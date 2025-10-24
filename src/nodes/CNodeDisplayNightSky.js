@@ -143,12 +143,12 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
 
         satGUI.add(this.satellites, 'flareAngle', 0, 20, 0.1).listen().name("Flare Angle Spread").tooltip("Maximum angle of the reflected view vector for a flare to be visible\ni.e. the range of angles between the vector from the satellite to the sun and the vector from the camera to the satellite reflected off the bottom of the satellite (which is parallel to the ground)")
-        this.addSimpleSerial("satellites.flareAngle")
+        this.addSimpleSerial("flareAngle")
 
 
         satGUI.add(this.satellites, 'penumbraDepth', 0, 100000, 1).listen().name("Earth's Penumbra Depth")
             .tooltip("Vertical depth in meters over which a satellite fades out as it enters the Earth's shadow")
-        this.addSimpleSerial("satellites.penumbraDepth")
+        this.addSimpleSerial("penumbraDepth")
 
 
 
@@ -262,11 +262,9 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                 setRenderOne(true);
                 option.action();
             }).name(option.name);
-            if (option.object === this.satellites) {
-                this.addSimpleSerial("satellites." + option.key);
-            } else {
-                this.addSimpleSerial(option.key);
-            }
+            // All satellite properties now have getters/setters on NightSkyNode
+            // so they should be serialized directly (not with satellites. prefix)
+            this.addSimpleSerial(option.key);
         });
 
         this.flareBandGroup.visible = this.showFlareBand;
@@ -341,7 +339,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                 this.satellites.filterSatellites();
                 setRenderOne(true);
             })
-        this.addSimpleSerial("satellites.arrowRange");
+        this.addSimpleSerial("arrowRange");
 
 
 
@@ -1114,9 +1112,81 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
     }
 
     /**
-     * Getters and setters for satellite name visibility flags
-     * These were moved to CSatellite but code still accesses them from nightSky
+     * Getters and setters for satellite properties
+     * These were moved to CSatellite but need to be accessible from nightSky for proper serialization
      */
+    get showSatellites() {
+        return this.satellites.showSatellites;
+    }
+
+    set showSatellites(value) {
+        this.satellites.showSatellites = value;
+    }
+
+    get showStarlink() {
+        return this.satellites.showStarlink;
+    }
+
+    set showStarlink(value) {
+        this.satellites.showStarlink = value;
+    }
+
+    get showISS() {
+        return this.satellites.showISS;
+    }
+
+    set showISS(value) {
+        this.satellites.showISS = value;
+    }
+
+    get showBrightest() {
+        return this.satellites.showBrightest;
+    }
+
+    set showBrightest(value) {
+        this.satellites.showBrightest = value;
+    }
+
+    get showOtherSatellites() {
+        return this.satellites.showOtherSatellites;
+    }
+
+    set showOtherSatellites(value) {
+        this.satellites.showOtherSatellites = value;
+    }
+
+    get showSatelliteList() {
+        return this.satellites.showSatelliteList;
+    }
+
+    set showSatelliteList(value) {
+        this.satellites.showSatelliteList = value;
+    }
+
+    get showSatelliteTracks() {
+        return this.satellites.showSatelliteTracks;
+    }
+
+    set showSatelliteTracks(value) {
+        this.satellites.showSatelliteTracks = value;
+    }
+
+    get showFlareTracks() {
+        return this.satellites.showFlareTracks;
+    }
+
+    set showFlareTracks(value) {
+        this.satellites.showFlareTracks = value;
+    }
+
+    get showSatelliteGround() {
+        return this.satellites.showSatelliteGround;
+    }
+
+    set showSatelliteGround(value) {
+        this.satellites.showSatelliteGround = value;
+    }
+
     get showSatelliteNames() {
         return this.satellites.showSatelliteNames;
     }
@@ -1131,6 +1201,30 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
     set showSatelliteNamesMain(value) {
         this.satellites.showSatelliteNamesMain = value;
+    }
+
+    get arrowRange() {
+        return this.satellites.arrowRange;
+    }
+
+    set arrowRange(value) {
+        this.satellites.arrowRange = value;
+    }
+
+    get flareAngle() {
+        return this.satellites.flareAngle;
+    }
+
+    set flareAngle(value) {
+        this.satellites.flareAngle = value;
+    }
+
+    get penumbraDepth() {
+        return this.satellites.penumbraDepth;
+    }
+
+    set penumbraDepth(value) {
+        this.satellites.penumbraDepth = value;
     }
 
 
