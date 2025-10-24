@@ -22,7 +22,6 @@ import {CNodeDisplaySkyOverlay} from "./CNodeDisplaySkyOverlay";
 import {CNodeViewUI} from "./CNodeViewUI";
 //import { eci_to_geodetic } from '../../pkg/eci_convert.js';
 // npm install satellite.js --save-dev
-
 // installed with
 // npm install astronomy-engine --save-dev
 // in the project dir (using terminal in PHPStorm)
@@ -1104,6 +1103,34 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
      */
     calcSatEUS(sat, date) {
         return this.satellites.calcSatEUS(sat, date);
+    }
+
+    /**
+     * Getter for TLE data - delegates to this.satellites
+     * Maintains backward compatibility with code that accesses nightSky.TLEData
+     */
+    get TLEData() {
+        return this.satellites.TLEData;
+    }
+
+    /**
+     * Getters and setters for satellite name visibility flags
+     * These were moved to CSatellite but code still accesses them from nightSky
+     */
+    get showSatelliteNames() {
+        return this.satellites.showSatelliteNames;
+    }
+
+    set showSatelliteNames(value) {
+        this.satellites.showSatelliteNames = value;
+    }
+
+    get showSatelliteNamesMain() {
+        return this.satellites.showSatelliteNamesMain;
+    }
+
+    set showSatelliteNamesMain(value) {
+        this.satellites.showSatelliteNamesMain = value;
     }
 
 
