@@ -1,10 +1,9 @@
 // A track node that can be used to track a satellite
 
 import {CNodeTrack} from "./CNodeTrack";
-import {GlobalDateTimeNode, Globals, guiMenus, NodeMan, Sit} from "../Globals";
+import {GlobalDateTimeNode, guiMenus, NodeMan, Sit} from "../Globals";
 import {EventManager} from "../CEventManager";
 import {bestSat} from "../TLEUtils";
-import {assert} from "../assert";
 
 // TODO - consider flagging this as not smoothable for use as a camera track
 // the TLE calculation should give a smooth curve, and the smoothing will shift the position slightly
@@ -104,6 +103,12 @@ import {assert} from "../assert";
         // we just force the satellite to be recalculated after all loading is done
         // with the call to NodeMan.recalculateAllRootFirst() that's done after loading
         this.norad = null;
+
+        // But  need to do a recalculate here too to ensure
+        // that the cameraTrackSwitch and targetTrackSwitch are set up for deserialization
+
+        this.recalculate();
+
     }
 
 
