@@ -285,7 +285,6 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                     this.guiPlanetScale.updateDisplay();
                 }
             })
-       // this.addSimpleSerial("starScale")
 
         if (Sit.starLimit === undefined)
             Sit.starLimit = 15; // default to 15 if not set
@@ -298,7 +297,6 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                 this.starField.updateStarVisibility(Sit.starLimit, this.celestialSphere);
             })
 
-       // this.addSimpleSerial("starLimit")
 
         if (Sit.planetScale === undefined)
             Sit.planetScale = 1; // default to 1 if not set
@@ -322,7 +320,6 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
         satGUI.add(Sit,"satScale",0,6,0.01).name("Sat Brightness").listen()
             .tooltip("Scale factor for the brightness of the satellites. 1 is normal, 0 is invisible, 2 is twice as bright, etc.")
-       // this.addSimpleSerial("satScale");
 
         satGUI.add(Sit,"flareScale",0,1,0.001).name("Flare Brightness").listen()
             .tooltip("Scale factor for the additional brightness of flaring satellites. 0 is nothing")
@@ -330,7 +327,6 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
         satGUI.add(Sit,"satCutOff",0,0.5,0.001).name("Sat Cut-Off").listen()
             .tooltip("Satellites dimmed to this level or less will not be displayed")
-       // this.addSimpleSerial("satCutOff");
 
 
         satGUI.add(this.satellites,"arrowRange",10,10000,1).name("Display Range (km)").listen()
