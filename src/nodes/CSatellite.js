@@ -709,6 +709,9 @@ export class CSatellite {
             }
 
             if (this.satellites) {
+                if (this.satellites.parent) {
+                    this.satellites.parent.remove(this.satellites);
+                }
                 this.satellites = null;
             }
 
