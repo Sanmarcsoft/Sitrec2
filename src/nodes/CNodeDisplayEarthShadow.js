@@ -28,9 +28,11 @@ export class CNodeDisplayEarthShadow extends CNode3DGroup {
         
         // Configuration
 
-        // CHECK: Is altitude from Earth's center or surface?
-        this.altitude = wgs84.RADIUS + 35786000; // Default to geostationary altitude (~35,786 km above Earth's surface)
+        this.altitude = 42164000; // Default to geostationary altitude (~42,164 km above Earth's center)
 
+        // Shadow colors
+        this.umbraColor = 0x87CEFF;      // Light blue (umbra)
+        this.penumbraColor = 0x4169E1;   // Darker blue (penumbra)
 
         this.fromSun = v.fromSun ?? V3(0, -1, 0); // Direction away from Sun (antisolar)
         
@@ -50,24 +52,25 @@ export class CNodeDisplayEarthShadow extends CNode3DGroup {
         this.penumbraConeGeometry = null;
         
         // Materials
-        this.umbraMaterial = makeMatLine(0xffff00, 2); // Yellow
-        this.penumbraMaterial = makeMatLine(0xff8000, 2); // Orange
+        this.umbraMaterial = makeMatLine(this.umbraColor, 2); // Light blue
+        this.penumbraMaterial = makeMatLine(this.penumbraColor, 2); // Darker blue
         this.umbraConeMaterial = new MeshBasicMaterial({
-            color: 0x0080ff,
+            color: this.umbraColor,
             wireframe: false,
             transparent: true,
-            opacity: 0.3,
-            depthTest: false, // no depth buffer, so it's always on top
+            opacity: 0.2,
+            depthTest: false,
             depthWrite: false,
-
+            side: 0 // THREE.FrontSide
         });
         this.penumbraConeMaterial = new MeshBasicMaterial({
-            color: 0xFF0044,
+            color: this.penumbraColor,
             wireframe: false,
             transparent: true,
-            opacity: 0.15,
-            depthTest: false, // no depth buffer, so it's always on top
+            opacity: 0.2,
+            depthTest: false,
             depthWrite: false,
+            side: 0 // THREE.FrontSide
         });
 
 
@@ -78,7 +81,7 @@ export class CNodeDisplayEarthShadow extends CNode3DGroup {
         }).listen()
             .tooltip("Toggle the display of Earth's shadow cone in the night sky.");
 
-        this.gui.add(this, 'altitude', wgs84.RADIUS, wgs84.RADIUS + 80000000, 1000).listen()
+        this.gui.add(this, 'altitude', 0, 80000000, 1000).listen()
             .onChange(() => {
                 setRenderOne(true);
                 this.rebuild();
@@ -184,7 +187,7 @@ export class CNodeDisplayEarthShadow extends CNode3DGroup {
     }
 
 
-    buildCone(radius, circleCenter, perpendicular, otherPerpendicular, material, geometryProp, meshProp) {
+    buildCone(radius, circleCenter, perpendicular, otherPerpendicular, material, geometryProp, meshProp, renderOrder) {
         // Build a truncated cone (frustum) showing a shadow volume
         // From Earth's center to the shadow plane at the specified radius
         
@@ -236,19 +239,22 @@ export class CNodeDisplayEarthShadow extends CNode3DGroup {
         // Store geometry and mesh in the specified properties
         this[geometryProp] = geometry;
         this[meshProp] = new Mesh(geometry, material);
+        this[meshProp].renderOrder = renderOrder;
         this.group.add(this[meshProp]);
     }
 
     buildUmbraCone(umbraRadius, circleCenter, perpendicular, otherPerpendicular) {
         // Build umbra cone - from Earth to umbra plane (bright blue, more opaque)
+        // renderOrder = 2: renders on top
         this.buildCone(umbraRadius, circleCenter, perpendicular, otherPerpendicular,
-                       this.umbraConeMaterial, 'umbraConeGeometry', 'umbraConeMesh');
+                       this.umbraConeMaterial, 'umbraConeGeometry', 'umbraConeMesh', 2);
     }
 
     buildPenumbraCone(penumbraRadius, circleCenter, perpendicular, otherPerpendicular) {
         // Build penumbra cone - from Earth to penumbra plane (darker blue, more transparent)
+        // renderOrder = 1: renders first (in background)
         this.buildCone(penumbraRadius, circleCenter, perpendicular, otherPerpendicular,
-                       this.penumbraConeMaterial, 'penumbraConeGeometry', 'penumbraConeMesh');
+                       this.penumbraConeMaterial, 'penumbraConeGeometry', 'penumbraConeMesh', 1);
     }
 
     rebuild() {
@@ -274,8 +280,8 @@ export class CNodeDisplayEarthShadow extends CNode3DGroup {
         const segments = 100;
         
         // Build the umbra and penumbra cones
-        this.buildUmbraCone(umbraRadius, circleCenter, perpendicular, otherPerpendicular);
         this.buildPenumbraCone(penumbraRadius, circleCenter, perpendicular, otherPerpendicular);
+        this.buildUmbraCone(umbraRadius, circleCenter, perpendicular, otherPerpendicular);
 
         // Create umbra circle
         {
@@ -329,5 +335,11 @@ export class CNodeDisplayEarthShadow extends CNode3DGroup {
             this.fromSun = Globals.fromSun.clone().normalize();
             this.rebuild();
         }
+    }
+
+
+    dispose() {
+        this.removeCircles();
+        super.dispose();
     }
 }
