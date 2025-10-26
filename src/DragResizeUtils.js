@@ -1,5 +1,21 @@
 /**
  * Modern drag and resize utilities to replace jQuery UI functionality
+ *
+ * IMPORTANT: This module uses Pointer Events (pointerdown/pointermove/pointerup) instead of
+ * mouse events for all drag operations. This is critical for correct off-screen drag behavior.
+ *
+ * Why Pointer Events?
+ * - Mouse events (mouseup) may not fire reliably when the pointer moves outside the browser window
+ * - Pointer events continue firing even when dragging off-screen, preventing elements from
+ *   remaining "stuck" to the cursor after releasing outside the viewport
+ * - Pointer events are the modern standard and work with mouse, touch, and stylus input
+ *
+ * Key Implementation Detail:
+ * - Drag-end listeners MUST be attached to `document`, not the element being dragged
+ * - This ensures proper event delivery when the pointer moves off-screen
+ *
+ * Do not replace pointer events with mouse events in this file.
+ * See related fix: lil-gui-extras.js handleTitleMouseDown() method (similar fix applied)
  */
 
 /**
@@ -38,7 +54,7 @@ export function makeDraggable(element, options = {}) {
     // Add handle styling
     handleElement.style.cursor = 'move';
     
-    const onMouseDown = (e) => {
+    const onPointerDown = (e) => {
         // Check if shift key is required and pressed
         if (options.shiftKey && !e.shiftKey) return;
         
@@ -60,13 +76,15 @@ export function makeDraggable(element, options = {}) {
             options.onDragStart(e, { left: startLeft, top: startTop, element });
         }
         
-        // Add global event listeners
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
+        // Add global event listeners using pointer events for better off-screen support
+        document.addEventListener('pointermove', onPointerMove);
+        document.addEventListener('pointerup', onPointerUp);
     };
     
-    const onMouseMove = (e) => {
-        if (!isDragging) return;
+    const onPointerMove = (e) => {
+        if (!isDragging) {
+            return;
+        }
         
         // Calculate new position
         const dx = e.clientX - startX;
@@ -98,7 +116,7 @@ export function makeDraggable(element, options = {}) {
         }
     };
     
-    const onMouseUp = (e) => {
+    const onPointerUp = (e) => {
         if (!isDragging) return;
         
         isDragging = false;
@@ -114,18 +132,18 @@ export function makeDraggable(element, options = {}) {
         }
         
         // Remove global event listeners
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
+        document.removeEventListener('pointermove', onPointerMove);
+        document.removeEventListener('pointerup', onPointerUp);
     };
     
-    // Add event listener to handle
-    handleElement.addEventListener('mousedown', onMouseDown);
+    // Add event listener to handle using pointerdown for better off-screen support
+    handleElement.addEventListener('pointerdown', onPointerDown);
     
     // Store cleanup function on element
     element._dragCleanup = () => {
-        handleElement.removeEventListener('mousedown', onMouseDown);
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
+        handleElement.removeEventListener('pointerdown', onPointerDown);
+        document.removeEventListener('pointermove', onPointerMove);
+        document.removeEventListener('pointerup', onPointerUp);
         delete element._dragData;
         delete element._dragCleanup;
     };
@@ -245,7 +263,7 @@ export function makeResizable(element, options = {}) {
         let startWidth, startHeight, startLeft, startTop;
         let aspectRatio;
         
-        const onMouseDown = (e) => {
+        const onPointerDown = (e) => {
             e.preventDefault();
             e.stopPropagation();
             
@@ -276,11 +294,11 @@ export function makeResizable(element, options = {}) {
                 });
             }
             
-            document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('mouseup', onMouseUp);
+            document.addEventListener('pointermove', onPointerMove);
+            document.addEventListener('pointerup', onPointerUp);
         };
         
-        const onMouseMove = (e) => {
+        const onPointerMove = (e) => {
             if (!isResizing) return;
             
             let newWidth = startWidth;
@@ -405,7 +423,7 @@ export function makeResizable(element, options = {}) {
             }
         };
         
-        const onMouseUp = (e) => {
+        const onPointerUp = (e) => {
             if (!isResizing) return;
             
             isResizing = false;
@@ -423,13 +441,13 @@ export function makeResizable(element, options = {}) {
                 });
             }
             
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
+            document.removeEventListener('pointermove', onPointerMove);
+            document.removeEventListener('pointerup', onPointerUp);
         };
         
-        handle.addEventListener('mousedown', onMouseDown);
+        handle.addEventListener('pointerdown', onPointerDown);
         handle._resizeCleanup = () => {
-            handle.removeEventListener('mousedown', onMouseDown);
+            handle.removeEventListener('pointerdown', onPointerDown);
         };
     });
     

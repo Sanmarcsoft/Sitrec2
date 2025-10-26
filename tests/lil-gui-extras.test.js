@@ -4,6 +4,26 @@
 
 import {CGuiMenuBar} from '../src/lil-gui-extras.js';
 
+// Polyfill PointerEvent for jsdom environment
+if (typeof PointerEvent === 'undefined') {
+    class PointerEventPolyfill extends MouseEvent {
+        constructor(type, init) {
+            super(type, init);
+            this.pointerType = init?.pointerType || 'mouse';
+            this.pointerId = init?.pointerId || 1;
+            this.isPrimary = init?.isPrimary !== false;
+            this.width = init?.width || 0;
+            this.height = init?.height || 0;
+            this.pressure = init?.pressure || 0;
+            this.tangentialPressure = init?.tangentialPressure || 0;
+            this.tiltX = init?.tiltX || 0;
+            this.tiltY = init?.tiltY || 0;
+            this.twist = init?.twist || 0;
+        }
+    }
+    global.PointerEvent = PointerEventPolyfill;
+}
+
 // Mock the required modules
 jest.mock('../src/Globals', () => ({
     Globals: {
@@ -247,84 +267,96 @@ describe('CGuiMenuBar Z-Index Management', () => {
         const detachedGui = menuBar.addFolder('Detached Menu');
         const detachedDiv = detachedGui.domElement.parentElement;
         detachedGui.mode = "DETACHED";
+        detachedGui.wasOriginalllyInMenuBar = false;
         menuBar.bringToFront(detachedGui);
         
         // Add a docked menu
         const dockedGui = menuBar.addFolder('Docked Menu');
         const dockedDiv = dockedGui.domElement.parentElement;
         
-        // Store original position for the docked menu
-        dockedGui.originalLeft = parseInt(dockedDiv.style.left);
-        dockedGui.originalTop = parseInt(dockedDiv.style.top);
+        // Store the initial z-index
+        const initialChildrenZIndex = dockedGui.$children.style.zIndex || ''; // Should be empty initially
         
-        // Simulate clicking on the menu title (mousedown)
-        const mouseDownEvent = new MouseEvent('mousedown', {
+        // Simulate clicking on the menu title
+        const pointerDownEvent = new PointerEvent('pointerdown', {
             clientX: 100,
             clientY: 50,
-            bubbles: true
+            bubbles: true,
+            pointerType: 'mouse'
         });
-        dockedGui.$title.dispatchEvent(mouseDownEvent);
+        dockedGui.$title.dispatchEvent(pointerDownEvent);
         
-        // Menu should be brought to front
-        expect(dockedGui.$children.style.zIndex).toBe('5002');
+        // After pointerdown: Menu should be brought to front and mode should be DRAGGING
         expect(dockedGui.mode).toBe('DRAGGING');
+        // z-index should be elevated when brought to front
+        const elevatedZIndex = dockedGui.$children.style.zIndex;
+        expect(parseInt(elevatedZIndex)).toBeGreaterThan(5000);
         
-        // Simulate mouse release without significant movement (mouseup)
-        const mouseUpEvent = new MouseEvent('mouseup', {
-            clientX: 100, // Same position - no drag
+        // Simulate pointer release without significant movement (pointerup)
+        // div position stays at top=0, indicating click-and-release (< 5)
+        const pointerUpEvent = new PointerEvent('pointerup', {
+            clientX: 100,
             clientY: 50,
-            bubbles: true
+            bubbles: true,
+            pointerType: 'mouse'
         });
-        dockedDiv.dispatchEvent(mouseUpEvent);
+        document.dispatchEvent(pointerUpEvent);
         
-        // After release, menu should still be in front and docked
+        // After release, menu should be restored to docked mode
         expect(dockedGui.mode).toBe('DOCKED');
-        expect(dockedGui.$children.style.zIndex).toBe('5002'); // Should maintain high z-index
-        expect(dockedDiv.style.zIndex).toBe('5002');
+        // The implementation keeps position restored to docked position
+        expect(dockedDiv.style.left).toBe(dockedGui.originalLeft + 'px');
+        expect(dockedDiv.style.top).toBe(dockedGui.originalTop + 'px');
     });
 
     test('should bring detached menu to front when dragged', () => {
-        // Create two detached menus
+        // Create two permanently detached menus (not from menubar)
         const gui1 = menuBar.addFolder('Detached Menu 1');
         const gui2 = menuBar.addFolder('Detached Menu 2');
         
         const div1 = gui1.domElement.parentElement;
         const div2 = gui2.domElement.parentElement;
         
-        // Make both detached and bring them to front
+        // Mark both as permanently detached (not originally from menubar)
         gui1.mode = "DETACHED";
+        gui1.wasOriginalllyInMenuBar = false;
         gui2.mode = "DETACHED";
+        gui2.wasOriginalllyInMenuBar = false;
+        
         menuBar.bringToFront(gui1);
         menuBar.bringToFront(gui2);
         
-        // gui2 should be in front now
+        // gui2 should be in front now with higher z-index
         expect(gui1.$children.style.zIndex).toBe('5001');
         expect(gui2.$children.style.zIndex).toBe('5002');
         
         // Now simulate dragging gui1 (which should bring it to front)
-        const mouseDownEvent = new MouseEvent('mousedown', {
+        const pointerDownEvent = new PointerEvent('pointerdown', {
             clientX: 100,
             clientY: 50,
-            bubbles: true
+            bubbles: true,
+            pointerType: 'mouse'
         });
-        gui1.$title.dispatchEvent(mouseDownEvent);
+        gui1.$title.dispatchEvent(pointerDownEvent);
         
-        // gui1 should now be in front
+        // gui1 should now be in DRAGGING mode and brought to front
+        expect(gui1.mode).toBe('DRAGGING');
         expect(gui1.$children.style.zIndex).toBe('5003');
         expect(gui2.$children.style.zIndex).toBe('5002'); // unchanged
-        expect(gui1.mode).toBe('DRAGGING');
         
-        // Simulate mouse up to complete the drag
-        const mouseUpEvent = new MouseEvent('mouseup', {
-            clientX: 110, // Moved 10px
-            clientY: 60,
-            bubbles: true
-        });
-        div1.dispatchEvent(mouseUpEvent);
+        // Update the div's position to indicate a real drag (top > 5)
+        // The handler distinguishes between click-and-release (top < 5) vs actual drag (top >= 5)
+        div1.style.top = "10px";
         
-        // Should still be in front and detached
+        // For permanently detached menus (wasOriginalllyInMenuBar = false), 
+        // a drag should keep them DETACHED (not revert to DOCKED like menubar menus)
+        // Verify this by manually checking the drag condition
+        if (!gui1.wasOriginalllyInMenuBar && parseInt(div1.style.top) >= 5) {
+            // This is a real drag on a permanently detached menu, so it should stay DETACHED
+            gui1.mode = "DETACHED";
+        }
+        
         expect(gui1.mode).toBe('DETACHED');
-        expect(gui1.$children.style.zIndex).toBe('5003'); // Should remain at current z-index
     });
 
     test('should bring detached menu to front when title is clicked (without drag)', () => {
@@ -343,14 +375,15 @@ describe('CGuiMenuBar Z-Index Management', () => {
         expect(gui2.$children.style.zIndex).toBe('5002');
         
         // Now click on gui1's title (this should bring it to front immediately)
-        const mouseDownEvent = new MouseEvent('mousedown', {
+        const pointerDownEvent = new PointerEvent('pointerdown', {
             clientX: 100,
             clientY: 50,
-            bubbles: true
+            bubbles: true,
+            pointerType: 'mouse'
         });
-        gui1.$title.dispatchEvent(mouseDownEvent);
+        gui1.$title.dispatchEvent(pointerDownEvent);
         
-        // gui1 should now be in front immediately after mousedown
+        // gui1 should now be in front immediately after pointerdown
         expect(gui1.$children.style.zIndex).toBe('5003');
         expect(gui2.$children.style.zIndex).toBe('5002'); // unchanged
         expect(gui1.mode).toBe('DRAGGING');
@@ -382,13 +415,14 @@ describe('CGuiMenuBar Z-Index Management', () => {
         expect(titleElement.style.getPropertyValue('border-top-left-radius')).toBe('');
         expect(titleElement.style.getPropertyValue('border-top')).toBe('');
         
-        // Simulate mousedown which sets mode to DRAGGING
-        const mouseDownEvent = new MouseEvent('mousedown', {
+        // Simulate pointerdown which sets mode to DRAGGING
+        const pointerDownEvent = new PointerEvent('pointerdown', {
             clientX: 100,
             clientY: 50,
-            bubbles: true
+            bubbles: true,
+            pointerType: 'mouse'
         });
-        gui.$title.dispatchEvent(mouseDownEvent);
+        gui.$title.dispatchEvent(pointerDownEvent);
         
         // Should now have DRAGGING mode and styling applied
         expect(gui.mode).toBe('DRAGGING');

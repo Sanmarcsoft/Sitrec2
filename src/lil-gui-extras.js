@@ -427,8 +427,8 @@ export class CGuiMenuBar {
             }
         });
 
-        // capture mousedown events from anywhere on screen to detect if we want to close the GUIs
-        document.addEventListener("mousedown", (event) => {
+        // capture pointerdown events from anywhere on screen to detect if we want to close the GUIs
+        document.addEventListener("pointerdown", (event) => {
             // if the click was not in the menu bar, close all the GUIs
             if (!this.menuBar.contains(event.target)) {
                 // Close regular menu bar items
@@ -657,6 +657,10 @@ export class CGuiMenuBar {
 
         newGUI.originalLeft = this.totalWidth;
         newGUI.originalTop = 0;
+        
+        // Mark that this menu was originally created in the menubar
+        // This flag persists even if the menu is dragged away and detached
+        newGUI.wasOriginalllyInMenuBar = true;
 
         // const divDebugColor = ["red", "green", "blue", "yellow", "purple", "orange", "pink", "cyan", "magenta", "lime", "teal", "indigo", "violet", "brown", "grey", "black", "white"];
         // // give the div a colored border
@@ -721,13 +725,14 @@ export class CGuiMenuBar {
         // Add the event listener using the bound method
         newGUI.$title.addEventListener("mouseover", this.boundHandleTitleMouseOver);
 
-        newGUI.$title.addEventListener("mousedown", this.boundHandleTitleMouseDown);
+        // Use pointerdown instead of mousedown for better off-screen drag support
+        newGUI.$title.addEventListener("pointerdown", this.boundHandleTitleMouseDown);
         newGUI.$title.addEventListener("dblclick", this.boundHandleTitleDoubleClick);
 
         // Add click listener to the entire GUI to bring it to front when any part is clicked
-        newGUI.domElement.addEventListener("mousedown", (event) => {
+        newGUI.domElement.addEventListener("pointerdown", (event) => {
             // Only bring to front if this is a detached menu (not docked or currently being ed)
-            // console.log(`GUI content mousedown on menu "${newGUI.$title.innerHTML}", mode: ${newGUI.mode}`);
+            // console.log(`GUI content pointerdown on menu "${newGUI.$title.innerHTML}", mode: ${newGUI.mode}`);
             if (newGUI.mode === "DETACHED") {
                 this.bringToFront(newGUI);
             }
@@ -773,6 +778,28 @@ export class CGuiMenuBar {
         this.applyModeStyles(newGUI);
     }
 
+    /**
+     * Check if a menu div is >80% off-screen
+     * Returns true if most of the menu is outside the viewport
+     */
+    isMenuOffScreen(newDiv) {
+        const rect = newDiv.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        
+        // Calculate how much of the menu is visible
+        const visibleWidth = Math.max(0, Math.min(rect.right, viewportWidth) - Math.max(rect.left, 0));
+        const visibleHeight = Math.max(0, Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0));
+        
+        // Calculate the visible area as a percentage
+        const menuArea = rect.width * rect.height;
+        const visibleArea = visibleWidth * visibleHeight;
+        const visiblePercentage = menuArea > 0 ? (visibleArea / menuArea) * 100 : 0;
+        
+        // Return true if less than 20% is visible (i.e., >80% off-screen)
+        return visiblePercentage < 20;
+    }
+
     applyModeStyles(gui) {
         const titleElement = gui.$title;
         
@@ -800,8 +827,6 @@ export class CGuiMenuBar {
         // find the GUI object that has this title element
         const newGUI = this.slots.find((gui) => gui.$title === event.target);
 
-        // console.log(`Title mousedown on menu "${newGUI.$title.innerHTML}", mode: ${newGUI.mode}`);
-
         // Bring this menu to the front
         this.bringToFront(newGUI);
 
@@ -813,14 +838,15 @@ export class CGuiMenuBar {
         let mouseX = event.clientX;
         let mouseY = event.clientY;
 
-        newGUI.firstDrag = (newGUI.mode === "DOCKED");
-
+        // Note: We use the persistent wasOriginalllyInMenuBar flag instead of firstDrag
+        // This allows us to correctly identify menubar menus even on subsequent drags
+        
         newGUI.mode = "DRAGGING"
         this.applyModeStyles(newGUI)
 
-        // capture all the mouse move events and use then to move the div
-        // when the mouse is released, remove the event listener
-        const boundHandleMouseMove = (event) => {
+        // capture all the pointer move events and use then to move the div
+        // when the pointer is released, remove the event listener
+        const boundHandlePointerMove = (event) => {
             // make sure it's open
             if (newGUI._closed) {
                 // in case we got locked into a closed state
@@ -840,27 +866,57 @@ export class CGuiMenuBar {
             // if off the top, then click it back into the menu bar
             if (parseInt(newDiv.style.top) < -5) {
                 this.restoreToBar(newGUI);
-                document.removeEventListener("mousemove", boundHandleMouseMove);
-                newDiv.removeEventListener("mouseup", boundHandleMouseUp);
+                document.removeEventListener("pointermove", boundHandlePointerMove);
+                document.removeEventListener("pointerup", boundHandlePointerUp);
                 newGUI.close();
             }
 
-            // prevent all the default mouse events
+            // Check if menu is >80% off-screen during drag
+            if (this.isMenuOffScreen(newDiv)) {
+                document.removeEventListener("pointermove", boundHandlePointerMove);
+                document.removeEventListener("pointerup", boundHandlePointerUp);
+                
+                // If it was originally created in the menubar, restore it to the bar
+                if (newGUI.wasOriginalllyInMenuBar) {
+                    // Was a menubar menu - restore it and close (same as double-click handler)
+                    this.restoreToBar(newGUI);
+                    newGUI.close();
+                    event.stopPropagation();
+                } else {
+                    // Was a standalone menu - just close it
+                    newGUI.close();
+                }
+                return;
+            }
+
+            // prevent all the default events
             event.preventDefault();
         }
 
-        //newDiv.addEventListener("mousemove", boundHandleMouseMove);
-        // capture ALL mouse events, not just those on the div
-        document.addEventListener("mousemove", boundHandleMouseMove);
+        // capture ALL pointer events, not just those on the div
+        // Using document instead of newDiv for better off-screen handling
+        document.addEventListener("pointermove", boundHandlePointerMove);
 
+        const boundHandlePointerUp = (event) => {
+            document.removeEventListener("pointermove", boundHandlePointerMove);
+            document.removeEventListener("pointerup", boundHandlePointerUp);
 
-
-        const boundHandleMouseUp = (event) => {
-            document.removeEventListener("mousemove", boundHandleMouseMove);
-            newDiv.removeEventListener("mouseup", boundHandleMouseUp);
-
+            // Check if menu ended up >80% off-screen
+            if (this.isMenuOffScreen(newDiv)) {
+                if (newGUI.wasOriginalllyInMenuBar) {
+                    // Was a menubar menu - restore it and close (same as double-click handler)
+                    this.restoreToBar(newGUI);
+                    newGUI.close();
+                    event.stopPropagation();
+                } else {
+                    // Was a standalone menu - just close it
+                    newGUI.close();
+                }
+                event.preventDefault();
+                return;
+            }
             // if in the first drag, and only moved a little, then snap it back
-            if (newGUI.firstDrag && parseInt(newDiv.style.top) < 5) {
+            if (newGUI.wasOriginalllyInMenuBar && parseInt(newDiv.style.top) < 5) {
                 // This was just a click, not a drag - restore position but keep high z-index
                 newDiv.style.left = newGUI.originalLeft + "px";
                 newDiv.style.top = newGUI.originalTop + "px";
@@ -877,7 +933,8 @@ export class CGuiMenuBar {
             
             event.preventDefault();
         }
-        newDiv.addEventListener("mouseup", boundHandleMouseUp);
+        // Add pointerup listener to document, not just the div
+        document.addEventListener("pointerup", boundHandlePointerUp);
 
         event.preventDefault();
     }
@@ -901,7 +958,7 @@ export class CGuiMenuBar {
             if (gui) {
 
                 gui.$title.removeEventListener("mouseover", this.boundHandleTitleMouseOver);
-                gui.$title.removeEventListener("mousedown", this.boundHandleTitleMouseDown);
+                gui.$title.removeEventListener("pointerdown", this.boundHandleTitleMouseDown);
                 gui.$title.removeEventListener("dblclick", this.boundHandleTitleDoubleClick);
 
                 gui.destroy(all);
