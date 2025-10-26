@@ -382,7 +382,11 @@ export class CNodeDisplayTrack extends CNode3DGroup {
         for (var f = 0; f < this.frames; f+= step) {
             let trackPoint = this.in.track.v(f)
 
-            if (trackPoint === undefined && f === 0) {
+            // the track must have a valid first frame. If we have a situation
+            // where it all null, then we abort
+            // example scenario - satellite track is ISS,
+            // but the TLE data does not have ISS, or the date is far out of range
+            if ((trackPoint === undefined || trackPoint.position === null) && f === 0) {
 //                console.warn("CNodeDisplayTrack: trackPoint is undefined, id="+this.id+" frame="+f+" SKIPPING")
                 return;
             }
@@ -403,6 +407,7 @@ export class CNodeDisplayTrack extends CNode3DGroup {
             if (trackPoint?.position !== undefined) {
 
                 var A = trackPoint.position
+                assert(A, "CNodeDisplayTrack: trackPoint.position is undefined or null, id=" + this.id + " frame=" + f);
                 assert(!isNaN(A.x) && !isNaN(A.y) && !isNaN(A.z), "CNodeDisplayTrack: trackPoint has NaNs in position, id=" + this.id + " frame=" + f);
 
                 //line_points.push(A.x, A.y, A.z);

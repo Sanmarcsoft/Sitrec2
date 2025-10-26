@@ -16,16 +16,12 @@ import {bestSat} from "../TLEUtils";
         this.frames = Sit.frames;
         this.useSitFrames = true;
 
-        if (v.satellite) {
-
-            this.satellite = v.satellite ?? 25544
-            this.recalculate()
-        }
+        this.satellite = v.satellite ?? 25544
+        this.satelliteText = "ISS (ZARYA)";
 
         // adding time object as input for recalculation
         this.addInput("time", "dateTimeStart")
 
-        this.satelliteText = "ISS (ZARYA)";
 
 
         this.guiSatellite = guiMenus.satellites.add(this, "satelliteText").name("Satellite to Track").onFinishChange(v => {
@@ -38,16 +34,27 @@ import {bestSat} from "../TLEUtils";
 
         // Use event listeners to update the track when the satellite changes
         EventManager.addEventListener("tleLoaded", (event, data) => {
-            this.recalculateCascade()
+            this.newTLEDataLoaded()
         })
-
 
         this.addSimpleSerial("satellite");
 
-
+        this.recalculate()
 
     }
 
+
+    newTLEDataLoaded() {
+        // check if we have a valid satellite number
+
+        if (!this.checkSatelliteTrackValid()) {
+            return;
+        }
+
+        this.visible = true;
+
+        this.recalculateCascade();
+    }
 
      // given a satellite name or number in s, convert it into a valid NORAD number that
     // exists in the TLE database
@@ -112,18 +119,28 @@ import {bestSat} from "../TLEUtils";
     }
 
 
-     recalculate() {
-
+    checkSatelliteTrackValid() {
         // if we don't have a norad number, then try to get one from the TLE database
         // once we have a norad number, we won't need to do this again
         // as norad numbers should not change
         if (!this.norad) {
             this.norad = this.getSatelliteNumber(this.satellite);
             if (!this.norad) {
-//                console.warn(`CNodeSatelliteTrack:recalculate no NORAD number found for ${this.satellite}`);
-                return;
+                console.warn(`CNodeSatelliteTrack:recalculate no NORAD number found for ${this.satellite}`);
+                this.hide();
+                this.guiSatellite?.hide();
+                return false;
             }
         }
+        return true;
+    }
+
+     recalculate() {
+
+        if (!this.checkSatelliteTrackValid()) {
+            return;
+        }
+
         // now we have a norad number, so we can get the satellite data
 
         // in case the the TLE data has changed, we need to recalculate the satellite data object
