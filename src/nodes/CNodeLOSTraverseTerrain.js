@@ -1,13 +1,13 @@
 // Track of LOS intersection with the cloud horizon
 // i.e. the point on on the LOS closes to the horizon viewed from the LOS start point in the direction of the LOS
-import {CNodeEmptyArray} from "./CNodeArray";
 import {Raycaster} from "three";
 import {vdump} from "../utils";
 
 import {V3} from "../threeUtils";
 import * as LAYER from "../LayerMasks";
+import {CNodeTrack} from "./CNodeTrack";
 
-export class CNodeLOSTraverseTerrain extends CNodeEmptyArray {
+export class CNodeLOSTraverseTerrain extends CNodeTrack {
     constructor(v) {
         super(v);
         //   this.checkInputs(["LOS", "terrain"])
