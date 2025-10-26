@@ -611,7 +611,7 @@ export class CFileManager extends CManager {
                 object.exportButtons = undefined;
             }
             if (object.exportSubFolder !== undefined) {
-                this.exportFolder.remove(object.exportSubFolder);
+                object.exportSubFolder.destroy();
                 object.exportSubFolder = undefined;
             }
         }
