@@ -427,6 +427,11 @@ export class CGuiMenuBar {
             }
         });
 
+        // Listen for window resize to check if floating menus end up off-screen
+        window.addEventListener('resize', () => {
+            this._checkFloatingMenusOnResize();
+        });
+
         // capture pointerdown events from anywhere on screen to detect if we want to close the GUIs
         document.addEventListener("pointerdown", (event) => {
             // if the click was not in the menu bar, close all the GUIs
@@ -598,6 +603,38 @@ export class CGuiMenuBar {
         }
         
         ViewMan.updateSize();
+    }
+
+    /**
+     * Check all floating menus on window resize
+     * Close and/or dock any menus that end up >80% off-screen
+     */
+    _checkFloatingMenusOnResize() {
+        // Check docked menu bar items
+        this.slots.forEach((gui) => {
+            if (gui && gui.mode === "DETACHED") {
+                const div = this.divs.find((d) => d === gui.domElement.parentElement);
+                if (div && this.isMenuOffScreen(div)) {
+                    // Menu is off-screen, restore it to the menu bar and close
+                    if (gui.wasOriginalllyInMenuBar) {
+                        this.restoreToBar(gui);
+                        gui.close();
+                    } else {
+                        gui.close();
+                    }
+                }
+            }
+        });
+
+        // Check standalone menus
+        const allContainers = Array.from(this.menuBar.children);
+        allContainers.forEach((container) => {
+            const gui = container._gui;
+            if (gui && gui._standaloneContainer && this.isMenuOffScreen(container)) {
+                // Standalone menu is off-screen, close it
+                gui.close();
+            }
+        });
     }
 
     toggleVisiblity() {
