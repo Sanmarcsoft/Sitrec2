@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FITS Header Parser</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .drop-zone {
+            border: 3px dashed #667eea;
+            border-radius: 8px;
+            padding: 60px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #f8f9ff;
+        }
+
+        .drop-zone:hover {
+            border-color: #764ba2;
+            background: #f0f2ff;
+        }
+
+        .drop-zone.dragover {
+            border-color: #764ba2;
+            background: #e9ecff;
+            transform: scale(1.02);
+        }
+
+        .drop-zone svg {
+            width: 64px;
+            height: 64px;
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+
+        .drop-zone h2 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 20px;
+        }
+
+        .drop-zone p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .file-input-label {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: background 0.3s ease;
+        }
+
+        .file-input-label:hover {
+            background: #764ba2;
+        }
+
+        .file-list {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .file-list h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+
+        .file-item {
+            background: #f8f9ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .file-name {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .file-status {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .results {
+            margin-top: 40px;
+            display: none;
+        }
+
+        .results h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        .result-item {
+            background: #f8f9ff;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .result-header:hover {
+            opacity: 0.8;
+        }
+
+        .result-title {
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .result-toggle {
+            color: #667eea;
+            font-size: 18px;
+            font-weight: bold;
+            transition: transform 0.3s ease;
+        }
+
+        .result-toggle.open {
+            transform: rotate(180deg);
+        }
+
+        .result-content {
+            display: none;
+            margin-top: 15px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .result-content.open {
+            display: block;
+        }
+
+        .canvas-container {
+            background: white;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .canvas-container canvas {
+            border: 1px solid #e0e0e0;
+            max-width: 100%;
+            height: auto;
+        }
+
+        .render-progress {
+            width: 100%;
+            height: 20px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .render-progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .hdu-info {
+            background: white;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 10px;
+            font-size: 13px;
+            color: #555;
+        }
+
+        .hdu-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .header-pair {
+            display: flex;
+            padding: 5px 0;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+        }
+
+        .header-key {
+            color: #667eea;
+            font-weight: 600;
+            min-width: 120px;
+            flex-shrink: 0;
+        }
+
+        .header-value {
+            color: #333;
+            flex-grow: 1;
+            word-break: break-all;
+            margin-right: 10px;
+        }
+
+        .header-comment {
+            color: #999;
+            font-style: italic;
+        }
+
+        .error-item {
+            background: #ffe9e9;
+            border-left: 4px solid #ff6b6b;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+
+        .error-title {
+            font-weight: 600;
+            color: #c92a2a;
+            margin-bottom: 5px;
+        }
+
+        .error-message {
+            color: #a61e4d;
+            font-size: 14px;
+        }
+
+        .success-item {
+            background: #e7f5f0;
+            border-left: 4px solid #20c997;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+
+        .success-title {
+            font-weight: 600;
+            color: #0b7285;
+            margin-bottom: 5px;
+        }
+
+        .actions {
+            margin-top: 30px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #764ba2;
+            transform: translateY(-2px);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #e9ecf1;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #dee2e6;
+        }
+
+        .progress-container {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9ff;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            display: none;
+        }
+
+        .progress-container.active {
+            display: block;
+        }
+
+        .progress-label {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            height: 24px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+            min-width: 40px;
+        }
+
+        @media (max-width: 600px) {
+            .header {
+                padding: 30px 20px;
+            }
+
+            .header h1 {
+                font-size: 24px;
+            }
+
+            .content {
+                padding: 20px;
+            }
+
+            .drop-zone {
+                padding: 40px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔬 FITS Header Parser</h1>
+            <p>Drag and drop your FITS files to parse headers</p>
+        </div>
+
+        <div class="content">
+            <div class="drop-zone" id="dropZone">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                </svg>
+                <h2>Drop FITS files here</h2>
+                <p>or click to select files</p>
+                <label class="file-input-label">
+                    Choose Files
+                    <input type="file" id="fileInput" multiple accept=".fits,.fit,.fts">
+                </label>
+            </div>
+
+            <div class="file-list" id="fileList">
+                <h3>Queued Files:</h3>
+                <div id="fileItems"></div>
+            </div>
+
+            <div class="actions" id="actions" style="display: none;">
+                <button class="btn-primary" id="parseBtn">Parse Files</button>
+                <button class="btn-secondary" id="clearBtn">Clear</button>
+            </div>
+
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-label" id="progressLabel">Processing...</div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar-fill" id="progressBar" style="width: 0%">0%</div>
+                </div>
+            </div>
+
+            <div class="results" id="results">
+                <h3>Parse Results:</h3>
+                <div id="resultItems"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+        const fileItems = document.getElementById('fileItems');
+        const actions = document.getElementById('actions');
+        const parseBtn = document.getElementById('parseBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const results = document.getElementById('results');
+        const resultItems = document.getElementById('resultItems');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressLabel = document.getElementById('progressLabel');
+        const progressBar = document.getElementById('progressBar');
+
+        let selectedFiles = [];
+
+        // Global helper to extract value from either plain number or {value, comment} object
+        const getValue = (val) => {
+            if (val === undefined) return undefined;
+            return typeof val === 'object' && val !== null ? val.value : val;
+        };
+
+        // FITS Parser Implementation
+        class FITSParser {
+            constructor(arrayBuffer) {
+                this.buffer = new Uint8Array(arrayBuffer);
+                this.offset = 0;
+                this.hdus = [];
+            }
+
+            parse() {
+                try {
+                    let hduCount = 0;
+                    while (this.offset < this.buffer.length && hduCount < 100) {
+                        const hdu = this.parseHDU();
+                        if (!hdu) {
+                            break;
+                        }
+                        hduCount++;
+                        this.hdus.push(hdu);
+                    }
+                    return { success: true, hdus: this.hdus };
+                } catch (err) {
+                    return { success: false, error: err.message };
+                }
+            }
+
+            parseHDU() {
+                if (this.offset + 80 > this.buffer.length) {
+                    return null;
+                }
+
+                // Peek at first keyword to validate this is a real HDU
+                const peekLine = this.buffer.slice(this.offset, this.offset + 80);
+                const peekText = new TextDecoder().decode(peekLine).substring(0, 8).trim();
+                
+                // Valid first keywords for FITS HDUs
+                const validFirstKeywords = ['SIMPLE', 'XTENSION'];
+                
+                if (this.hdus.length === 0) {
+                    // First HDU must start with SIMPLE
+                    if (peekText !== 'SIMPLE') {
+                        return null;
+                    }
+                } else {
+                    // Subsequent HDUs must start with XTENSION
+                    if (peekText !== 'XTENSION') {
+                        return null;
+                    }
+                }
+
+                const header = {};
+                let hduIndex = this.hdus.length;
+                let dataSize = 0;
+                const dataOffset = this.offset;
+                let recordCount = 0;
+
+                // Parse header records
+                while (this.offset + 80 <= this.buffer.length) {
+                    const record = this.readRecord();
+                    recordCount++;
+                    
+                    if (record.keyword === 'END') {
+                        // Align to 2880-byte boundary
+                        this.alignTo2880();
+                        break;
+                    }
+
+                    if (record.keyword && record.keyword !== 'END') {
+                        // Avoid duplicate keywords
+                        if (!header[record.keyword]) {
+                            header[record.keyword] = record.value !== undefined ? 
+                                (record.comment ? { value: record.value, comment: record.comment } : record.value) :
+                                true;
+                        }
+                    }
+
+                    // Calculate data size from NAXIS and BITPIX
+                    if (record.keyword === 'BITPIX' && header['NAXIS'] !== undefined) {
+                        dataSize = this.calculateDataSize(header);
+                    }
+                    if (record.keyword === 'NAXIS' || record.keyword?.startsWith('NAXIS')) {
+                        if (this.hasAllNAxis(header)) {
+                            dataSize = this.calculateDataSize(header);
+                        }
+                    }
+                }
+
+                // Store where pixel data starts (right after header alignment)
+                let rawDataOffset = this.offset;
+
+                // Skip data section
+                if (dataSize > 0) {
+                    // Align data size to 2880-byte boundary
+                    const alignedDataSize = Math.ceil(dataSize / 2880) * 2880;
+                    this.offset += alignedDataSize;
+                }
+
+                return {
+                    hdu: hduIndex,
+                    header: header,
+                    dataSize: dataSize,
+                    dataOffset: rawDataOffset,  // Position where pixel data starts in buffer
+                    rawDataOffset: rawDataOffset  // Position where pixel data starts in buffer
+                };
+            }
+
+            readRecord() {
+                const record = {
+                    keyword: '',
+                    value: undefined,
+                    comment: ''
+                };
+
+                const line = this.readBytes(80);
+                const text = new TextDecoder().decode(line).trimEnd();
+
+                // Special case: END keyword is just 3 characters, valid on its own
+                if (text === 'END') {
+                    record.keyword = 'END';
+                    return record;
+                }
+
+                if (text.length < 8) {
+                    return record;
+                }
+
+                // Extract keyword
+                record.keyword = text.substring(0, 8).trim();
+                
+                // Detect binary data: keywords like "555555" or short repeated chars
+                if (record.keyword.length > 0) {
+                    const firstChar = record.keyword[0];
+                    const isRepeated = record.keyword.split('').every(c => c === firstChar);
+                    if (isRepeated) {
+                        record.keyword = 'END';
+                        return record;
+                    }
+                }
+                
+                // Validate that keyword looks like a valid FITS header keyword
+                // Keywords should be alphanumeric + some special chars
+                if (!/^[A-Z0-9_\-]+$/.test(record.keyword) && record.keyword.length > 0) {
+                    // Mark this as END to stop parsing
+                    record.keyword = 'END';
+                    return record;
+                }
+
+                if (text.length <= 8) return record;
+
+                // Check for value indicator
+                if (text[8] !== '=') return record;
+
+                // Extract value and comment
+                let valueEnd = text.indexOf('/');
+                if (valueEnd === -1) valueEnd = text.length;
+
+                const valueStr = text.substring(9, valueEnd).trim();
+                if (valueEnd < text.length) {
+                    record.comment = text.substring(valueEnd + 1).trim();
+                }
+
+                // Parse value
+                if (valueStr.length === 0) {
+                    record.value = null;
+                } else if (valueStr[0] === "'") {
+                    // String value
+                    const endQuote = valueStr.lastIndexOf("'");
+                    record.value = valueStr.substring(1, endQuote);
+                } else if (valueStr === 'T' || valueStr === 'F') {
+                    // Logical value
+                    record.value = valueStr === 'T';
+                } else if (!isNaN(valueStr) && valueStr !== '') {
+                    // Numeric value
+                    record.value = valueStr.includes('.') ? parseFloat(valueStr) : parseInt(valueStr);
+                } else {
+                    record.value = valueStr;
+                }
+
+                return record;
+            }
+
+            readBytes(count) {
+                const bytes = this.buffer.slice(this.offset, this.offset + count);
+                this.offset += count;
+                return bytes;
+            }
+
+            alignTo2880() {
+                const remainder = this.offset % 2880;
+                if (remainder !== 0) {
+                    this.offset += 2880 - remainder;
+                }
+            }
+
+            calculateDataSize(header) {
+                const bitpix = getValue(header['BITPIX']);
+                const naxis = getValue(header['NAXIS']);
+
+                if (bitpix === undefined || naxis === undefined) {
+                    console.warn('calculateDataSize: Missing BITPIX or NAXIS', {bitpix, naxis});
+                    return 0;
+                }
+
+                const bytesPerPixel = Math.abs(bitpix) / 8;
+                let totalPixels = 1;
+
+                for (let i = 1; i <= naxis; i++) {
+                    const axis = getValue(header[`NAXIS${i}`]);
+                    if (axis === undefined) {
+                        return 0;
+                    }
+                    totalPixels *= axis;
+                }
+
+                const result = bytesPerPixel * totalPixels;
+                return result;
+            }
+
+            hasAllNAxis(header) {
+                const naxis = getValue(header['NAXIS']);
+                if (naxis === undefined || typeof naxis !== 'number') return false;
+                
+                for (let i = 1; i <= naxis; i++) {
+                    const axisVal = getValue(header[`NAXIS${i}`]);
+                    if (axisVal === undefined || typeof axisVal !== 'number') return false;
+                }
+                return true;
+            }
+        }
+
+        // FITS Image Renderer - Progressive resampling to avoid timeouts
+        class FITSImageRenderer {
+            constructor(hdu, buffer) {
+                this.hdu = hdu;
+                this.buffer = new Uint8Array(buffer);
+                this.canvas = null;
+                this.progress = 0;
+            }
+
+            async renderAsync(onProgress) {
+                try {
+                    const header = this.hdu.header;
+                    const bitpix = getValue(header['BITPIX']);
+                    const naxis1 = getValue(header['NAXIS1']);
+                    const naxis2 = getValue(header['NAXIS2']);
+                    
+                    if (!bitpix || !naxis1 || !naxis2) {
+                        return null;
+                    }
+
+                    // Read raw pixel data
+                    const pixelData = await this.readPixelDataAsync(bitpix, naxis1, naxis2, onProgress);
+                    if (!pixelData) return null;
+
+                    // Resample at 1/4 linear resolution (1/16 area)
+                    const sampledData = await this.resampleAsync(pixelData, naxis1, naxis2, onProgress);
+
+                    // Normalize and create canvas
+                    const normalized = this.normalizePixelData(sampledData.data, sampledData.width, sampledData.height);
+                    this.canvas = this.createCanvasImage(normalized, sampledData.width, sampledData.height);
+
+                    return this.canvas;
+                } catch (err) {
+                    return null;
+                }
+            }
+
+            async readPixelDataAsync(bitpix, width, height, onProgress) {
+                const bytesPerPixel = Math.abs(bitpix) / 8;
+                const totalPixels = width * height;
+                const totalBytes = bytesPerPixel * totalPixels;
+
+                let offset = this.hdu.rawDataOffset;
+                const maxOffset = this.buffer.byteLength;
+                const pixelArray = new Float32Array(totalPixels);
+
+                // Process in chunks to avoid blocking
+                const chunkSize = Math.max(1000, Math.floor(totalPixels / 100)); // ~100 updates
+                
+                for (let i = 0; i < totalPixels; i += chunkSize) {
+                    const end = Math.min(i + chunkSize, totalPixels);
+                    
+                    for (let j = i; j < end; j++) {
+                        // Bounds check before reading
+                        if (offset + bytesPerPixel > maxOffset) {
+                            // Fill remaining pixels with 0 or return what we have
+                            for (let k = j; k < totalPixels; k++) {
+                                pixelArray[k] = 0;
+                            }
+                            return pixelArray;
+                        }
+                        pixelArray[j] = this.readPixel(bitpix, offset);
+                        offset += bytesPerPixel;
+                    }
+
+                    if (onProgress) {
+                        this.progress = (i + chunkSize) / totalPixels;
+                        onProgress(Math.min(this.progress, 0.9), 'Reading pixels...');
+                    }
+
+                    // Yield to browser
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+
+                return pixelArray;
+            }
+
+            readPixel(bitpix, offset) {
+                const bytesPerPixel = Math.abs(bitpix) / 8;
+                
+                // Validate offset is within bounds
+                if (offset < 0 || offset + bytesPerPixel > this.buffer.byteLength) {
+                    console.error(`readPixel: offset ${offset} out of bounds (buffer size: ${this.buffer.byteLength}, needs: ${bytesPerPixel} bytes)`);
+                    return 0;
+                }
+
+                const view = new DataView(this.buffer.buffer, this.buffer.byteOffset + offset);
+
+                try {
+                    switch (bitpix) {
+                        case 8:  // unsigned byte
+                            return view.getUint8(0);
+                        case 16: // signed short (big-endian)
+                            return view.getInt16(0, false);
+                        case 32: // signed long (big-endian)
+                            return view.getInt32(0, false);
+                        case -32: // float (big-endian)
+                            return view.getFloat32(0, false);
+                        case -64: // double (big-endian)
+                            return view.getFloat64(0, false);
+                        default:
+                            console.warn(`Unsupported BITPIX: ${bitpix}`);
+                            return 0;
+                    }
+                } catch (err) {
+                    console.error(`readPixel error at offset ${offset}:`, err);
+                    return 0;
+                }
+            }
+
+            async resampleAsync(pixelData, width, height, onProgress) {
+                // For very large images (>10MP), use 1/8 linear to speed up processing
+                const scale = (width * height > 10000000) ? 8 : 4;
+                const newWidth = Math.floor(width / scale);
+                const newHeight = Math.floor(height / scale);
+                const sampledData = new Float32Array(newWidth * newHeight);
+
+                const chunkHeight = Math.max(1, Math.floor(newHeight / 50)); // ~50 updates
+                let processed = 0;
+
+                for (let y = 0; y < newHeight; y += chunkHeight) {
+                    const yEnd = Math.min(y + chunkHeight, newHeight);
+                    
+                    for (let yy = y; yy < yEnd; yy++) {
+                        for (let x = 0; x < newWidth; x++) {
+                            // Average 4x4 block
+                            let sum = 0;
+                            let count = 0;
+
+                            for (let dy = 0; dy < scale; dy++) {
+                                for (let dx = 0; dx < scale; dx++) {
+                                    const srcX = x * scale + dx;
+                                    const srcY = yy * scale + dy;
+                                    if (srcX < width && srcY < height) {
+                                        sum += pixelData[srcY * width + srcX];
+                                        count++;
+                                    }
+                                }
+                            }
+
+                            sampledData[yy * newWidth + x] = count > 0 ? sum / count : 0;
+                        }
+                    }
+
+                    processed += yEnd - y;
+                    if (onProgress) {
+                        this.progress = 0.9 + (processed / newHeight) * 0.09;
+                        onProgress(this.progress, 'Resampling...');
+                    }
+
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+
+                return { data: sampledData, width: newWidth, height: newHeight };
+            }
+
+            normalizePixelData(pixelData, width, height) {
+                // Find min/max for normalization
+                let min = Infinity, max = -Infinity;
+                for (let i = 0; i < pixelData.length; i++) {
+                    const val = pixelData[i];
+                    if (isFinite(val)) {
+                        min = Math.min(min, val);
+                        max = Math.max(max, val);
+                    }
+                }
+
+                const range = max - min || 1;
+                const normalized = new Uint8ClampedArray(width * height * 4);
+
+                for (let i = 0; i < pixelData.length; i++) {
+                    const val = isFinite(pixelData[i]) ? pixelData[i] : min;
+                    const normalized8bit = Math.floor(((val - min) / range) * 255);
+                    
+                    const idx = i * 4;
+                    normalized[idx] = normalized8bit;     // R
+                    normalized[idx + 1] = normalized8bit; // G
+                    normalized[idx + 2] = normalized8bit; // B
+                    normalized[idx + 3] = 255;            // A
+                }
+
+                return normalized;
+            }
+
+            createCanvasImage(imageData, width, height) {
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                
+                const ctx = canvas.getContext('2d');
+                const imgData = ctx.createImageData(width, height);
+                imgData.data.set(imageData);
+                ctx.putImageData(imgData, 0, 0);
+
+                return canvas;
+            }
+
+            getCanvas() {
+                return this.canvas;
+            }
+        }
+
+        // Drag and drop handlers
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        function handleFiles(files) {
+            selectedFiles = Array.from(files).filter(f => 
+                f.name.toLowerCase().match(/\.(fits|fit|fts)$/)
+            );
+
+            if (selectedFiles.length === 0) {
+                alert('Please select valid FITS files (.fits, .fit, or .fts)');
+                return;
+            }
+
+            updateFileList();
+            actions.style.display = 'flex';
+            results.style.display = 'none';
+        }
+
+        function updateFileList() {
+            fileItems.innerHTML = selectedFiles.map((file, index) => `
+                <div class="file-item">
+                    <div>
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-status">${(file.size / 1024 / 1024).toFixed(2)} MB</div>
+                    </div>
+                </div>
+            `).join('');
+
+            fileList.style.display = selectedFiles.length > 0 ? 'block' : 'none';
+        }
+
+        parseBtn.addEventListener('click', async () => {
+            if (selectedFiles.length === 0) return;
+
+            parseBtn.disabled = true;
+            parseBtn.innerHTML = '<span class="spinner"></span>Parsing...';
+            resultItems.innerHTML = '';
+            progressContainer.classList.add('active');
+
+            try {
+                for (let fileIndex = 0; fileIndex < selectedFiles.length; fileIndex++) {
+                    const file = selectedFiles[fileIndex];
+                    const progress = ((fileIndex + 0.5) / selectedFiles.length) * 100;
+                    progressLabel.textContent = `Processing: ${file.name}`;
+                    progressBar.style.width = `${Math.min(progress, 99)}%`;
+                    progressBar.textContent = `${Math.round(Math.min(progress, 99))}%`;
+
+                    try {
+                        const arrayBuffer = await file.arrayBuffer();
+                        const parser = new FITSParser(arrayBuffer);
+                        const result = parser.parse();
+
+                        if (!result.success) {
+                            displayResult({
+                                fileName: file.name,
+                                error: result.error || 'Unknown error'
+                            });
+                        } else {
+                            displayResult({
+                                fileName: file.name,
+                                data: result,
+                                arrayBuffer: arrayBuffer
+                            });
+                        }
+                    } catch (err) {
+                        displayResult({
+                            fileName: file.name,
+                            error: err.message
+                        });
+                    }
+
+                    const completionProgress = ((fileIndex + 1) / selectedFiles.length) * 100;
+                    progressBar.style.width = `${completionProgress}%`;
+                    progressBar.textContent = `${Math.round(completionProgress)}%`;
+                }
+            } finally {
+                parseBtn.disabled = false;
+                parseBtn.innerHTML = 'Parse Files';
+                results.style.display = 'block';
+                progressContainer.classList.remove('active');
+            }
+        });
+
+        clearBtn.addEventListener('click', () => {
+            selectedFiles = [];
+            fileItems.innerHTML = '';
+            fileList.style.display = 'none';
+            actions.style.display = 'none';
+            results.style.display = 'none';
+            progressContainer.classList.remove('active');
+            fileInput.value = '';
+        });
+
+        function displayResult(result) {
+            const resultDiv = document.createElement('div');
+
+            if (result.error) {
+                resultDiv.className = 'error-item';
+                resultDiv.innerHTML = `
+                    <div class="error-title">❌ ${result.fileName}</div>
+                    <div class="error-message">${result.error}</div>
+                `;
+            } else {
+                const data = result.data;
+                resultDiv.className = 'result-item';
+                
+                const hduContent = data.hdus.map((hdu, idx) => {
+                    const naxis = getValue(hdu.header['NAXIS']);
+                    const hasImageData = naxis === 2 && hdu.dataSize > 0;
+                    return `
+                    <div class="hdu-info">
+                        <div class="hdu-title">📋 HDU ${hdu.hdu} Header (${Object.keys(hdu.header).length} keywords)</div>
+                        ${Object.entries(hdu.header).map(([key, value]) => {
+                            let displayValue = '';
+                            let comment = '';
+                            
+                            if (typeof value === 'object' && value !== null) {
+                                displayValue = JSON.stringify(value.value);
+                                comment = value.comment ? ` / ${value.comment}` : '';
+                            } else {
+                                displayValue = JSON.stringify(value);
+                            }
+                            
+                            return `
+                                <div class="header-pair">
+                                    <div class="header-key">${key}</div>
+                                    <div class="header-value">${displayValue}</div>
+                                    ${comment ? `<div class="header-comment">${comment}</div>` : ''}
+                                </div>
+                            `;
+                        }).join('')}
+                        <div class="header-pair" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e0e0e0;">
+                            <div class="header-key">Data Size:</div>
+                            <div class="header-value">${(hdu.dataSize / 1024 / 1024).toFixed(2)} MB</div>
+                        </div>
+                        <div class="header-pair">
+                            <div class="header-key">Data Offset:</div>
+                            <div class="header-value">${hdu.dataOffset} bytes</div>
+                        </div>
+                        ${hasImageData ? `<div id="image-render-${idx}" class="canvas-container" style="display: none;">
+                            <div style="font-size: 14px; font-weight: 600; color: #333;">🖼️ Rendering Image...</div>
+                            <div class="render-progress">
+                                <div class="render-progress-bar" style="width: 0%"><span>0%</span></div>
+                            </div>
+                        </div>` : ''}
+                    </div>
+                `}).join('');
+
+                resultDiv.innerHTML = `
+                    <div class="result-header" onclick="this.parentElement.querySelector('.result-content').classList.toggle('open'); this.querySelector('.result-toggle').classList.toggle('open')">
+                        <span class="result-title">✅ ${result.fileName} (${data.hdus.length} HDU${data.hdus.length !== 1 ? 's' : ''})</span>
+                        <span class="result-toggle">▼</span>
+                    </div>
+                    <div class="result-content">
+                        ${hduContent}
+                    </div>
+                `;
+
+                // Render images asynchronously
+                data.hdus.forEach((hdu, idx) => {
+                    if (getValue(hdu.header['NAXIS']) === 2 && hdu.dataSize > 0) {
+                        setTimeout(() => {
+                            renderImageForHDU(hdu, idx, result.arrayBuffer);
+                        }, 100);
+                    }
+                });
+            }
+
+            resultItems.appendChild(resultDiv);
+        }
+
+        async function renderImageForHDU(hdu, hduIndex, arrayBuffer) {
+            const renderContainer = document.getElementById(`image-render-${hduIndex}`);
+            if (!renderContainer) {
+                return;
+            }
+
+            renderContainer.style.display = 'flex';
+            
+            const progressBar = renderContainer.querySelector('.render-progress-bar');
+            
+            const renderer = new FITSImageRenderer(hdu, arrayBuffer);
+            const canvas = await renderer.renderAsync((progress, status) => {
+                const percent = Math.round(progress * 100);
+                progressBar.style.width = `${percent}%`;
+                progressBar.querySelector('span').textContent = `${percent}%`;
+                renderContainer.querySelector('div:first-child').textContent = `🖼️ ${status}`;
+            });
+
+            if (canvas) {
+                renderContainer.innerHTML = '';
+                const label = document.createElement('div');
+                label.style.cssText = 'font-size: 12px; color: #666; margin-bottom: 5px;';
+                const width = getValue(hdu.header['NAXIS1']);
+                const height = getValue(hdu.header['NAXIS2']);
+                const scale = (width * height > 10000000) ? 8 : 4;
+                label.textContent = `Image Preview (${canvas.width}×${canvas.height}) - 1/${scale} linear resolution from ${width}×${height}`;
+                renderContainer.appendChild(label);
+                renderContainer.appendChild(canvas);
+                renderContainer.style.display = 'flex';
+            } else {
+                renderContainer.querySelector('div:first-child').textContent = '❌ Failed to render image';
+            }
+        }
+    </script>
+</body>
+</html>
