@@ -155,8 +155,15 @@ export class CNodeTerrainUI extends CNode {
             }
         }
 
+
+        // This is the default map type if none specificed in the Sit file
+        // Use DOCKER_MAP_TYPE if building for Docker, otherwise use DEFAULT_MAP_TYPE
+        const defaultMapType =  process.env.DOCKER_BUILD
+            ? (process.env.DOCKER_MAP_TYPE ?? "Debug")
+            : (process.env.DEFAULT_MAP_TYPE ?? "Debug");
+
         // map type from the terrain object in a a saved sitch, or default to the first one
-        this.mapType = v.mapType ?? configParams.defaultMapType ?? Object.keys(this.mapSources)[0];
+        this.mapType = v.mapType ?? defaultMapType ?? Object.keys(this.mapSources)[0];
 
         this.gui = guiMenus.terrain;
         this.mapTypeMenu = this.gui.add(this, "mapType", this.mapTypesKV).listen().name("Map Type")
@@ -200,7 +207,12 @@ export class CNodeTerrainUI extends CNode {
             const elevationDef = this.elevationSources[elevationType]
             this.elevationTypesKV[elevationDef.name] = elevationType
         }
-        this.elevationType = v.elevationType ?? Object.keys(this.elevationSources)[0]
+
+        const defaultElevationType =  process.env.DOCKER_BUILD
+            ? (process.env.DOCKER_ELEVATION_TYPE ?? "Flat")
+            : (process.env.DEFAULT_ELEVATION_TYPE ?? "Flat");
+
+        this.elevationType = v.elevationType ?? defaultElevationType ?? Object.keys(this.elevationSources)[0]
         // add the menu
         this.elevationTypeMenu = this.gui.add(this, "elevationType", this.elevationTypesKV).listen().name("Elevation Type")
             .tooltip("Elevation data source for terrain height data")

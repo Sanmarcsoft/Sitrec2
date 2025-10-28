@@ -11,11 +11,13 @@ export const _configParams = {
 
     rehostRequiresLogin: true,
 
-    // This is the default map type if none specificed in the Sit file
-    // Use DOCKER_MAP_TYPE if building for Docker, otherwise use DEFAULT_MAP_TYPE
-    defaultMapType: process.env.DOCKER_BUILD
-        ? (process.env.DOCKER_MAP_TYPE ?? "Debug")
-        : (process.env.DEFAULT_MAP_TYPE ?? "Debug"), //"NRL_WMTS",
+    // NOTE: defaultMapType is no longer specified here, as it comes from shared.env
+    // the logic decidding which one to use is now in CNodeTerrainUI.js
+
+
+    defaultElevationType: process.env.DOCKER_BUILD
+        ? (process.env.DOCKER_ELEVATION_TYPE ?? "FLAT")
+        : (process.env.DEFAULT_ELEVATION_TYPE ?? "FLAT")
 
     customMapSources: {
 
