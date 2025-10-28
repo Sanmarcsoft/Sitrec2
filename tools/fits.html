@@ -57,9 +57,37 @@
         }
 
         .content {
-            padding: 15px 20px;
+            padding: 0;
             flex: 1;
-            overflow: auto;
+            overflow: hidden;
+            display: flex;
+            gap: 0;
+        }
+
+        .pane-left {
+            flex: 0 0 50%;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 15px 20px;
+            border-right: 1px solid #e0e0e0;
+        }
+
+        .pane-right {
+            flex: 0 0 50%;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 15px 20px;
+            background: #fafafa;
+        }
+
+        .file-controls {
+            position: sticky;
+            top: 0;
+            background: white;
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+            z-index: 10;
+            border-bottom: 1px solid #e0e0e0;
         }
 
         .drop-zone {
@@ -195,18 +223,20 @@
         .canvas-container {
             background: white;
             border-radius: 4px;
-            padding: 8px;
-            margin-bottom: 6px;
+            padding: 12px;
+            margin-bottom: 12px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
+            border: 1px solid #e0e0e0;
         }
 
         .canvas-container canvas {
-            border: 1px solid #e0e0e0;
+            border: 1px solid #ddd;
             max-width: 100%;
             height: auto;
+            display: block;
         }
 
         .render-progress {
@@ -391,6 +421,18 @@
             min-width: 40px;
         }
 
+        @media (max-width: 900px) {
+            .pane-left,
+            .pane-right {
+                flex: 0 0 50%;
+            }
+
+            .pane-left {
+                border-right: 1px solid #e0e0e0;
+                border-bottom: none;
+            }
+        }
+
         @media (max-width: 600px) {
             .header {
                 padding: 30px 20px;
@@ -401,7 +443,19 @@
             }
 
             .content {
-                padding: 20px;
+                padding: 0;
+                flex-direction: column;
+            }
+
+            .pane-left,
+            .pane-right {
+                flex: 1;
+                border-right: none;
+                border-bottom: 1px solid #e0e0e0;
+            }
+
+            .pane-right {
+                border-bottom: none;
             }
 
             .drop-zone {
@@ -418,33 +472,45 @@
         </div>
 
         <div class="content">
-            <div style="display: flex; gap: 8px; margin-bottom: 10px;">
-                <label class="file-input-label">
-                    Choose Files
-                    <input type="file" id="fileInput" multiple accept=".fits,.fit,.fts">
-                </label>
-            </div>
+            <!-- Left Pane: Headers -->
+            <div class="pane-left">
+                <div class="file-controls">
+                    <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                        <label class="file-input-label">
+                            Choose Files
+                            <input type="file" id="fileInput" multiple accept=".fits,.fit,.fts">
+                        </label>
+                    </div>
 
-            <div class="file-list" id="fileList">
-                <h3>Queued Files:</h3>
-                <div id="fileItems"></div>
-            </div>
+                    <div class="file-list" id="fileList">
+                        <h3>Queued Files:</h3>
+                        <div id="fileItems"></div>
+                    </div>
 
-            <div class="actions" id="actions" style="display: none;">
-                <button class="btn-primary" id="parseBtn">Parse Files</button>
-                <button class="btn-secondary" id="clearBtn">Clear</button>
-            </div>
+                    <div class="actions" id="actions" style="display: none;">
+                        <button class="btn-primary" id="parseBtn">Parse Files</button>
+                        <button class="btn-secondary" id="clearBtn">Clear</button>
+                    </div>
 
-            <div class="progress-container" id="progressContainer">
-                <div class="progress-label" id="progressLabel">Processing...</div>
-                <div class="progress-bar-container">
-                    <div class="progress-bar-fill" id="progressBar" style="width: 0%">0%</div>
+                    <div class="progress-container" id="progressContainer">
+                        <div class="progress-label" id="progressLabel">Processing...</div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar-fill" id="progressBar" style="width: 0%">0%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="results" id="results">
+                    <h3>Parse Results:</h3>
+                    <div id="resultItems"></div>
                 </div>
             </div>
 
-            <div class="results" id="results">
-                <h3>Parse Results:</h3>
-                <div id="resultItems"></div>
+            <!-- Right Pane: Images -->
+            <div class="pane-right" id="imagePane">
+                <div style="color: #999; text-align: center; padding: 40px 20px; font-size: 14px;">
+                    Images will appear here
+                </div>
             </div>
         </div>
     </div>
@@ -461,9 +527,11 @@
         const progressContainer = document.getElementById('progressContainer');
         const progressLabel = document.getElementById('progressLabel');
         const progressBar = document.getElementById('progressBar');
+        const imagePane = document.getElementById('imagePane');
 
         let selectedFiles = [];
         const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB chunks for reading
+        let currentFileIndex = 0;
 
         // Global helper to extract value from either plain number or {value, comment} object
         const getValue = (val) => {
@@ -1143,6 +1211,9 @@
             results.style.display = 'none';
             progressContainer.classList.remove('active');
             fileInput.value = '';
+            
+            // Clear right pane
+            imagePane.innerHTML = '<div style="color: #999; text-align: center; padding: 40px 20px; font-size: 14px;">Images will appear here</div>';
         });
 
         function displayResult(result) {
@@ -1191,12 +1262,6 @@
                             <div class="header-key">Data Offset:</div>
                             <div class="header-value">${hdu.dataOffset} bytes</div>
                         </div>
-                        ${hasImageData ? `<div id="image-render-${idx}" class="canvas-container" style="display: none;">
-                            <div style="font-size: 14px; font-weight: 600; color: #333;">🖼️ Rendering Image...</div>
-                            <div class="render-progress">
-                                <div class="render-progress-bar" style="width: 0%"><span>0%</span></div>
-                            </div>
-                        </div>` : ''}
                     </div>
                 `}).join('');
 
@@ -1210,7 +1275,13 @@
                     </div>
                 `;
 
-                // Render images asynchronously
+                // Store file reference for image rendering
+                resultDiv.dataset.fileReference = JSON.stringify({
+                    file: result.file,
+                    data: data
+                });
+
+                // Render images asynchronously to right pane
                 data.hdus.forEach((hdu, idx) => {
                     if (getValue(hdu.header['NAXIS']) === 2 && hdu.dataSize > 0) {
                         setTimeout(() => {
@@ -1224,39 +1295,67 @@
         }
 
         async function renderImageForHDU(hdu, hduIndex, file, result) {
-            const renderContainer = document.getElementById(`image-render-${hduIndex}`);
-            if (!renderContainer) {
-                return;
-            }
-
+            // Create a unique container for this image in the right pane
+            const containerId = `image-render-${Date.now()}-${hduIndex}`;
+            const renderContainer = document.createElement('div');
+            renderContainer.id = containerId;
+            renderContainer.className = 'canvas-container';
             renderContainer.style.display = 'flex';
             
+            // Add to right pane
+            const placeholder = imagePane.querySelector('div[style*="color: #999"]');
+            if (placeholder) {
+                imagePane.innerHTML = '';
+            }
+            imagePane.appendChild(renderContainer);
+            
+            // Create progress UI
+            const progressHTML = `
+                <div style="font-size: 14px; font-weight: 600; color: #333;">🖼️ Rendering Image...</div>
+                <div class="render-progress">
+                    <div class="render-progress-bar" style="width: 0%"><span>0%</span></div>
+                </div>
+            `;
+            renderContainer.innerHTML = progressHTML;
+            
             const progressBar = renderContainer.querySelector('.render-progress-bar');
+            const statusDiv = renderContainer.querySelector('div:first-child');
             
-            // Get pixel data (either cached or load on-demand)
-            const pixelData = await getPixelDataForRendering(file, result);
-            
-            const renderer = new FITSImageRenderer(hdu, pixelData);
-            const canvas = await renderer.renderAsync((progress, status) => {
-                const percent = Math.round(progress * 100);
-                progressBar.style.width = `${percent}%`;
-                progressBar.querySelector('span').textContent = `${percent}%`;
-                renderContainer.querySelector('div:first-child').textContent = `🖼️ ${status}`;
-            });
+            try {
+                // Get pixel data (either cached or load on-demand)
+                const pixelData = await getPixelDataForRendering(file, result);
+                
+                const renderer = new FITSImageRenderer(hdu, pixelData);
+                const canvas = await renderer.renderAsync((progress, status) => {
+                    const percent = Math.round(progress * 100);
+                    progressBar.style.width = `${percent}%`;
+                    progressBar.querySelector('span').textContent = `${percent}%`;
+                    statusDiv.textContent = `🖼️ ${status}`;
+                });
 
-            if (canvas) {
-                renderContainer.innerHTML = '';
-                const label = document.createElement('div');
-                label.style.cssText = 'font-size: 12px; color: #666; margin-bottom: 5px;';
-                const width = getValue(hdu.header['NAXIS1']);
-                const height = getValue(hdu.header['NAXIS2']);
-                const scale = (width * height > 10000000) ? 8 : 4;
-                label.textContent = `Image Preview (${canvas.width}×${canvas.height}) - 1/${scale} linear resolution from ${width}×${height}`;
-                renderContainer.appendChild(label);
-                renderContainer.appendChild(canvas);
-                renderContainer.style.display = 'flex';
-            } else {
-                renderContainer.querySelector('div:first-child').textContent = '❌ Failed to render image';
+                if (canvas) {
+                    renderContainer.innerHTML = '';
+                    const label = document.createElement('div');
+                    label.style.cssText = 'font-size: 12px; color: #666; margin-bottom: 8px; text-align: center;';
+                    const width = getValue(hdu.header['NAXIS1']);
+                    const height = getValue(hdu.header['NAXIS2']);
+                    const scale = (width * height > 10000000) ? 8 : 4;
+                    label.textContent = `HDU ${hdu.hdu}: ${canvas.width}×${canvas.height} (1/${scale} from ${width}×${height})`;
+                    renderContainer.appendChild(label);
+                    
+                    const canvasWrapper = document.createElement('div');
+                    canvasWrapper.style.cssText = 'display: flex; justify-content: center; flex-grow: 1;';
+                    canvasWrapper.appendChild(canvas);
+                    renderContainer.appendChild(canvasWrapper);
+                    
+                    renderContainer.style.display = 'flex';
+                    renderContainer.style.flexDirection = 'column';
+                } else {
+                    statusDiv.textContent = '❌ Failed to render image';
+                }
+            } catch (err) {
+                console.error('Error rendering image:', err);
+                statusDiv.textContent = `❌ Error: ${err.message}`;
             }
         }
     </script>
