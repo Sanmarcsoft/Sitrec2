@@ -535,24 +535,31 @@
             // Store file reference for on-demand pixel data loading
             result.file = file;
             result.fileSize = fileSize;
+            result.headerBuffer = headerBuffer;  // Pass the header buffer to avoid re-reading
 
-            // Load remaining pixel data in background
+            // Load remaining pixel data in background (fire-and-forget)
             if (fileSize > headerBuffer.length) {
-                loadPixelDataInBackground(file, result, onPixelDataProgress);
+                // Fire without awaiting to return immediately to UI
+                loadPixelDataInBackground(file, result, headerBuffer.length, onPixelDataProgress).catch(err => {
+                    console.error('Background pixel loading error:', err);
+                });
             }
 
             return result;
         }
 
         // Load remaining pixel data in background without blocking UI
-        async function loadPixelDataInBackground(file, result, onProgress) {
+        async function loadPixelDataInBackground(file, result, headerSize, onProgress) {
             const fileSize = file.size;
-            const headerBuffer = new Uint8Array(await file.slice(0, Math.min(fileSize, 100 * 1024 * 1024)).arrayBuffer());
-            
-            let fullBuffer = headerBuffer;
-            let loaded = headerBuffer.length;
+            let fullBuffer = result.headerBuffer;
+            let loaded = headerSize;
 
-            for (let offset = headerBuffer.length; offset < fileSize; offset += CHUNK_SIZE) {
+            // Immediately report that we're starting to load
+            if (onProgress) {
+                onProgress(loaded / fileSize);
+            }
+
+            for (let offset = headerSize; offset < fileSize; offset += CHUNK_SIZE) {
                 const end = Math.min(offset + CHUNK_SIZE, fileSize);
                 const chunk = new Uint8Array(await file.slice(offset, end).arrayBuffer());
                 
