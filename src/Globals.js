@@ -9,6 +9,7 @@ export var Globals = {
     GPUMemoryMonitor: null,  // GPU Memory Monitor instance
     debugGPUBacklog: false,  // Enable logging of GPU buffer flushes
     showTileStats: false,  // Enable tile statistics logging
+    showCompassElevation: false, // Show elevation on compass
     
     // Granular render debug flags - shared across ALL views
     renderDebugFlags: {

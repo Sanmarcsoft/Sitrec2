@@ -281,10 +281,15 @@ export class CCustomManager {
 
         if (Globals.showAllTracksInLook === undefined)
             Globals.showAllTracksInLook = false;
-        guiMenus.showhide.add(Globals, "showAllTracksInLook").name("Show All Tracks in Look View").onChange(() => {
+            guiMenus.showhide.add(Globals, "showAllTracksInLook").name("Show All Tracks in Look View").onChange(() => {
             this.refreshLookViewTracks();
 
         }).listen();
+
+        if (GlobalScene.showCompassElevation === undefined) {
+            Globals.showCompassElevation = false;
+            guiMenus.showhide.add(Globals, "showCompassElevation").name("Show Compass Elevation")
+        }
 
         guiMenus.contents.add(this, "removeAllTracks")
             .name("Remove All Tracks")

@@ -3,8 +3,10 @@
 
 import {CNodeViewUI} from "./CNodeViewUI";
 import {getCompassHeading} from "../SphericalMath";
+import {getAzElFromPositionAndForward} from "../SphericalMath";
 import {MV3} from "../threeUtils";
-import {NodeMan} from "../Globals";
+import {NodeMan,Globals} from "../Globals";
+//import {Globals} from "../Globals";
 
 export class   CNodeCompassUI extends CNodeViewUI {
 
@@ -13,7 +15,12 @@ export class   CNodeCompassUI extends CNodeViewUI {
         this.input("camera");  // a camera node
 
         // addText(key, text, x, y, size, color, align, font) {
-        this.text = this.addText("heading", "0°", 50, 20, 20, "white", "center", "Arial")
+        if(Globals.showCompassElevation === false) {
+            this.text = this.addText("heading", "0°", 50, 20, 20, "white", "center", "Arial")
+        }
+        else {
+            this.text = this.addText("heading", "0°", 50, 20, 16, "white", "center", "Arial")
+        }
 
         this.cx = 50;
         this.cy = 60;
@@ -21,6 +28,7 @@ export class   CNodeCompassUI extends CNodeViewUI {
 
         // State tracking for optimization
         this.lastHeading = null;
+        this.lastElevation = null;
         this.lastTargetWindFrom = null;
         this.lastLocalWindFrom = null;
     }
@@ -59,6 +67,8 @@ export class   CNodeCompassUI extends CNodeViewUI {
 
         // get the heading of the camera, in radians
         const heading = getCompassHeading(camera.position, forward, camera);
+        const azel =  getAzElFromPositionAndForward(camera.position, forward);
+        const elevationRound = -Math.round(azel[1] * 10) / 10;
 
         // convert to 0..360 degrees for display
         const headingDeg = heading * 180 / Math.PI;
@@ -67,10 +77,6 @@ export class   CNodeCompassUI extends CNodeViewUI {
         // round to the nearest 0.1 degree
         const headingRound = Math.round(headingPos * 10) / 10;
 
-
-
-
-
         // Get current wind states for change detection
         const targetWind = NodeMan.get("targetWind", false);
         const localWind = NodeMan.get("localWind", false);
@@ -78,19 +84,28 @@ export class   CNodeCompassUI extends CNodeViewUI {
         const currentLocalWindFrom = localWind?.from;
 
         // Check if anything has changed
-        if (this.lastHeading === headingRound &&
+        if (this.lastHeading === headingRound && this.lastElevation === elevationRound &&
             this.lastTargetWindFrom === currentTargetWindFrom &&
             this.lastLocalWindFrom === currentLocalWindFrom) {
             return; // Nothing changed, early out
         }
 
         // set the text to the rounded heading
-        this.text.text = headingRound + "°";
+        if(Globals.showCompassElevation === false) {
+            this.removeText("heading");
+            this.text = this.addText("heading", headingRound + "°", 50, 20, 20, "white", "center", "Arial")
+        }
+        else {
+            this.removeText("heading");
+            this.text = this.addText("heading", headingRound + "° / " + elevationRound + "°", 50, 20, 16, "white", "center", "Arial")
+        }
+
         // after updating the text, render the text
         super.renderCanvas(frame);
 
         // Update state
         this.lastHeading = headingRound;
+        this.lastElevation = elevationRound;
         this.lastTargetWindFrom = currentTargetWindFrom;
         this.lastLocalWindFrom = currentLocalWindFrom;
 
