@@ -1617,9 +1617,9 @@ export class CNodeView3D extends CNodeViewCanvas {
         console.log(`  Ray direction (from origin): (${rayDirection.x.toFixed(4)}, ${rayDirection.y.toFixed(4)}, ${rayDirection.z.toFixed(4)})`);
 
         // Check planets
-        if (nightSkyNode.planetSprites) {
-            console.log(`Checking ${Object.keys(nightSkyNode.planetSprites).length} planets`);
-            for (const [planetName, planetData] of Object.entries(nightSkyNode.planetSprites)) {
+        if (nightSkyNode.planets.planetSprites) {
+            console.log(`Checking ${Object.keys(nightSkyNode.planets.planetSprites).length} planets`);
+            for (const [planetName, planetData] of Object.entries(nightSkyNode.planets.planetSprites)) {
                 if (!planetData.sprite || !planetData.sprite.visible) continue;
 
                 // Get planet position in world space
