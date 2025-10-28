@@ -625,7 +625,7 @@
                 // Update result.fullBuffer immediately so rendering can use new data
                 result.fullBuffer = fullBuffer;
                 const elapsed = performance.now() - startTime;
-                console.log(`[BG-LOAD] ${elapsed.toFixed(0)}ms: Loaded to ${end / 1024 / 1024}MB / ${fileSize / 1024 / 1024}MB (fullBuffer: ${(fullBuffer.length / 1024 / 1024).toFixed(2)} MB)`);
+//                console.log(`[BG-LOAD] ${elapsed.toFixed(0)}ms: Loaded to ${end / 1024 / 1024}MB / ${fileSize / 1024 / 1024}MB (fullBuffer: ${(fullBuffer.length / 1024 / 1024).toFixed(2)} MB)`);
 
                 loaded = end;
                 
@@ -919,18 +919,18 @@
 
                 console.log(`[RENDERER] Progressive rendering: ${width}×${height} → ${reducedWidth}×${reducedHeight} (scale ${scale}x)`);
 
-                // Create canvas with grey pixels
+                // Create canvas with dark yellow pixels for debugging
                 this.canvas = document.createElement('canvas');
                 this.canvas.width = reducedWidth;
                 this.canvas.height = reducedHeight;
                 const ctx = this.canvas.getContext('2d');
                 const imageData = ctx.createImageData(reducedWidth, reducedHeight);
                 
-                // Fill with grey initially
+                // Fill with dark yellow initially (to clearly see unrendered areas)
                 for (let i = 0; i < imageData.data.length; i += 4) {
-                    imageData.data[i] = 128;     // R
-                    imageData.data[i + 1] = 128; // G
-                    imageData.data[i + 2] = 128; // B
+                    imageData.data[i] = 180;     // R (dark yellow)
+                    imageData.data[i + 1] = 140; // G
+                    imageData.data[i + 2] = 0;   // B
                     imageData.data[i + 3] = 255; // A
                 }
                 ctx.putImageData(imageData, 0, 0);
@@ -966,14 +966,18 @@
                 const reducedHeight = Math.ceil(height / scale);
                 
                 let offset = this.hdu.rawDataOffset;
-                const scanlineBuffer = [];
-                let reducedRowIndex = 0;
+                const renderedRows = new Set(); // Track which rows have been rendered
                 let batchCount = 0;
-                let skippedBatches = 0;
-                let sourceRowStart = 0; // Track which source rows we're processing
+                let currentBatchStartRow = 0;
+                let currentBatchBuffer = [];
+                
+                // Track global min/max for consistent normalization across all rows
+                let globalMin = Infinity;
+                let globalMax = -Infinity;
+                const rowDataCache = new Map(); // Store row data for re-rendering with global normalization
                 
                 console.log(`[RENDERER] Reading and rendering ${height} scanlines...`);
-                console.log(`[RENDERER] Canvas dimensions: ${reducedWidth}×${reducedHeight}, Expected batches: ${Math.ceil(height / scale)}`);
+                console.log(`[RENDERER] Canvas dimensions: ${reducedWidth}×${reducedHeight}, scale: ${scale}x`);
 
                 for (let row = 0; row < height; row++) {
                     const scanlineStart = offset + row * bytesPerScanline;
@@ -1010,28 +1014,72 @@
                         }
                     }
                     
-                    scanlineBuffer.push(rawScanline);
+                    // Which batch does this row belong to?
+                    const batchIndex = Math.floor(row / scale);
+                    const rowInBatch = row % scale;
                     
-                    // When we have enough scanlines for a reduced row, render it
-                    if (scanlineBuffer.length === scale || row === height - 1) {
-                        if (reducedRowIndex < reducedHeight) {
-                            const sourceRowEnd = row + 1;
-                            console.log(`[RENDERER] Batch ${batchCount}: source rows [${sourceRowStart}-${sourceRowEnd}] → canvas row ${reducedRowIndex}, bufSize=${scanlineBuffer.length}, hasData=${hasData}`);
-                            this.renderReducedScanline(
-                                scanlineBuffer, 
-                                reducedRowIndex, 
-                                reducedWidth, 
-                                scale, 
-                                ctx
-                            );
-                            reducedRowIndex++;
-                            sourceRowStart = row + 1; // Next batch starts after this row
+                    // Start new batch if this is the first row of a batch
+                    if (rowInBatch === 0) {
+                        currentBatchStartRow = row;
+                        currentBatchBuffer = [];
+                    }
+                    
+                    currentBatchBuffer.push(rawScanline);
+                    
+                    // Check if batch is complete (we have 'scale' rows or we're at the last row)
+                    const isEndOfBatch = (rowInBatch === scale - 1) || (row === height - 1);
+                    const targetReducedRow = batchIndex;
+                    
+                    if (isEndOfBatch && currentBatchBuffer.length > 0 && targetReducedRow < reducedHeight) {
+                        // Process the batch if we haven't processed this row yet
+                        if (!renderedRows.has(targetReducedRow)) {
+//                            console.log(`[RENDERER] Processing batch ${batchCount}: source rows [${currentBatchStartRow}-${row}] (${currentBatchBuffer.length} rows) → canvas row ${targetReducedRow}`);
+                            
+                            // Calculate averaged values for this row and update global min/max
+                            const avgRowData = new Float32Array(reducedWidth);
+                            for (let x = 0; x < reducedWidth; x++) {
+                                let sum = 0, count = 0;
+                                const srcXBase = x * scale;
+                                
+                                for (let dy = 0; dy < currentBatchBuffer.length; dy++) {
+                                    for (let dx = 0; dx < scale; dx++) {
+                                        const srcX = srcXBase + dx;
+                                        if (srcX < currentBatchBuffer[0].length) {
+                                            const pixel = currentBatchBuffer[dy][srcX];
+                                            if (isFinite(pixel)) {
+                                                sum += pixel;
+                                                count++;
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                const avg = count > 0 ? sum / count : 0;
+                                avgRowData[x] = avg;
+                                
+                                // Update global min/max
+                                if (isFinite(avg)) {
+                                    globalMin = Math.min(globalMin, avg);
+                                    globalMax = Math.max(globalMax, avg);
+                                }
+                            }
+                            
+                            // Cache the averaged row data
+                            rowDataCache.set(targetReducedRow, avgRowData);
+                            renderedRows.add(targetReducedRow);
                             batchCount++;
+                            
+                            // Do a quick preview render with current min/max (will be re-rendered later)
+                            this.renderRowWithNormalization(avgRowData, targetReducedRow, reducedWidth, ctx, 
+                                isFinite(globalMin) ? globalMin : 0, 
+                                isFinite(globalMax) ? globalMax : 1);
+                            
+                            // Force canvas update after each row render
+                            await new Promise(resolve => setTimeout(resolve, 0));
                         } else {
-                            console.warn(`[RENDERER] SKIPPED batch at row=${row}: reducedRowIndex(${reducedRowIndex}) >= reducedHeight(${reducedHeight})`);
-                            skippedBatches++;
+                            console.warn(`[RENDERER] Row ${targetReducedRow} already processed, skipping batch at source row ${row}`);
                         }
-                        scanlineBuffer.length = 0;
+                        currentBatchBuffer = [];
                     }
                     
                     if (onProgress && row % 10 === 0) {
@@ -1039,26 +1087,66 @@
                         onProgress(Math.min(this.progress, 0.99), `Rendering ${row + 1}/${height}...`);
                     }
 
-                    // Yield frequently to allow canvas to update
-                    if (row % 4 === 0) {
+                    // Yield less frequently - only at batch boundaries to avoid timing issues
+                    // The yield after rendering (line 1043) handles the important canvas updates
+                    if (rowInBatch === 0 && row > 0) {
                         await new Promise(resolve => setTimeout(resolve, 0));
                     }
                 }
                 
+                // Final pass: Re-render all rows with consistent global normalization
+                console.log(`[RENDERER] Final pass: Re-rendering with global normalization [${globalMin.toFixed(2)}, ${globalMax.toFixed(2)}]`);
+                
+                if (isFinite(globalMin) && isFinite(globalMax) && rowDataCache.size > 0) {
+                    for (const [rowIndex, rowData] of rowDataCache.entries()) {
+                        this.renderRowWithNormalization(rowData, rowIndex, reducedWidth, ctx, globalMin, globalMax);
+                    }
+                    
+                    // Force final canvas update
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+                
                 const elapsed = performance.now() - startTime;
                 console.log(`[RENDERER] Progressive rendering completed in ${elapsed.toFixed(0)}ms`);
-                console.log(`[RENDERER] Summary: ${batchCount} batches rendered, ${skippedBatches} skipped`);
-                console.log(`[RENDERER] Canvas: ${reducedRowIndex}/${reducedHeight} rows rendered`);
+                console.log(`[RENDERER] Summary: ${batchCount} batches processed, global range: [${globalMin.toFixed(2)}, ${globalMax.toFixed(2)}]`);
+                console.log(`[RENDERER] Canvas: ${renderedRows.size}/${reducedHeight} rows rendered`);
                 
-                // Check for gaps
-                if (reducedRowIndex < reducedHeight) {
-                    console.warn(`[RENDERER] ⚠️ COVERAGE GAP: ${reducedHeight - reducedRowIndex} rows not rendered (rows ${reducedRowIndex}-${reducedHeight - 1})`);
+                // Check for gaps - identify which specific rows were missed
+                const missedRows = [];
+                for (let i = 0; i < reducedHeight; i++) {
+                    if (!renderedRows.has(i)) {
+                        missedRows.push(i);
+                    }
+                }
+                
+                if (missedRows.length > 0) {
+                    console.warn(`[RENDERER] ⚠️ COVERAGE GAP: ${missedRows.length} rows not rendered`);
+                    console.warn(`[RENDERER] Missed rows: ${missedRows.join(', ')}`);
                 } else {
                     console.log(`[RENDERER] ✓ All ${reducedHeight} canvas rows covered`);
                 }
                 if (onProgress) {
                     onProgress(1.0, 'Done!');
                 }
+            }
+            
+            renderRowWithNormalization(rowData, rowIndex, width, ctx, minVal, maxVal) {
+                const imageData = ctx.createImageData(width, 1);
+                const range = maxVal - minVal || 1;
+                
+                for (let x = 0; x < width; x++) {
+                    const value = rowData[x];
+                    const normalized = Math.floor(((value - minVal) / range) * 255);
+                    const clamped = Math.max(0, Math.min(255, normalized));
+                    
+                    const idx = x * 4;
+                    imageData.data[idx] = clamped;     // R
+                    imageData.data[idx + 1] = clamped; // G
+                    imageData.data[idx + 2] = clamped; // B
+                    imageData.data[idx + 3] = 255;     // A
+                }
+                
+                ctx.putImageData(imageData, 0, rowIndex);
             }
 
             renderReducedScanline(scanlineBuffer, reducedRow, reducedWidth, scale, ctx) {
