@@ -547,6 +547,9 @@
         let selectedFiles = [];
         const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB chunks for reading
         let currentFileIndex = 0;
+        
+        // Store active renderers for fast re-rendering
+        let activeRenderers = [];
 
         // Global helper to extract value from either plain number or {value, comment} object
         const getValue = (val) => {
@@ -992,6 +995,12 @@
                 this.workerScriptUrl = null;
                 this.normalization = normalization;
                 this.asinhScale = asinhScale;
+                // Cache for fast re-rendering
+                this.rowDataCache = null;
+                this.globalMin = null;
+                this.globalMax = null;
+                this.reducedWidth = null;
+                this.reducedHeight = null;
             }
             
             // Normalization functions
@@ -1392,6 +1401,13 @@
                 console.log(`[RENDERER] Summary: ${batchCount} batches processed, global range: [${globalMin.toFixed(2)}, ${globalMax.toFixed(2)}]`);
                 console.log(`[RENDERER] Canvas: ${renderedRows.size}/${reducedHeight} rows rendered`);
                 
+                // Store cache for fast re-rendering
+                this.rowDataCache = rowDataCache;
+                this.globalMin = globalMin;
+                this.globalMax = globalMax;
+                this.reducedWidth = reducedWidth;
+                this.reducedHeight = reducedHeight;
+                
                 // Check for gaps - identify which specific rows were missed
                 const missedRows = [];
                 for (let i = 0; i < reducedHeight; i++) {
@@ -1429,6 +1445,42 @@
                 }
                 
                 ctx.putImageData(imageData, 0, rowIndex);
+            }
+            
+            // Fast re-rendering with new normalization settings (uses cached data)
+            reRenderWithNormalization(normalization, asinhScale) {
+                if (!this.canvas || !this.rowDataCache || !isFinite(this.globalMin) || !isFinite(this.globalMax)) {
+                    console.warn('[RENDERER] Cannot re-render: missing cached data');
+                    return;
+                }
+                
+                const startTime = performance.now();
+                this.normalization = normalization;
+                this.asinhScale = asinhScale;
+                
+                const ctx = this.canvas.getContext('2d');
+                const fullImageData = ctx.createImageData(this.reducedWidth, this.reducedHeight);
+                
+                // Render all rows with new normalization
+                for (const [rowIndex, rowData] of this.rowDataCache.entries()) {
+                    for (let x = 0; x < this.reducedWidth; x++) {
+                        const value = rowData[x];
+                        const normalized01 = this.normalize(value, this.globalMin, this.globalMax);
+                        const normalized = Math.floor(normalized01 * 255);
+                        const clamped = Math.max(0, Math.min(255, normalized));
+                        
+                        const idx = (rowIndex * this.reducedWidth + x) * 4;
+                        fullImageData.data[idx] = clamped;     // R
+                        fullImageData.data[idx + 1] = clamped; // G
+                        fullImageData.data[idx + 2] = clamped; // B
+                        fullImageData.data[idx + 3] = 255;     // A
+                    }
+                }
+                
+                ctx.putImageData(fullImageData, 0, 0);
+                
+                const elapsed = performance.now() - startTime;
+                console.log(`[RENDERER] Fast re-render completed in ${elapsed.toFixed(0)}ms (${normalization}, scale: ${asinhScale})`);
             }
 
             renderReducedScanline(scanlineBuffer, reducedRow, reducedWidth, scale, ctx) {
@@ -1732,20 +1784,37 @@
         const asinhScaleValue = document.getElementById('asinhScaleValue');
         const asinhControls = document.getElementById('asinhControls');
         
-        // Update scale value display
+        // Update scale value display and trigger re-render
         if (asinhScale && asinhScaleValue) {
             asinhScale.addEventListener('input', (e) => {
-                asinhScaleValue.textContent = parseFloat(e.target.value).toFixed(2);
+                const newScale = parseFloat(e.target.value);
+                asinhScaleValue.textContent = newScale.toFixed(2);
+                
+                // Re-render all active images with new scale
+                const currentNorm = normSelect?.value || 'asinh';
+                activeRenderers.forEach(renderer => {
+                    renderer.reRenderWithNormalization(currentNorm, newScale);
+                });
             });
         }
         
-        // Show/hide asinh controls based on normalization method
+        // Show/hide asinh controls and trigger re-render on method change
         if (normSelect && asinhControls) {
             const updateAsinhControlsVisibility = () => {
                 asinhControls.style.display = normSelect.value === 'asinh' ? 'flex' : 'none';
             };
             updateAsinhControlsVisibility();
-            normSelect.addEventListener('change', updateAsinhControlsVisibility);
+            
+            normSelect.addEventListener('change', () => {
+                updateAsinhControlsVisibility();
+                
+                // Re-render all active images with new normalization method
+                const newNorm = normSelect.value;
+                const currentScale = parseFloat(asinhScale?.value || 1.0);
+                activeRenderers.forEach(renderer => {
+                    renderer.reRenderWithNormalization(newNorm, currentScale);
+                });
+            });
         }
 
         function handleFiles(files) {
@@ -1788,6 +1857,8 @@
             parseBtn.disabled = true;
             parseBtn.innerHTML = '<span class="spinner"></span>Parsing...';
             resultItems.innerHTML = '';
+            activeRenderers = []; // Clear old renderers when parsing new files
+            imagePane.innerHTML = '<div style="color: #999; font-size: 14px;">Image previews will appear here</div>';
             progressContainer.classList.add('active');
 
             try {
@@ -1852,6 +1923,7 @@
 
         clearBtn.addEventListener('click', () => {
             selectedFiles = [];
+            activeRenderers = []; // Clear renderers when clearing files
             fileItems.innerHTML = '';
             fileList.style.display = 'none';
             actions.style.display = 'none';
@@ -1983,6 +2055,10 @@
                 const normMethod = document.getElementById('normSelect')?.value || 'asinh';
                 const asinhScale = parseFloat(document.getElementById('asinhScale')?.value || 1.0);
                 const renderer = new FITSImageRenderer(hdu, pixelData, renderContainer, normMethod, asinhScale);
+                
+                // Store renderer for fast re-rendering
+                activeRenderers.push(renderer);
+                
                 const rendererStartTime = performance.now();
                 const canvas = await renderer.renderAsync((progress, status) => {
                     const percent = Math.round(progress * 100);
