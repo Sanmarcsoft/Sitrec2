@@ -146,11 +146,14 @@ class CMetaTrack {
 
 
 
-// a co
-function extractIndexedMisbCSV(complexMisb, index) {
-    console.log("extractIndexedMisbCSV: extracting index ", index, " from complex MISB CSV with length ", complexMisb.length);
-    // first we cound the number of unique values in the TrackID column
-    // this is a full MISB array with the PlatformCallSign standing in for TrackID
+/**
+ * Get information about tracks in a complex MISB CSV
+ * @param {Array} complexMisb - Full MISB array with potentially multiple tracks
+ * @returns {Object} - Object with trackIDArray and count
+ */
+function getCSVTrackInfo(complexMisb) {
+    // Count the number of unique values in the TrackID column
+    // This is a full MISB array with the PlatformCallSign standing in for TrackID
     // (they both have the same column index)
     const trackIDs = new Set();
     const trackIDCol = MISB.TrackID;
@@ -162,11 +165,29 @@ function extractIndexedMisbCSV(complexMisb, index) {
     }
 
     const trackIDArray = Array.from(trackIDs);
-    // if empty, then just patch is as if it has one entry
+    // if empty, then just patch it as if it has one entry
     if (trackIDArray.length === 0) {
-        console.warn("extractIndexedMisbCSV: No TrackIDs found, assuming single track with index 0");
+        console.warn("getCSVTrackInfo: No TrackIDs found, assuming single track");
         trackIDArray.push("dummyTrackID");
     }
+
+    return {
+        trackIDArray: trackIDArray,
+        count: trackIDArray.length
+    };
+}
+
+/**
+ * Extract a single track from a complex MISB CSV by index
+ * @param {Array} complexMisb - Full MISB array with potentially multiple tracks
+ * @param {number} index - Index of the track to extract
+ * @returns {Array|null} - Extracted MISB array for the specified track, or null if index out of range
+ */
+function extractIndexedMisbCSV(complexMisb, index) {
+    console.log("extractIndexedMisbCSV: extracting index ", index, " from complex MISB CSV with length ", complexMisb.length);
+    
+    const trackInfo = getCSVTrackInfo(complexMisb);
+    const trackIDArray = trackInfo.trackIDArray;
 
     if (index >= trackIDArray.length) {
         console.warn("extractIndexedMisbCSV: index ", index, " out of range, only ", trackIDArray.length, " unique TrackIDs");
@@ -175,12 +196,9 @@ function extractIndexedMisbCSV(complexMisb, index) {
 
     // now create a new MISB array with only the entries (rows) matching the selected TrackID
     const selectedTrackID = trackIDArray[index];
-    const extractedMisb = complexMisb.filter(row => row[trackIDCol] === selectedTrackID);
+    const extractedMisb = complexMisb.filter(row => row[MISB.TrackID] === selectedTrackID);
     console.log("extractIndexedMisbCSV: extracted MISB length ", extractedMisb.length);
     return extractedMisb;
-
-
-
 }
 
 
@@ -1115,15 +1133,50 @@ class CTrackManager extends CManager {
 
         }
 
-        // CHECK HERE
-        // for complex CSV, like we do in extractIndexedMisbCSV
-        // if there's only one track then carry on as before
-        // if there are multiple tracks, then we need to find the right one using the
-        // same logic as extractIndexedMisbCSV (refactor as needed here)
-        // If there's a tail number, use that as the short name
-        // otherwise use the trackID
-
-
+        // Handle complex CSV files with multiple tracks
+        if (ext === "csv") {
+            const complexMisb = FileManager.get(trackFileName);
+            
+            if (complexMisb && complexMisb.length > 0) {
+                // Get track information
+                const trackInfo = getCSVTrackInfo(complexMisb);
+                const numTracks = trackInfo.count;
+                const trackIDArray = trackInfo.trackIDArray;
+                
+                console.log(`CSV file contains ${numTracks} unique track(s)`);
+                
+                // Check if there are more tracks after this one
+                if (trackIndex < numTracks - 1) {
+                    moreTracks = true;
+                }
+                
+                // If we have multiple tracks or explicit index, extract the specific track
+                if (numTracks > 1 || trackIndex > 0) {
+                    if (trackIndex < numTracks) {
+                        const trackID = trackIDArray[trackIndex];
+                        // Filter to get rows for this track to check for tail number
+                        const trackRows = complexMisb.filter(row => row[MISB.TrackID] === trackID);
+                        
+                        if (trackRows.length > 0) {
+                            // Try to use tail number as short name
+                            const tailNumber = trackRows[0][MISB.PlatformTailNumber];
+                            if (tailNumber !== null && tailNumber !== undefined && tailNumber !== "") {
+                                shortName = tailNumber;
+                                console.log(`Using tail number as short name: ${shortName}`);
+                            } else {
+                                // Use the trackID as short name
+                                shortName = trackID;
+                                console.log(`Using trackID as short name: ${shortName}`);
+                            }
+                            found = true;
+                        }
+                    } else {
+                        console.warn(`CSV trackIndex ${trackIndex} out of range (${numTracks} tracks available)`);
+                    }
+                }
+                // If single track, continue to default handling below
+            }
+        }
 
         if (!found) {
             const match = trackFileName.match(/FlightAware_([A-Z0-9]+)_/);
