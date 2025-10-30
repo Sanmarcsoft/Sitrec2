@@ -1255,10 +1255,39 @@ export class CGuiMenuBar {
             if (containerDiv.parentElement) {
                 containerDiv.parentElement.removeChild(containerDiv);
             }
+            // Remove the escape key listener
+            if (gui._escapeKeyHandler) {
+                document.removeEventListener('keydown', gui._escapeKeyHandler);
+            }
             // Reset mouseOverGUI flag to ensure keyboard controls work after menu is closed
             setMouseOverGUI(false);
             originalDestroy(all);
         };
+        
+        // Add Escape key handler to close the menu
+        gui._escapeKeyHandler = (event) => {
+            if (event.key === 'Escape' && containerDiv.parentElement) {
+                // Check if this menu is the topmost one
+                let maxZIndex = -Infinity;
+                let topmostMenu = null;
+                const allContainers = Array.from(this.menuBar.children);
+                for (const container of allContainers) {
+                    if (container._gui && container._gui._standaloneContainer) {
+                        const zIndex = parseInt(container.style.zIndex);
+                        if (zIndex > maxZIndex) {
+                            maxZIndex = zIndex;
+                            topmostMenu = container._gui;
+                        }
+                    }
+                }
+                
+                // Only close if this is the topmost menu
+                if (topmostMenu === gui) {
+                    gui.destroy();
+                }
+            }
+        };
+        document.addEventListener('keydown', gui._escapeKeyHandler);
         
         return gui;
     }
