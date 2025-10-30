@@ -656,8 +656,8 @@ function extractFeaturesFromFile(csv) {
         if (isNaN(alt)) alt = 0;
         const label = row[labelCol] ?? "";
 
-        // Skip empty rows
-        if (isNaN(lat) || isNaN(lon) || !label) {
+        // Skip rows with invalid coordinates
+        if (isNaN(lat) || isNaN(lon)) {
             continue;
         }
 

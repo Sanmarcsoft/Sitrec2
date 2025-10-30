@@ -506,6 +506,9 @@ export class CNodeFeatureMarker extends CNodeLabel3D {
         
         super(v);
         
+        // Store the text for serialization
+        this.text = v.text ?? "";
+        
         // Add black stroke/border to the text
         this.sprite.strokeWidth = 1;
         this.sprite.strokeColor = 'black';
