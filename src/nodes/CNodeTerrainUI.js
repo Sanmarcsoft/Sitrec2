@@ -454,7 +454,19 @@ export class CNodeTerrainUI extends CNode {
 
             // also, if we have a capabilities URL, then start loading it
             if (mapDef.capabilities !== undefined) {
-                const response = await fetch(mapDef.capabilities);
+
+                let response;
+                try {
+                     response = await fetch(mapDef.capabilities);
+                } catch (e) {
+                    // if it returns an error, then we should fall back on the "Debug" maptype
+                    console.log("Error fetching capabilities for " + mapType + " from " + mapDef.capabilities + ": " + e.message);
+                    console.log("Falling back to Debug map type");
+                    this.mapType = "Debug";
+                    return this.setMapType(this.mapType);
+                }
+
+
                 const data = await response.text();
                 console.log("Capabilities for " + mapType)
                 //console.log(data)
