@@ -1441,6 +1441,29 @@ export class CCustomManager {
                 console.log(`Created object ${objectID} with track at ${lat}, ${lon}, ${alt}m`);
                 menu.destroy();
             },
+            dropPin: () => {
+                // Close the menu first
+                menu.destroy();
+                
+                // Create a unique feature ID
+                const featureID = `feature_${Date.now()}`;
+                
+                // Create the feature at the ground location
+                const featureNode = FeatureManager.addFeature({
+                    id: featureID,
+                    text: "New Feature",
+                    positionLLA: {
+                        lat: lat,
+                        lon: lon,
+                        alt: alt  // Will conform to ground
+                    }
+                });
+                
+                // Open the editing menu with focus on the text field
+                FeatureManager.showFeatureEditMenu(featureNode, mouseX, mouseY, true);
+                
+                console.log(`Created feature ${featureID} at ${lat}, ${lon}, ${alt}m`);
+            },
         };
         
         // Add location text as custom HTML (bright and selectable)
@@ -1451,6 +1474,9 @@ export class CCustomManager {
         menu.add(menuData, "setCameraOnGround").name("Set Camera on Ground");
         menu.add(menuData, "setTargetAbove").name("Set Target Above");
         menu.add(menuData, "setTargetOnGround").name("Set Target on Ground");
+
+        // Add feature marker option
+        menu.add(menuData, "dropPin").name("Drop Pin / Add Feature");
 
         // Add synthetic track options
         menu.add(menuData, "createTrackWithObject").name("Create Track with Object");

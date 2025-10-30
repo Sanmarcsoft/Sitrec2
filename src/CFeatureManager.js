@@ -195,8 +195,9 @@ class CFeatureManager extends CManager {
      * @param {CNodeFeatureMarker} featureNode - The feature to edit
      * @param {number} clientX - Screen X coordinate for menu placement
      * @param {number} clientY - Screen Y coordinate for menu placement
+     * @param {boolean} focusOnText - Whether to focus on the text field (default: false)
      */
-    showFeatureEditMenu(featureNode, clientX, clientY) {
+    showFeatureEditMenu(featureNode, clientX, clientY, focusOnText = false) {
         console.log(`Editing feature: ${featureNode.id}`);
         
         // Create an edit menu for the feature
@@ -208,7 +209,7 @@ class CFeatureManager extends CManager {
             text: featureNode.text
         };
         
-        standaloneMenu.add(editableData, 'text')
+        const textController = standaloneMenu.add(editableData, 'text')
             .name('Label Text')
             .listen()
             .onChange((value) => {
@@ -226,8 +227,37 @@ class CFeatureManager extends CManager {
             standaloneMenu.add({alt: featureNode.lla.alt.toFixed(2)}, 'alt').name('Altitude (m)').listen().disable();
         }
         
+        // Add Delete button
+        const deleteObj = {
+            deleteFeature: () => {
+                // Confirm before deleting
+                const featureName = featureNode.text || 'this feature';
+                if (confirm(`Delete "${featureName}"?`)) {
+                    // Remove the feature
+                    this.removeFeature(featureNode.id);
+                    // Close the menu
+                    standaloneMenu.destroy();
+                }
+            }
+        };
+        standaloneMenu.add(deleteObj, 'deleteFeature')
+            .name('🗑️ Delete Feature')
+            .setLabelColor('#ff4444');
+        
         // Open the menu
         standaloneMenu.open();
+        
+        // If focusOnText requested, focus and select the text input
+        if (focusOnText) {
+            // Wait for DOM to update, then focus the input
+            setTimeout(() => {
+                const input = textController.$input;
+                if (input) {
+                    input.focus();
+                    input.select(); // Select all text for easy replacement
+                }
+            }, 0);
+        }
     }
 }
 
