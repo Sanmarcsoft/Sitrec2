@@ -1,10 +1,6 @@
-import {CNodeGUIColor} from "./CNodeGUIColor";
-import {guiMenus, guiShowHide, NodeMan, setRenderOne} from "../Globals";
+import {setRenderOne} from "../Globals";
 import {CNode} from "./CNode";
-import {par} from "../par";
 import * as LAYERS from "../LayerMasks";
-
-
 
 
 // Common GUI Elements for a CMetaTrack
@@ -33,6 +29,7 @@ export class CNodeTrackGUI extends CNode {
             //this.metaTrack.displayTargetSphere.setLayerBit(LAYERS.LOOK, this.showTrackInLook);
     }).name("Show in look view")
 
+        this.addSimpleSerial("showTrackInLook");
 
 
     }
