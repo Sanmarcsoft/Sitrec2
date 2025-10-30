@@ -89,6 +89,7 @@ class CFeatureManager extends CManager {
                     alt: featureNode.lla.alt,
                     arrowLength: featureNode.arrowLength ?? 100,
                     arrowColor: featureNode.arrowColor ?? 0xFF0000,
+                    textColor: featureNode.textColor ?? 0xFFFFFF,
                 };
                 
                 features.push(featureData);
@@ -126,7 +127,8 @@ class CFeatureManager extends CManager {
                         alt: featureData.alt
                     },
                     arrowLength: featureData.arrowLength ?? 100,
-                    arrowColor: featureData.arrowColor ?? 0xFF0000
+                    arrowColor: featureData.arrowColor ?? 0xFF0000,
+                    textColor: featureData.textColor ?? 0xFFFFFF
                 });
                 
                 console.log(`Deserialized feature marker: ${featureData.text}`);
@@ -245,6 +247,16 @@ class CFeatureManager extends CManager {
         standaloneMenu.addColor(featureNode, 'arrowColor')
             .name('Arrow Color')
             .listen();
+        
+        // Add text color picker
+        standaloneMenu.addColor(featureNode, 'textColor')
+            .name('Text Color')
+            .listen()
+            .onChange((value) => {
+                // Convert hex number to CSS color string for the sprite
+                const hexString = '#' + value.toString(16).padStart(6, '0');
+                featureNode.sprite.color = hexString;
+            });
         
         // Add Delete button
         const deleteObj = {

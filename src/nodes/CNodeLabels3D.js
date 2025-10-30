@@ -541,8 +541,9 @@ export class CNodeFeatureMarker extends CNodeLabel3D {
         v.offsetY = v.offsetY ?? arrowLength;
         v.centerY = v.centerY ?? 0; // Bottom of label at the top of arrow
         
-        // Set default white color for text label
-        v.color = v.color ?? 0xFFFFFF;
+        // Set text color (default white) - textColor takes precedence over color
+        const textColor = v.textColor ?? v.color ?? 0xFFFFFF;
+        v.color = textColor;
         
         super(v);
 
@@ -551,6 +552,9 @@ export class CNodeFeatureMarker extends CNodeLabel3D {
         // Store the arrow color (default red)
         this.arrowColor = v.arrowColor ?? 0xFF0000;
         
+        // Store the text color for serialization
+        this.textColor = textColor;
+        
         // Store the text for serialization
         this.text = v.text ?? "";
         
@@ -558,6 +562,10 @@ export class CNodeFeatureMarker extends CNodeLabel3D {
         // This ensures the feature respects "Features in Main/Look" settings immediately
         this.sprite.layers.mask = this.groupNode.group.layers.mask;
         this.group.layers.mask = this.groupNode.group.layers.mask;
+        
+        // Convert textColor hex number to CSS color string for the sprite
+        const hexString = '#' + textColor.toString(16).padStart(6, '0');
+        this.sprite.color = hexString;
         
         // Add black stroke/border to the text
         this.sprite.strokeWidth = 1;
