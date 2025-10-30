@@ -16,6 +16,7 @@ import {assert} from "../assert.js";
 import {V2, V3} from "../threeUtils";
 
 import {ViewMan} from "../CViewManager";
+import {EventManager} from "../CEventManager";
 
 
 export const measurementUIVars = {
@@ -490,6 +491,89 @@ export class CNodeMeasureAltitude extends CNodeMeasureAB {
         super(v);
 
         this.altitude = true;
+    }
+}
+
+// A feature marker with a label and an arrow pointing down from 100 pixels above the feature
+export class CNodeFeatureMarker extends CNodeLabel3D {
+    constructor(v) {
+        // Set the label to be 100 pixels above the feature
+        v.offsetY = v.offsetY ?? 100;
+        v.centerY = v.centerY ?? 0; // Bottom of label at the top of arrow
+        
+        // Set default white color for text label
+        v.color = v.color ?? 0xFFFFFF;
+        
+        super(v);
+        
+        // Add black stroke/border to the text
+        this.sprite.strokeWidth = 1;
+        this.sprite.strokeColor = 'black';
+        this.sprite.fontWeight = 'bold';
+        
+        // Store the original LLA values
+        this.lla = null;
+        if (v.positionLLA !== undefined) {
+            this.lla = {
+                lat: v.positionLLA.lat,
+                lon: v.positionLLA.lon,
+                alt: v.positionLLA.alt
+            };
+        }
+        
+        // Store the base feature position (without offset)
+        this.featurePosition = V3();
+        
+        // Initial calculation
+        this.recalculate(0);
+        
+        // Listen for elevation changes to update ground-conformed positions
+        EventManager.addEventListener("elevationChanged", () => {
+            this.recalculate(0);
+        });
+    }
+    
+    recalculate(f) {
+        if (!this.lla) return;
+        
+        // If altitude is zero, conform to ground
+        if (this.lla.alt === 0) {
+            // First get the position at the lat/lon with zero altitude
+            const basePos = LLAToEUS(this.lla.lat, this.lla.lon, 0);
+            
+            // Then get the point on the terrain/sphere below
+            if (NodeMan.exists("TerrainModel")) {
+                const terrainNode = NodeMan.get("TerrainModel");
+                this.featurePosition.copy(terrainNode.getPointBelow(basePos));
+            } else {
+                this.featurePosition.copy(pointOnSphereBelow(basePos));
+            }
+        } else {
+            // Use the specified altitude
+            const pos = LLAToEUS(this.lla.lat, this.lla.lon, this.lla.alt);
+            this.featurePosition.copy(pos);
+        }
+        
+        // Update the position used by the parent class
+        this.position.copy(this.featurePosition);
+    }
+    
+    preRender(view) {
+        super.preRender(view);
+        
+        // Calculate the top position (100 pixels above in screen space)
+        const topPosition = view.offsetScreenPixels(this.featurePosition.clone(), 0, 100);
+        
+        // Arrow is always red for feature markers
+        const color = 0xFF0000;
+        
+        // Add arrow pointing down from label to feature
+        DebugArrowAB(this.id + "_arrow", topPosition, this.featurePosition, color, true, this.group);
+    }
+    
+    dispose() {
+        removeDebugArrow(this.id + "_arrow");
+        super.dispose();
     }
 }
 

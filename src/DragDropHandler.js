@@ -12,7 +12,7 @@ import {doesKMLContainTrack, extractKMLObjects} from "./KMLUtils";
 import {findColumn} from "./ParseUtils";
 import {EventManager} from "./CEventManager";
 import {CNodeArray} from "./nodes/CNodeArray";
-import {CNodeLabel3D} from "./nodes/CNodeLabels3D";
+import {CNodeFeatureMarker} from "./nodes/CNodeLabels3D";
 
 // The DragDropHandler is more like the local client file handler, with rehosting, and parsing
 class CDragDropHandler {
@@ -650,14 +650,12 @@ function extractFeaturesFromFile(csv) {
 
         console.log(`Adding feature: ${label} at (${lat}, ${lon}, ${alt})`);
 
-        // Create a marker node at the specified location with the label
-        new CNodeLabel3D({
+        // Create a feature marker node with an arrow pointing down to the feature
+        new CNodeFeatureMarker({
             id: `feature_${i}_${label}`,
             text: label,
             positionLLA: {lat: lat, lon: lon, alt: alt},
-        })
-        //const markerNode = NodeMan.createMarkerNode(lat, lon, alt, label);
-        //NodeMan.add(markerNode);
+        });
     }
 }
 
