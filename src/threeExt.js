@@ -300,7 +300,10 @@ export function DebugArrow(name, direction, origin, _length = 100, color="#FFFFF
         DebugArrows[name].headLength = _headLength;
         DebugArrows[name].direction = dir;
 
-
+        // Update layer mask if it has changed
+        if (layerMask !== undefined) {
+            setLayerMaskRecursive(DebugArrows[name], layerMask)
+        }
     }
     return DebugArrows[name]
 }

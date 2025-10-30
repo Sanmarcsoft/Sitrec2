@@ -31,6 +31,10 @@ let labelsGroupNode = null;
 let labelsControllerMain = null;
 let labelsControllerLook = null;
 
+let featuresGroupNode = null;
+let featuresControllerMain = null;
+let featuresControllerLook = null;
+
 
 // adds a new group for measurements, and a GUI controller to toggle it.
 export function setupMeasurementUI() {
@@ -42,6 +46,8 @@ export function setupMeasurementUI() {
     measureArrowGroupNode.isMeasurement = true
 
     labelsGroupNode = new CNode3DGroup({id: "LabelsGroupNode"});
+
+    featuresGroupNode = new CNode3DGroup({id: "FeaturesGroupNode"});
 
     measureDistanceGroupNode = new CNode3DGroup({id: "MeasureDistanceGroupNode"});
     measureDistanceGroupNode.isMeasurement = true;
@@ -83,16 +89,29 @@ export function setupMeasurementUI() {
         refreshLabelVisibility();
     })
 
+    Globals.showFeaturesMain = true;
+    Globals.showFeaturesLook = false;
+
+    featuresControllerMain = guiShowHide.add(Globals, "showFeaturesMain").name("Features in Main").listen().onChange( (value) => {
+        refreshFeatureVisibility();
+    });
+
+    featuresControllerLook = guiShowHide.add(Globals, "showFeaturesLook").name("Features in Look").listen().onChange( (value) => {
+        refreshFeatureVisibility();
+    })
+
 }
 
 export function refreshLabelsAfterLoading() {
     measurementUIVars.controller._callOnChange(); // PATCH: call the onChange function to update the UI for the visibility of the measurements
 
     labelsControllerMain._callOnChange();
-    labelsControllerLook._callOnChange
-
+    labelsControllerLook._callOnChange();
+    featuresControllerMain._callOnChange();
+    featuresControllerLook._callOnChange();
 
     refreshLabelVisibility();
+    refreshFeatureVisibility();
 }
 
 export function refreshLabelVisibility() {
@@ -108,6 +127,19 @@ export function refreshLabelVisibility() {
     propagateLayerMaskObject(labelsGroupNode.group);
 }
 
+export function refreshFeatureVisibility() {
+    // we just set the layers mask to the appropriate value
+    let mask = 0;
+    if (Globals.showFeaturesMain) {
+        mask |= LAYER.MASK_MAIN;
+    }
+    if (Globals.showFeaturesLook) {
+        mask |= LAYER.MASK_LOOK;
+    }
+    featuresGroupNode.group.layers.mask = mask;
+    propagateLayerMaskObject(featuresGroupNode.group);
+}
+
 export function removeMeasurementUI() {
     if (measureArrowGroupNode) {
         measureArrowGroupNode.dispose();
@@ -116,6 +148,8 @@ export function removeMeasurementUI() {
         measureDistanceGroupNode = null;
         labelsGroupNode.dispose();
         labelsGroupNode = null;
+        featuresGroupNode.dispose();
+        featuresGroupNode = null;
         measurementUIDdone = false
     }
 }
@@ -497,6 +531,9 @@ export class CNodeMeasureAltitude extends CNodeMeasureAB {
 // A feature marker with a label and an arrow pointing down from 100 pixels above the feature
 export class CNodeFeatureMarker extends CNodeLabel3D {
     constructor(v) {
+        // Set the groupNode to FeaturesGroupNode instead of MeasurementsGroupNode
+        v.groupNode = v.groupNode ?? "FeaturesGroupNode";
+        
         // Set the label to be 100 pixels above the feature
         v.offsetY = v.offsetY ?? 100;
         v.centerY = v.centerY ?? 0; // Bottom of label at the top of arrow
@@ -571,7 +608,8 @@ export class CNodeFeatureMarker extends CNodeLabel3D {
         const color = 0xFF0000;
         
         // Add arrow pointing down from label to feature
-        DebugArrowAB(this.id + "_arrow", topPosition, this.featurePosition, color, true, this.group);
+        // Use the parent group's layer mask so arrow visibility matches the label visibility
+        DebugArrowAB(this.id + "_arrow", topPosition, this.featurePosition, color, true, this.group, 20, this.group.layers.mask);
     }
     
     dispose() {

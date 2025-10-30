@@ -2013,6 +2013,8 @@ export class CCustomManager {
             "showMeasurements",
             "showLabelsMain",
             "showLabelsLook",
+            "showFeaturesMain",
+            "showFeaturesLook",
             "objectScale",
             "showAllTracksInLook"
         ]
