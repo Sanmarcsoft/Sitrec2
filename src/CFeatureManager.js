@@ -1,6 +1,7 @@
 import {CManager} from "./CManager";
 import {CNodeFeatureMarker} from "./nodes/CNodeLabels3D";
-import {NodeMan} from "./Globals";
+import {Globals, NodeMan} from "./Globals";
+import {Vector3} from "three";
 
 /**
  * CFeatureManager
@@ -129,6 +130,104 @@ class CFeatureManager extends CManager {
                 console.error(`Failed to deserialize feature marker ${featureData.id}:`, error);
             }
         }
+    }
+
+    /**
+     * Handle context menu for feature markers using screen-space checking
+     * This is more reliable than raycasting for screen-space invariant markers
+     * @param {number} mouseX - Screen X coordinate (clientX)
+     * @param {number} mouseY - Screen Y coordinate (clientY)
+     * @param {CNodeView3D} view - The view that was clicked
+     * @returns {boolean} True if a feature was found and menu was shown, false otherwise
+     */
+    handleContextMenu(mouseX, mouseY, view) {
+        if (!view.camera) return false;
+        
+        const threshold = 30; // pixels
+        let closestFeature = null;
+        let closestDistance = threshold;
+        
+        // Iterate through all features and check screen-space distance
+        this.iterate((id, featureNode) => {
+            if (!featureNode.featurePosition || !featureNode.group.visible) return;
+            
+            // Check both the arrow (at featurePosition) and the label (100px above)
+            const positions = [
+                featureNode.featurePosition,  // Arrow base
+                view.offsetScreenPixels(featureNode.featurePosition.clone(), 0, 100)  // Label position
+            ];
+            
+            for (const pos3D of positions) {
+                // Project to screen space
+                const screenPos = new Vector3(pos3D.x, pos3D.y, pos3D.z);
+                screenPos.project(view.camera);
+                
+                // Skip if behind camera
+                if (screenPos.z > 1) continue;
+                
+                // Convert from normalized device coordinates (-1 to 1) to screen pixels
+                const screenX = (screenPos.x * 0.5 + 0.5) * view.widthPx + view.leftPx;
+                const screenY = (1 - (screenPos.y * 0.5 + 0.5)) * view.heightPx + view.topPx;
+                
+                // Calculate distance from mouse to projected point
+                const dx = mouseX - screenX;
+                const dy = mouseY - screenY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestFeature = featureNode;
+                }
+            }
+        });
+        
+        // If we found a feature, show the edit menu
+        if (closestFeature) {
+            this.showFeatureEditMenu(closestFeature, mouseX, mouseY);
+            return true;
+        }
+        
+        return false;
+    }
+
+    /**
+     * Show the edit menu for a feature marker
+     * @param {CNodeFeatureMarker} featureNode - The feature to edit
+     * @param {number} clientX - Screen X coordinate for menu placement
+     * @param {number} clientY - Screen Y coordinate for menu placement
+     */
+    showFeatureEditMenu(featureNode, clientX, clientY) {
+        console.log(`Editing feature: ${featureNode.id}`);
+        
+        // Create an edit menu for the feature
+        const menuTitle = `Feature: ${featureNode.text || "(blank)"}`;
+        const standaloneMenu = Globals.menuBar.createStandaloneMenu(menuTitle, clientX, clientY);
+        
+        // Add editable text field
+        const editableData = {
+            text: featureNode.text
+        };
+        
+        standaloneMenu.add(editableData, 'text')
+            .name('Label Text')
+            .listen()
+            .onChange((value) => {
+                // Update the feature's text
+                featureNode.text = value;
+                featureNode.sprite.text = value;
+                // Update the menu title
+                standaloneMenu.title(value ? `Feature: ${value}` : `Feature: (blank)`);
+            });
+        
+        // Add location info (read-only)
+        if (featureNode.lla) {
+            standaloneMenu.add({lat: featureNode.lla.lat.toFixed(6)}, 'lat').name('Latitude').listen().disable();
+            standaloneMenu.add({lon: featureNode.lla.lon.toFixed(6)}, 'lon').name('Longitude').listen().disable();
+            standaloneMenu.add({alt: featureNode.lla.alt.toFixed(2)}, 'alt').name('Altitude (m)').listen().disable();
+        }
+        
+        // Open the menu
+        standaloneMenu.open();
     }
 }
 

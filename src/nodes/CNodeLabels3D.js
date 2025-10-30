@@ -546,6 +546,11 @@ export class CNodeFeatureMarker extends CNodeLabel3D {
         // Store the text for serialization
         this.text = v.text ?? "";
         
+        // Override the layer masks to match the parent FeaturesGroupNode
+        // This ensures the feature respects "Features in Main/Look" settings immediately
+        this.sprite.layers.mask = this.groupNode.group.layers.mask;
+        this.group.layers.mask = this.groupNode.group.layers.mask;
+        
         // Add black stroke/border to the text
         this.sprite.strokeWidth = 1;
         this.sprite.strokeColor = 'black';
@@ -608,8 +613,9 @@ export class CNodeFeatureMarker extends CNodeLabel3D {
         const color = 0xFF0000;
         
         // Add arrow pointing down from label to feature
-        // Use the parent group's layer mask so arrow visibility matches the label visibility
-        DebugArrowAB(this.id + "_arrow", topPosition, this.featurePosition, color, true, this.group, 20, this.group.layers.mask);
+        // Use the parent FeaturesGroupNode's layer mask to ensure proper visibility
+        // (using this.group.layers.mask might not be updated yet on initial creation)
+        DebugArrowAB(this.id + "_arrow", topPosition, this.featurePosition, color, true, this.group, 20, this.groupNode.group.layers.mask);
     }
     
     dispose() {

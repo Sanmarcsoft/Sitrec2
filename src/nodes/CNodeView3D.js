@@ -54,6 +54,7 @@ import {CameraMapControls} from "../js/CameraControls";
 import {ViewMan} from "../CViewManager";
 import * as LAYER from "../LayerMasks";
 import {globalProfiler} from "../VisualProfiler";
+import {FeatureManager} from "../CFeatureManager";
 
 
 function linearToSrgb(color) {
@@ -1724,6 +1725,11 @@ export class CNodeView3D extends CNodeViewCanvas {
         event.stopPropagation();
         
         if (!this.mouseEnabled) return;
+        
+        // First check for feature markers using screen-space detection (more reliable for screen-invariant markers)
+        if (FeatureManager.handleContextMenu(mouseX, mouseY, this)) {
+            return; // Feature menu shown, we're done
+        }
         
         // mouseX, mouseY are screen coordinates (event.clientX, event.clientY)
         // Convert to view-relative coordinates
