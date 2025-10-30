@@ -548,6 +548,9 @@ export class CNodeFeatureMarker extends CNodeLabel3D {
 
         this.arrowLength = arrowLength;
         
+        // Store the arrow color (default red)
+        this.arrowColor = v.arrowColor ?? 0xFF0000;
+        
         // Store the text for serialization
         this.text = v.text ?? "";
         
@@ -614,13 +617,10 @@ export class CNodeFeatureMarker extends CNodeLabel3D {
         // Calculate the top position (arrowLength pixels above in screen space)
         const topPosition = view.offsetScreenPixels(this.featurePosition.clone(), 0, this.arrowLength);
         
-        // Arrow is always red for feature markers
-        const color = 0xFF0000;
-        
         // Add arrow pointing down from label to feature
         // Use the parent FeaturesGroupNode's layer mask to ensure proper visibility
         // (using this.group.layers.mask might not be updated yet on initial creation)
-        DebugArrowAB(this.id + "_arrow", topPosition, this.featurePosition, color, true, this.group, 20, this.groupNode.group.layers.mask);
+        DebugArrowAB(this.id + "_arrow", topPosition, this.featurePosition, this.arrowColor, true, this.group, 20, this.groupNode.group.layers.mask);
     }
     
     dispose() {

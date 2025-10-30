@@ -88,6 +88,7 @@ class CFeatureManager extends CManager {
                     lon: featureNode.lla.lon,
                     alt: featureNode.lla.alt,
                     arrowLength: featureNode.arrowLength ?? 100,
+                    arrowColor: featureNode.arrowColor ?? 0xFF0000,
                 };
                 
                 features.push(featureData);
@@ -124,7 +125,8 @@ class CFeatureManager extends CManager {
                         lon: featureData.lon,
                         alt: featureData.alt
                     },
-                    arrowLength: featureData.arrowLength ?? 100
+                    arrowLength: featureData.arrowLength ?? 100,
+                    arrowColor: featureData.arrowColor ?? 0xFF0000
                 });
                 
                 console.log(`Deserialized feature marker: ${featureData.text}`);
@@ -238,6 +240,11 @@ class CFeatureManager extends CManager {
                 // (offset is a Vector2, not individual properties)
                 featureNode.offset.y = value;
             });
+        
+        // Add arrow color picker
+        standaloneMenu.addColor(featureNode, 'arrowColor')
+            .name('Arrow Color')
+            .listen();
         
         // Add Delete button
         const deleteObj = {

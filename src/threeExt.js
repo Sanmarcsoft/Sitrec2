@@ -300,6 +300,15 @@ export function DebugArrow(name, direction, origin, _length = 100, color="#FFFFF
         DebugArrows[name].headLength = _headLength;
         DebugArrows[name].direction = dir;
 
+        // Update color if it has changed
+        const newColor = new Color(color);
+        if (DebugArrows[name].line && DebugArrows[name].line.material) {
+            DebugArrows[name].line.material.color.copy(newColor);
+        }
+        if (DebugArrows[name].cone && DebugArrows[name].cone.material) {
+            DebugArrows[name].cone.material.color.copy(newColor);
+        }
+
         // Update layer mask if it has changed
         if (layerMask !== undefined) {
             setLayerMaskRecursive(DebugArrows[name], layerMask)
