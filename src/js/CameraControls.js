@@ -384,10 +384,14 @@ class CameraMapControls {
 		if (!this.pinchActive && Math.abs(totalMotion.pinchDelta) > this.scaleChangeThreshold && this.zoomGestures) {
 			this.pinchActive = true;
 			this.state = STATE.TOUCH_PINCH_ZOOM;
+			// Update zoom target to the point between the fingers
+			this.updateTargetFromScreenPosition(this.gestureStartCentroid.x, this.gestureStartCentroid.y);
 		}
 		if (!this.rotateActive && Math.abs(totalMotion.rotateDelta) > this.rotationThreshold && this.rotateGestures) {
 			this.rotateActive = true;
 			this.state = STATE.TOUCH_TWO_FINGER_ROTATE;
+			// Update rotation target to the point between the fingers
+			this.updateTargetFromScreenPosition(this.gestureStartCentroid.x, this.gestureStartCentroid.y);
 		}
 		if (!this.tiltActive && Math.abs(totalMotion.tiltDelta) > this.tiltThreshold && this.tiltGestures) {
 			this.tiltActive = true;
@@ -398,7 +402,7 @@ class CameraMapControls {
 		if (this.pinchActive) {
 			// PINCH ZOOM - relative motion along the finger line
 			// Positive pinchDelta = fingers apart (zoom out), negative = together (zoom in)
-			const zoomDelta = incrementalMotion.pinchDelta * 0.02;
+			const zoomDelta = incrementalMotion.pinchDelta * 0.04;
 			this.zoomBy(zoomDelta);
 		}
 
@@ -436,6 +440,59 @@ class CameraMapControls {
 	}
 
 	// ===== GESTURE OPERATIONS =====
+
+	/**
+	 * Update this.target from screen coordinates by raycasting
+	 * @param {number} clientX - Screen X coordinate
+	 * @param {number} clientY - Screen Y coordinate
+	 */
+	updateTargetFromScreenPosition(clientX, clientY) {
+		if (!this.view || !this.view.raycaster) {
+			return; // Can't update target without view/raycaster
+		}
+
+		// Convert client coordinates to view-relative coordinates
+		const viewX = clientX - this.view.leftPx;
+		const viewY = clientY - this.view.topPx;
+
+		// Convert to normalized device coordinates (-1 to +1)
+		// Y is inverted for Three.js coordinate system
+		const mouseRay = new Vector2();
+		mouseRay.x = (viewX / this.view.widthPx) * 2 - 1;
+		mouseRay.y = -(viewY / this.view.heightPx) * 2 + 1;
+
+		// Set up raycaster from camera
+		this.view.raycaster.setFromCamera(mouseRay, this.camera);
+
+		let found = false;
+		let targetPoint = null;
+
+		// Try terrain intersection first
+		if (NodeMan.exists("TerrainModel")) {
+			const terrainNode = NodeMan.get("TerrainModel");
+			const firstIntersect = terrainNode.getClosestIntersect(this.view.raycaster);
+			if (firstIntersect) {
+				targetPoint = firstIntersect.point.clone();
+				this.targetIsTerrain = true;
+				found = true;
+			}
+		}
+
+		// Fall back to globe sphere intersection
+		if (!found) {
+			const possibleTarget = new Vector3();
+			const dragSphere = new Sphere(new Vector3(0, -wgs84.RADIUS, 0), wgs84.RADIUS);
+			if (this.view.raycaster.ray.intersectSphere(dragSphere, possibleTarget)) {
+				targetPoint = possibleTarget.clone();
+				this.targetIsTerrain = false;
+				found = true;
+			}
+		}
+
+		if (found && targetPoint) {
+			this.target = targetPoint;
+		}
+	}
 
 	rotateAroundPoint(screenPoint, angle) {
 		if (!this.rotateGestures) return;
