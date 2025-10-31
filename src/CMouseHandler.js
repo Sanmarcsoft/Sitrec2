@@ -24,6 +24,7 @@ export class CMouseHandler {
         this.view.canvas.addEventListener('pointermove', e => this.handleMouseMove(e));
         this.view.canvas.addEventListener('pointerdown', e => this.handleMouseDown(e));
         this.view.canvas.addEventListener('pointerup', e => this.handleMouseUp(e));
+        this.view.canvas.addEventListener('pointercancel', e => this.handlePointerCancel(e));
         this.view.canvas.addEventListener('dblclick', e => this.handleMouseDblClick(e));
         this.view.canvas.addEventListener('contextmenu', e => this.handleContextMenu(e));
         this.view.canvas.addEventListener('mouseLeave', e => this.handleMouseLeave(e));
@@ -135,6 +136,13 @@ export class CMouseHandler {
                 
                 this.handleContextMenu(syntheticEvent);
                 
+                // Clean up state since context menu interrupts normal pointer flow
+                this.activePointers.clear();
+                this.dragging = false;
+                if (e.pointerId !== undefined) {
+                    this.view.canvas.releasePointerCapture(e.pointerId);
+                }
+                
                 // Vibrate for tactile feedback
                 if (navigator.vibrate) {
                     navigator.vibrate(50);
@@ -167,6 +175,15 @@ export class CMouseHandler {
             this.isLongPressTriggered = false;
         }
 
+    }
+
+    handlePointerCancel(e) {
+        // Handle pointer interruptions (e.g., browser gestures, context menus)
+        this.view.canvas.releasePointerCapture(e.pointerId);
+        this.activePointers.delete(e.pointerId);
+        this.clearLongPressTimer();
+        this.dragging = false;
+        this.isLongPressTriggered = false;
     }
 
     handleMouseDblClick(e) {

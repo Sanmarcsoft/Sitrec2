@@ -112,6 +112,7 @@ class CameraMapControls {
 		this.canvas.addEventListener( 'contextmenu', e => this.onContextMenu(e) );
 		this.canvas.addEventListener( 'pointerdown', e => this.handleMouseDown(e) );
 		this.canvas.addEventListener( 'pointerup', e => this.handleMouseUp(e) );
+		this.canvas.addEventListener( 'pointercancel', e => this.handlePointerCancel(e) );
 		this.canvas.addEventListener( 'pointermove', e => this.handleMouseMove(e) );
 		this.canvas.addEventListener( 'wheel', e => this.handleMouseWheel(e) );
 		this.canvas.addEventListener( 'touchstart', e => this.handleTouchStart(e), { passive: false } );
@@ -606,6 +607,13 @@ class CameraMapControls {
 					this.view.onContextMenu(syntheticEvent, this.longPressStartX, this.longPressStartY);
 				}
 				
+				// Clean up state since context menu interrupts normal pointer flow
+				this.activePointers.clear();
+				this.state = STATE.NONE;
+				if (event.pointerId !== undefined) {
+					this.canvas.releasePointerCapture(event.pointerId);
+				}
+				
 				// Vibrate for tactile feedback
 				if (navigator.vibrate) {
 					navigator.vibrate(50);
@@ -713,6 +721,15 @@ class CameraMapControls {
 
 
 
+	}
+
+	handlePointerCancel(event) {
+		// Handle pointer interruptions (e.g., browser gestures, context menus)
+		this.canvas.releasePointerCapture(event.pointerId);
+		this.activePointers.delete(event.pointerId);
+		this.clearLongPressTimer();
+		this.state = STATE.NONE;
+		this.isLongPressTriggered = false;
 	}
 
 	handleMouseMove(event) {
