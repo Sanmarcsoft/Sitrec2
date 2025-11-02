@@ -6,7 +6,6 @@ import {CNodeSynthBuilding} from "./nodes/CNodeSynthBuilding";
 import {Globals, NodeMan, setRenderOne} from "./Globals";
 import {ViewMan} from "./CViewManager";
 import {makeMouseRay} from "./mouseMoveView";
-import {mouseInViewOnly} from "./ViewUtils";
 import {V3} from "./threeUtils";
 import {getLocalUpVector} from "./SphericalMath";
 import {Sphere, Vector3} from "three";
@@ -18,32 +17,7 @@ export class C3DSynthManager extends CManager {
         this.buildings = new Map();  // Map of buildingID -> CNodeSynthBuilding
         this.nextBuildingID = 1;
         
-        // Creation mode state
-        this.creationMode = false;
-        this.creationStartPoint = null;
-        this.creationCurrentPoint = null;
-        this.creationPreviewBuilding = null;
-        
-        // Make globally accessible for GUI callbacks
-        window.synth3DManager = this;
-        
-        // Set up event listeners for creation mode
-        this.setupEventListeners();
-        
         console.log("C3DSynthManager initialized");
-    }
-    
-    /**
-     * Set up event listeners for creation mode
-     */
-    setupEventListeners() {
-        this.onPointerDownBound = (e) => this.onPointerDown(e);
-        this.onPointerMoveBound = (e) => this.onPointerMove(e);
-        this.onPointerUpBound = (e) => this.onPointerUp(e);
-        
-        document.addEventListener('pointerdown', this.onPointerDownBound);
-        document.addEventListener('pointermove', this.onPointerMoveBound);
-        document.addEventListener('pointerup', this.onPointerUpBound);
     }
     
     /**
@@ -83,234 +57,46 @@ export class C3DSynthManager extends CManager {
     }
     
     /**
-     * Start creation mode - user will click and drag to create a building footprint
+     * Create a 15x15x4 meter building centered at the given point
+     * @param {Vector3} centerPoint - The center point on the ground (in EUS coordinates)
+     * @returns {CNodeSynthBuilding} The created building
      */
-    startCreationMode() {
+    createBuildingAtPoint(centerPoint) {
         if (Globals.editingBuilding) {
             alert("Please exit edit mode before creating a new building");
-            return;
+            return null;
         }
         
-        this.creationMode = true;
-        this.creationStartPoint = null;
-        this.creationCurrentPoint = null;
+        // Get local coordinate system at the center point
+        const localUp = getLocalUpVector(centerPoint);
         
-        // Disable camera controls during creation
-        const view = ViewMan.get("mainView");
-        if (view && view.controls) {
-            view.controls.enabled = false;
-        }
+        // Create local north and east directions
+        // East is perpendicular to up and points roughly eastward
+        const east = new Vector3(1, 0, 0).cross(localUp).normalize();
+        const north = new Vector3().crossVectors(localUp, east).normalize();
         
-        console.log("Building creation mode started. Click and drag on the ground to create a building.");
-    }
-    
-    /**
-     * Cancel creation mode
-     */
-    cancelCreationMode() {
-        this.creationMode = false;
-        this.creationStartPoint = null;
-        this.creationCurrentPoint = null;
+        // Create a 15x15 meter footprint centered at the point
+        const halfSize = 7.5; // Half of 15 meters
+        const corners = [
+            centerPoint.clone().add(north.clone().multiplyScalar(-halfSize))
+                                .add(east.clone().multiplyScalar(-halfSize)),
+            centerPoint.clone().add(north.clone().multiplyScalar(halfSize))
+                                .add(east.clone().multiplyScalar(-halfSize)),
+            centerPoint.clone().add(north.clone().multiplyScalar(halfSize))
+                                .add(east.clone().multiplyScalar(halfSize)),
+            centerPoint.clone().add(north.clone().multiplyScalar(-halfSize))
+                                .add(east.clone().multiplyScalar(halfSize))
+        ];
         
-        if (this.creationPreviewBuilding) {
-            NodeMan.disposeRemove('preview_building');
-            this.creationPreviewBuilding = null;
-        }
-        
-        // Re-enable camera controls
-        const view = ViewMan.get("mainView");
-        if (view && view.controls) {
-            view.controls.enabled = true;
-        }
-        
-        setRenderOne(true);
-    }
-    
-    /**
-     * Handle pointer down during creation mode
-     */
-    onPointerDown(event) {
-        if (!this.creationMode) return;
-        if (event.button !== 0) return; // Only left mouse button
-        
-        const view = ViewMan.get("mainView");
-        if (!view || !mouseInViewOnly(view, event.clientX, event.clientY)) return;
-        
-        // Get ground intersection point
-        const groundPoint = this.getGroundPoint(view, event.clientX, event.clientY);
-        if (!groundPoint) return;
-        
-        this.creationStartPoint = groundPoint.clone();
-        this.creationCurrentPoint = groundPoint.clone();
-        
-        console.log("Creation start point:", this.creationStartPoint);
-        
-        event.stopPropagation();
-        event.preventDefault();
-    }
-    
-    /**
-     * Handle pointer move during creation mode
-     */
-    onPointerMove(event) {
-        if (!this.creationMode || !this.creationStartPoint) return;
-        
-        const view = ViewMan.get("mainView");
-        if (!view) return;
-        
-        // Get current ground point
-        const groundPoint = this.getGroundPoint(view, event.clientX, event.clientY);
-        if (!groundPoint) return;
-        
-        this.creationCurrentPoint = groundPoint.clone();
-        
-        console.log("Creation current point:", this.creationCurrentPoint, "distance:", this.creationStartPoint.distanceTo(this.creationCurrentPoint));
-        
-        // Update preview building
-        this.updateCreationPreview();
-        
-        setRenderOne(true);
-        event.stopPropagation();
-        event.preventDefault();
-    }
-    
-    /**
-     * Handle pointer up - finish creating building
-     */
-    onPointerUp(event) {
-        if (!this.creationMode || !this.creationStartPoint) return;
-        
-        const view = ViewMan.get("mainView");
-        if (!view) return;
-        
-        // Get final ground point
-        const groundPoint = this.getGroundPoint(view, event.clientX, event.clientY);
-        if (!groundPoint) {
-            this.cancelCreationMode();
-            return;
-        }
-        
-        // Check if drag distance is significant (at least 5 meters)
-        const distance = this.creationStartPoint.distanceTo(groundPoint);
-        console.log("Final distance check:", distance, "Start:", this.creationStartPoint, "End:", groundPoint);
-        if (distance < 5) {
-            console.log("Building too small (minimum 5m). Creation cancelled.");
-            this.cancelCreationMode();
-            return;
-        }
-        
-        // Create the building footprint rectangle
-        const footprint = this.createRectangleFootprint(
-            this.creationStartPoint,
-            groundPoint
-        );
-        
-        // Remove preview
-        if (this.creationPreviewBuilding) {
-            NodeMan.disposeRemove('preview_building');
-            this.creationPreviewBuilding = null;
-        }
-        
-        // Create actual building with default height of 10m
+        // Create building with 4 meter height
         const building = this.addBuilding({
-            footprint: footprint,
-            height: 10,
+            footprint: corners,
+            height: 4,
             name: `Building ${this.nextBuildingID}`
         });
         
-        // Exit creation mode
-        this.creationMode = false;
-        this.creationStartPoint = null;
-        this.creationCurrentPoint = null;
-        
-        // Re-enable camera controls
-        if (view.controls) {
-            view.controls.enabled = true;
-        }
-        
-        // Immediately enter edit mode on the new building
-        building.setEditMode(true);
-        
-        console.log(`Created building: ${building.buildingID}`);
-        setRenderOne(true);
-    }
-    
-    /**
-     * Update the preview building during creation
-     */
-    updateCreationPreview() {
-        if (!this.creationStartPoint || !this.creationCurrentPoint) return;
-        
-        // Remove old preview
-        if (this.creationPreviewBuilding) {
-            NodeMan.disposeRemove('preview_building');
-            this.creationPreviewBuilding = null;
-        }
-        
-        // Create footprint rectangle
-        const footprint = this.createRectangleFootprint(
-            this.creationStartPoint,
-            this.creationCurrentPoint
-        );
-        
-        // Create preview building (semi-transparent)
-        this.creationPreviewBuilding = new CNodeSynthBuilding({
-            id: 'preview_building',
-            footprint: footprint,
-            height: 10,
-            name: 'Preview'
-        });
-        
-        // Make it more transparent
-        if (this.creationPreviewBuilding.solidMesh) {
-            this.creationPreviewBuilding.solidMesh.material.opacity = 0.3;
-        }
-    }
-    
-    /**
-     * Create a rectangle footprint from two corner points
-     * The rectangle is aligned with local north/east directions
-     */
-    createRectangleFootprint(point1, point2) {
-        // Get local coordinate system at point1
-        const localUp = getLocalUpVector(point1);
-        
-        // Project both points to the same horizontal plane
-        // (in case they're at slightly different elevations)
-        const midpoint = point1.clone().add(point2).multiplyScalar(0.5);
-        
-        // Vector from point1 to point2 in 3D
-        const diagonal = point2.clone().sub(point1);
-        
-        // Project diagonal onto horizontal plane (perpendicular to localUp)
-        const diagonalProjected = diagonal.clone().sub(
-            localUp.clone().multiplyScalar(diagonal.dot(localUp))
-        );
-        
-        // Get perpendicular direction (also in horizontal plane)
-        const perpendicular = new Vector3().crossVectors(localUp, diagonalProjected).normalize();
-        const parallel = new Vector3().crossVectors(perpendicular, localUp).normalize();
-        
-        // Half-dimensions
-        const halfLength = diagonalProjected.length() / 2;
-        const halfWidth = 0; // We create a thin initial rectangle that can be expanded
-        
-        // Actually, let's make it have some minimum width so it's visible
-        const minWidth = Math.max(5, halfLength * 0.3); // At least 5m or 30% of length
-        
-        // Create 4 corners
-        const corners = [
-            midpoint.clone().add(parallel.clone().multiplyScalar(-halfLength))
-                            .add(perpendicular.clone().multiplyScalar(-minWidth)),
-            midpoint.clone().add(parallel.clone().multiplyScalar(halfLength))
-                            .add(perpendicular.clone().multiplyScalar(-minWidth)),
-            midpoint.clone().add(parallel.clone().multiplyScalar(halfLength))
-                            .add(perpendicular.clone().multiplyScalar(minWidth)),
-            midpoint.clone().add(parallel.clone().multiplyScalar(-halfLength))
-                            .add(perpendicular.clone().multiplyScalar(minWidth))
-        ];
-        
-        return corners;
+        console.log(`Created building: ${building.buildingID} at center point`);
+        return building;
     }
     
     /**
@@ -438,10 +224,5 @@ export class C3DSynthManager extends CManager {
         if (this.creationPreviewBuilding) {
             this.creationPreviewBuilding.dispose();
         }
-        
-        window.synth3DManager = null;
     }
 }
-
-// Export singleton instance
-export const Synth3DManager = new C3DSynthManager();

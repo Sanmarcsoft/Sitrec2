@@ -24,6 +24,7 @@ import {
     setRenderOne,
     setSitchEstablished,
     Sit,
+    Synth3DManager,
     Units
 } from "./Globals";
 import {isKeyHeld, toggler} from "./KeyBoardHandler";
@@ -1335,9 +1336,18 @@ export class CCustomManager {
         // Get ground elevation at this point
         const groundElevation = elevationAtLL(lat, lon);
         
+        // Close any existing ground context menu before creating a new one
+        if (this.groundContextMenu) {
+            this.groundContextMenu.destroy();
+            this.groundContextMenu = null;
+        }
+        
         // Create the context menu using lil-gui standalone menu
         const menu = Globals.menuBar.createStandaloneMenu("Ground", mouseX, mouseY);
         menu.open();
+        
+        // Store reference to track this menu
+        this.groundContextMenu = menu;
         
         // Format the location text
         const locationText = `${lat.toFixed(6)}, ${lon.toFixed(6)}, ${alt.toFixed(1)}m`;
@@ -1352,6 +1362,7 @@ export class CCustomManager {
                     camera.setLLA(lat, lon, currentAlt);
                     console.log(`Camera set to: ${lat}, ${lon}, ${currentAlt}m (altitude maintained)`);
                 }
+                this.groundContextMenu = null;
                 menu.destroy();
             },
             setCameraOnGround: () => {
@@ -1361,6 +1372,7 @@ export class CCustomManager {
                     camera.setLLA(lat, lon, alt + 2);
                     console.log(`Camera set to ground: ${lat}, ${lon}, ${alt + 2}m`);
                 }
+                this.groundContextMenu = null;
                 menu.destroy();
             },
             setTargetAbove: () => {
@@ -1371,6 +1383,7 @@ export class CCustomManager {
                     target.setLLA(lat, lon, currentAlt);
                     console.log(`Target set to: ${lat}, ${lon}, ${currentAlt}m (altitude maintained)`);
                 }
+                this.groundContextMenu = null;
                 menu.destroy();
             },
             setTargetOnGround: () => {
@@ -1380,6 +1393,7 @@ export class CCustomManager {
                     target.setLLA(lat, lon, alt);
                     console.log(`Target set to ground: ${lat}, ${lon}, ${alt}m`);
                 }
+                this.groundContextMenu = null;
                 menu.destroy();
             },
             centerTerrain: () => {
@@ -1390,7 +1404,7 @@ export class CCustomManager {
                     terrainUI.flagForRecalculation();
                     console.log(`Centered terrain at: ${lat}, ${lon}`);
                 }
-
+                this.groundContextMenu = null;
                 menu.destroy();
             },
             createSyntheticTrack: () => {
@@ -1401,6 +1415,7 @@ export class CCustomManager {
                     editMode: true,
                     startFrame: par.frame
                 });
+                this.groundContextMenu = null;
                 menu.destroy();
             },
             createTrackWithObject: () => {
@@ -1446,10 +1461,12 @@ export class CCustomManager {
 
 
                 console.log(`Created object ${objectID} with track at ${lat}, ${lon}, ${alt}m`);
+                this.groundContextMenu = null;
                 menu.destroy();
             },
             dropPin: () => {
                 // Close the menu first
+                this.groundContextMenu = null;
                 menu.destroy();
                 
                 // Create a unique feature ID
@@ -1473,14 +1490,17 @@ export class CCustomManager {
             },
             addBuilding: () => {
                 // Close the menu
+                this.groundContextMenu = null;
                 menu.destroy();
                 
-                // Start building creation mode
-                if (window.synth3DManager) {
-                    window.synth3DManager.startCreationMode();
-                    console.log("Building creation mode started. Click and drag to create a building footprint.");
-                } else {
-                    console.error("C3DSynthManager not initialized");
+                // Create a default 7x7x4 building centered at the ground point
+                const building = Synth3DManager.createBuildingAtPoint(groundPoint);
+                
+                // Immediately enter edit mode and show edit menu
+                if (building) {
+                    building.setEditMode(true);
+                    this.showBuildingEditingMenu(mouseX, mouseY, groundPoint);
+                    console.log(`Created building at ground point, now in edit mode with menu`);
                 }
             },
         };
@@ -1641,7 +1661,7 @@ export class CCustomManager {
     }
 
     /**
-     * Show context menu when right-clicking in building edit mode
+     * Show persistent edit menu when in building edit mode
      */
     showBuildingEditingMenu(mouseX, mouseY, groundPoint) {
         const building = Globals.editingBuilding;
@@ -1652,9 +1672,36 @@ export class CCustomManager {
         
         const buildingName = building.name || building.buildingID;
         
-        // Create the context menu
+        // Close any existing building edit menu
+        if (this.buildingEditMenu) {
+            this.buildingEditMenu.destroy();
+        }
+        
+        // Create the persistent edit menu
         const menu = Globals.menuBar.createStandaloneMenu(`Edit: ${buildingName}`, mouseX, mouseY);
-        menu.open();
+        this.buildingEditMenu = menu;
+        
+        // Add instructions
+        menu.addHTML('<div style="color: #aaa; font-size: 11px; padding: 5px;">Click and drag yellow spheres to move vertices</div>', 'Instructions');
+        
+        // Add material controls
+        const materialFolder = menu.addFolder('Material');
+        
+        materialFolder.add(building, 'materialType', ['basic', 'lambert', 'phong', 'physical'])
+            .name('Type')
+            .onChange(() => building.rebuildMaterial());
+        
+        materialFolder.addColor(building, 'materialColor')
+            .name('Color')
+            .onChange(() => building.rebuildMaterial());
+        
+        materialFolder.add(building, 'materialOpacity', 0, 1, 0.01)
+            .name('Opacity')
+            .onChange(() => building.rebuildMaterial());
+        
+        materialFolder.add(building, 'materialTransparent')
+            .name('Transparent')
+            .onChange(() => building.rebuildMaterial());
         
         // Create menu actions
         const menuData = {
@@ -1663,11 +1710,23 @@ export class CCustomManager {
                 building.setEditMode(false);
                 console.log(`Exited edit mode for building ${buildingName}`);
                 menu.destroy();
+                this.buildingEditMenu = null;
+            },
+            deleteBuilding: () => {
+                if (confirm(`Delete building "${buildingName}"?`)) {
+                    Synth3DManager.removeBuilding(building.buildingID);
+                    menu.destroy();
+                    this.buildingEditMenu = null;
+                }
             }
         };
         
-        // Add menu items
-        menu.add(menuData, "exitEditMode").name("Exit Edit Mode");
+        // Add action buttons
+        menu.add(menuData, "exitEditMode").name("✓ Exit Edit Mode");
+        menu.add(menuData, "deleteBuilding").name("🗑️ Delete Building").setLabelColor('#ff4444');
+        
+        // Open the menu
+        menu.open();
     }
 
     updateViewFromPreset() {

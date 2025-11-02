@@ -9,7 +9,10 @@ import {
     LineBasicMaterial,
     LineSegments,
     Mesh,
+    MeshBasicMaterial,
     MeshLambertMaterial,
+    MeshPhongMaterial,
+    MeshStandardMaterial,
     Plane,
     Raycaster,
     SphereGeometry,
@@ -20,7 +23,7 @@ import {getLocalUpVector} from "../SphericalMath";
 import {EUSToLLA, LLAToEUS} from "../LLA-ECEF-ENU";
 import {makeMouseRay} from "../mouseMoveView";
 import {ViewMan} from "../CViewManager";
-import {Globals, guiMenus, setRenderOne} from "../Globals";
+import {CustomManager, Globals, guiMenus, setRenderOne, Synth3DManager} from "../Globals";
 import {mouseInViewOnly} from "../ViewUtils";
 
 export class CNodeSynthBuilding extends CNode3DGroup {
@@ -46,6 +49,14 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         // Metadata
         this.buildingID = v.id;
         this.name = v.name || v.id;
+        
+        // Material properties
+        this.materialType = v.material || 'lambert';
+        this.materialColor = v.color || 0x8888ff;
+        this.materialOpacity = v.opacity !== undefined ? v.opacity : 0.7;
+        this.materialTransparent = v.transparent !== undefined ? v.transparent : true;
+        this.materialDepthTest = v.depthTest !== undefined ? v.depthTest : true;
+        this.materialWireframe = v.wireframe || false;
         
         // THREE.js rendering objects
         this.solidMesh = null;      // The rendered building mesh
@@ -151,13 +162,14 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         // Define faces as quads (we'll triangulate for rendering)
         // Vertex order: 0,1,2,3 = bottom corners (CCW from above)
         //               4,5,6,7 = top corners (CCW from above)
+        // NOTE: Winding order REVERSED so normals point OUTWARD from the building
         this.faces = [
-            {indices: [0, 1, 2, 3]},  // Bottom face
-            {indices: [4, 5, 6, 7]},  // Top face (reversed for correct normal)
-            {indices: [0, 1, 5, 4]},  // Side face
-            {indices: [1, 2, 6, 5]},  // Side face
-            {indices: [2, 3, 7, 6]},  // Side face
-            {indices: [3, 0, 4, 7]},  // Side face
+            {indices: [3, 2, 1, 0]},  // Bottom face (reversed - normal points down/out)
+            {indices: [7, 6, 5, 4]},  // Top face (reversed - normal points up/out)
+            {indices: [4, 5, 1, 0]},  // Side face (reversed - normal points out)
+            {indices: [5, 6, 2, 1]},  // Side face (reversed - normal points out)
+            {indices: [6, 7, 3, 2]},  // Side face (reversed - normal points out)
+            {indices: [7, 4, 0, 3]},  // Side face (reversed - normal points out)
         ];
         
         this.computeEdges();
@@ -226,13 +238,8 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         geometry.setIndex(triangulatedIndices);
         geometry.computeVertexNormals();
         
-        // Create solid mesh
-        const material = new MeshLambertMaterial({
-            color: 0x8888ff,
-            transparent: true,
-            opacity: 0.7,
-            depthWrite: true
-        });
+        // Create solid mesh with material
+        const material = this.createMaterial();
         
         this.solidMesh = new Mesh(geometry, material);
         this.solidMesh.layers.mask = LAYER.MASK_MAIN | LAYER.MASK_LOOK;
@@ -258,6 +265,45 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         this.wireframe = new LineSegments(edgeGeometry, edgeMaterial);
         this.wireframe.layers.mask = LAYER.MASK_MAIN | LAYER.MASK_LOOK;
         this.group.add(this.wireframe);
+    }
+    
+    /**
+     * Create a material based on current material properties
+     */
+    createMaterial() {
+        const materialConfig = {
+            color: this.materialColor,
+            transparent: this.materialTransparent,
+            opacity: this.materialOpacity,
+            depthTest: this.materialDepthTest,
+            wireframe: this.materialWireframe,
+            depthWrite: true
+        };
+        
+        switch (this.materialType) {
+            case 'basic':
+                return new MeshBasicMaterial(materialConfig);
+            case 'lambert':
+                return new MeshLambertMaterial(materialConfig);
+            case 'phong':
+                return new MeshPhongMaterial(materialConfig);
+            case 'physical':
+                return new MeshStandardMaterial(materialConfig);
+            default:
+                return new MeshLambertMaterial(materialConfig);
+        }
+    }
+    
+    /**
+     * Rebuild the material when properties change
+     */
+    rebuildMaterial() {
+        if (this.solidMesh) {
+            const oldMaterial = this.solidMesh.material;
+            this.solidMesh.material = this.createMaterial();
+            oldMaterial.dispose();
+            setRenderOne(true);
+        }
     }
     
     /**
@@ -307,10 +353,21 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             console.log(`  Created ${this.controlPoints.length} control points`);
             console.log(`  Control points are on layer mask:`, this.controlPoints[0]?.layers.mask.toString(2));
             
-            // Show GUI folder
+            // Show GUI folder and expand it
             if (this.guiFolder) {
                 this.guiFolder.show();
+                this.guiFolder.open();
             }
+            
+            // Keep material folder visible but closed initially
+            if (this.materialFolder) {
+                this.materialFolder.close();
+            }
+            
+            // Show the standalone edit menu at a default position (center-right of screen)
+            const defaultX = window.innerWidth * 0.65;
+            const defaultY = window.innerHeight * 0.3;
+            CustomManager.showBuildingEditingMenu(defaultX, defaultY, null);
         } else {
             // Remove control points
             this.controlPoints.forEach(cp => {
@@ -322,6 +379,12 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             
             if (Globals.editingBuilding === this) {
                 Globals.editingBuilding = null;
+            }
+            
+            // Close the standalone edit menu if it exists
+            if (CustomManager.buildingEditMenu) {
+                CustomManager.buildingEditMenu.destroy();
+                CustomManager.buildingEditMenu = null;
             }
             
             // Hide GUI folder
@@ -355,6 +418,15 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             return;
         }
         if (event.button !== 0) return; // Only left mouse button
+        
+        // Check if clicking on a GUI element - menus should have priority
+        let target = event.target;
+        while (target) {
+            if (target.classList && target.classList.contains('lil-gui')) {
+                return; // Click is on GUI, don't handle it
+            }
+            target = target.parentElement;
+        }
         
         const view = ViewMan.get("mainView");
         if (!view || !mouseInViewOnly(view, event.clientX, event.clientY)) {
@@ -530,20 +602,52 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         this.guiFolder = guiMenus.contents.addFolder(this.name);
         this.guiFolder.domElement.id = folderID;
         
+        // Name editor
+        this.guiFolder.add(this, 'name').name('Name').onChange(() => {
+            // Update folder title
+            this.guiFolder.title = this.name;
+            setRenderOne(true);
+        });
+        
         // Edit mode checkbox
         const editModeData = {editMode: this.editMode};
         this.guiFolder.add(editModeData, 'editMode').name('Edit Mode').onChange((value) => {
             this.setEditMode(value);
         });
         
+        // Material folder
+        this.materialFolder = this.guiFolder.addFolder('Material').close();
+        
+        this.materialFolder.add(this, 'materialType', ['basic', 'lambert', 'phong', 'physical'])
+            .name('Type')
+            .onChange(() => this.rebuildMaterial());
+        
+        this.materialFolder.addColor(this, 'materialColor')
+            .name('Color')
+            .onChange(() => this.rebuildMaterial());
+        
+        this.materialFolder.add(this, 'materialOpacity', 0, 1, 0.01)
+            .name('Opacity')
+            .onChange(() => this.rebuildMaterial());
+        
+        this.materialFolder.add(this, 'materialTransparent')
+            .name('Transparent')
+            .onChange(() => this.rebuildMaterial());
+        
+        this.materialFolder.add(this, 'materialWireframe')
+            .name('Wireframe')
+            .onChange(() => this.rebuildMaterial());
+        
+        this.materialFolder.add(this, 'materialDepthTest')
+            .name('Depth Test')
+            .onChange(() => this.rebuildMaterial());
+        
         // Delete button
         const actions = {
             delete: () => {
                 if (confirm(`Delete building "${this.name}"?`)) {
                     // Manager will handle deletion
-                    if (window.synth3DManager) {
-                        window.synth3DManager.removeBuilding(this.buildingID);
-                    }
+                    Synth3DManager.removeBuilding(this.buildingID);
                 }
             }
         };
@@ -559,15 +663,27 @@ export class CNodeSynthBuilding extends CNode3DGroup {
     serialize() {
         // Convert vertices to LLA for portability across different map origins
         const verticesLLA = this.vertices.map(v => {
-            const lla = EUSToLLA(v.x, v.y, v.z);
-            return {lat: lla.lat, lon: lla.lon, alt: lla.alt};
+            const lla = EUSToLLA(v.position.x, v.position.y, v.position.z);
+            return {
+                position: {lat: lla.lat, lon: lla.lon, alt: lla.alt},
+                type: v.type,
+                next: v.next,
+                prev: v.prev,
+                linkedVertex: v.linkedVertex
+            };
         });
         
         return {
             id: this.buildingID,
             name: this.name,
             vertices: verticesLLA,
-            faces: this.faces.map(f => ({indices: [...f.indices]}))
+            faces: this.faces.map(f => ({indices: [...f.indices]})),
+            material: this.materialType,
+            color: this.materialColor,
+            opacity: this.materialOpacity,
+            transparent: this.materialTransparent,
+            depthTest: this.materialDepthTest,
+            wireframe: this.materialWireframe
         };
     }
     
@@ -577,14 +693,39 @@ export class CNodeSynthBuilding extends CNode3DGroup {
     static deserialize(data) {
         // Convert LLA vertices back to EUS
         const verticesEUS = data.vertices.map(v => {
-            return LLAToEUS(v.lat, v.lon, v.alt);
+            // Handle both old format (just position) and new format (with metadata)
+            if (v.position) {
+                const eus = LLAToEUS(v.position.lat, v.position.lon, v.position.alt);
+                return {
+                    position: eus,
+                    type: v.type || 'free',
+                    next: v.next !== undefined ? v.next : -1,
+                    prev: v.prev !== undefined ? v.prev : -1,
+                    linkedVertex: v.linkedVertex !== undefined ? v.linkedVertex : -1
+                };
+            } else {
+                // Old format
+                return {
+                    position: LLAToEUS(v.lat, v.lon, v.alt),
+                    type: 'free',
+                    next: -1,
+                    prev: -1,
+                    linkedVertex: -1
+                };
+            }
         });
         
         return new CNodeSynthBuilding({
             id: data.id,
             name: data.name,
             vertices: verticesEUS,
-            faces: data.faces
+            faces: data.faces,
+            material: data.material,
+            color: data.color,
+            opacity: data.opacity,
+            transparent: data.transparent,
+            depthTest: data.depthTest,
+            wireframe: data.wireframe
         });
     }
     

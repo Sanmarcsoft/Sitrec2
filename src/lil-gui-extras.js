@@ -441,14 +441,16 @@ export class CGuiMenuBar {
                     gui.close();
                 });
                 
-                // Close standalone menus
+                // Close standalone menus (unless locked open)
                 const allContainers = Array.from(this.menuBar.children);
                 allContainers.forEach((container) => {
                     // Find the GUI associated with this container
                     const gui = container._gui;
                     if (gui && gui._standaloneContainer) {
-                        // This is a standalone menu, close it by removing the container
-                        gui.destroy();
+                        // Only close if not locked open
+                        if (!gui.lockOpenClose) {
+                            gui.destroy();
+                        }
                     }
                 });
             }

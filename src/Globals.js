@@ -57,7 +57,8 @@ export function setSitchMan(n) {SitchMan = n;}
 export var CustomManager;
 export function setCustomManager(n) {CustomManager = n;}
 
-
+export var Synth3DManager;
+export function setSynth3DManager(n) {Synth3DManager = n;}
 
 export var gui;
 export var guiTweaks;
