@@ -760,8 +760,33 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             
             console.log("  Started dragging vertex:", this.draggingVertexIndex);
             
+            // Store the initial position of the handle for relative dragging
+            this.dragInitialHandlePosition = this.draggingPoint.position.clone();
+            
             // Store the local up vector at this position
             this.dragLocalUp = getLocalUpVector(this.draggingPoint.position);
+            
+            // Calculate and store the initial intersection point on the appropriate plane
+            const isRoofCenter = this.draggingPoint.userData.isRoofCenter;
+            const draggedVertex = isRoofCenter ? null : this.vertices[this.draggingVertexIndex];
+            const isTopVertex = !isRoofCenter && (draggedVertex && draggedVertex.type === 'top');
+            
+            let plane = new Plane();
+            if (isRoofCenter || isTopVertex) {
+                // Create a vertical plane facing the camera for height adjustment
+                const cameraPos = view.camera.position;
+                const toCamera = cameraPos.clone().sub(this.draggingPoint.position).normalize();
+                const tangent = new Vector3().crossVectors(this.dragLocalUp, toCamera).normalize();
+                const planeNormal = new Vector3().crossVectors(tangent, this.dragLocalUp).normalize();
+                plane.setFromNormalAndCoplanarPoint(planeNormal, this.draggingPoint.position);
+            } else {
+                // Create a horizontal plane for bottom vertices
+                plane.setFromNormalAndCoplanarPoint(this.dragLocalUp, this.draggingPoint.position);
+            }
+            
+            // Store the initial intersection point
+            this.dragInitialIntersection = new Vector3();
+            this.raycaster.ray.intersectPlane(plane, this.dragInitialIntersection);
             
             // Disable camera controls while dragging
             if (view.controls) {
@@ -977,27 +1002,33 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         } else if (isRoofCenter || isTopVertex) {
             // For roof center handle and top vertices, create a vertical plane facing the camera
             // This allows height adjustment while keeping horizontal position locked
+            // Use the INITIAL handle position to create the plane for consistent relative dragging
             const cameraPos = view.camera.position;
-            const toCamera = cameraPos.clone().sub(this.draggingPoint.position).normalize();
+            const toCamera = cameraPos.clone().sub(this.dragInitialHandlePosition).normalize();
             
             // Make plane perpendicular to camera view but parallel to localUp
             const tangent = new Vector3().crossVectors(this.dragLocalUp, toCamera).normalize();
             const planeNormal = new Vector3().crossVectors(tangent, this.dragLocalUp).normalize();
             
-            plane.setFromNormalAndCoplanarPoint(planeNormal, this.draggingPoint.position);
+            plane.setFromNormalAndCoplanarPoint(planeNormal, this.dragInitialHandlePosition);
         } else {
             // For bottom vertices, create a horizontal plane (perpendicular to localUp)
+            // Use the INITIAL handle position to create the plane for consistent relative dragging
             plane.setFromNormalAndCoplanarPoint(
                 this.dragLocalUp,
-                this.draggingPoint.position
+                this.dragInitialHandlePosition
             );
         }
         
-        // Intersect ray with plane
-        const newPosition = new Vector3();
-        if (this.raycaster.ray.intersectPlane(plane, newPosition)) {
+        // Intersect ray with plane to get current mouse position
+        const currentIntersection = new Vector3();
+        if (this.raycaster.ray.intersectPlane(plane, currentIntersection)) {
+            let newPosition;
+            
             if (isBuildingMesh) {
-                // For building mesh: move the entire building horizontally
+                // For building mesh: use incremental movement (already working correctly)
+                // The plane is created at dragStartPoint and updated each frame
+                newPosition = currentIntersection.clone();
                 const displacement = newPosition.clone().sub(this.dragStartPoint);
                 
                 // Move all vertices by the same displacement
@@ -1011,7 +1042,12 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                 // Update drag start point for next frame (incremental translation)
                 this.dragStartPoint.copy(newPosition);
                 
-            } else if (isRoofCenter || isTopVertex) {
+            } else {
+                // For vertex/roof dragging: use relative displacement from initial click point
+                const displacement = currentIntersection.clone().sub(this.dragInitialIntersection);
+                newPosition = this.dragInitialHandlePosition.clone().add(displacement);
+                
+                if (isRoofCenter || isTopVertex) {
                 // For roof center handle and top vertices, calculate the new HEIGHT and apply to all tops
                 // This keeps each top vertex directly above its corresponding bottom
                 
@@ -1115,9 +1151,10 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                 
                 // Reposition top to maintain its height above the new bottom position
                 linkedTop.position.copy(draggedVertex.position.clone().add(localUp.multiplyScalar(currentHeight)));
+                }
             }
             
-            // Rebuild mesh
+            // Rebuild mesh (for all drag types)
             this.buildMesh();
             
             // Recreate control points to update their positions
