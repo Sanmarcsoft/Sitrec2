@@ -62,6 +62,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         this.solidMesh = null;      // The rendered building mesh
         this.wireframe = null;      // Wireframe edges
         this.controlPoints = [];    // Editable vertex control points
+        this.roofCenterHandle = null; // Single grey handle for roof height adjustment
         
         // Edit mode state
         this.editMode = false;
@@ -318,25 +319,59 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         });
         this.controlPoints = [];
         
-        // Create a sphere at each vertex
+        // Remove old roof center handle if it exists
+        if (this.roofCenterHandle) {
+            this.group.remove(this.roofCenterHandle);
+            this.roofCenterHandle.geometry.dispose();
+            this.roofCenterHandle.material.dispose();
+            this.roofCenterHandle = null;
+        }
+        
         const geometry = new SphereGeometry(3, 16, 16);  // 3m radius
         
+        // Create yellow handles only for bottom vertices
         this.vertices.forEach((vertex, idx) => {
-            const material = new MeshLambertMaterial({
-                color: 0xffff00,
+            if (vertex.type === 'bottom') {
+                const material = new MeshLambertMaterial({
+                    color: 0xffff00,
+                    transparent: true,
+                    opacity: 0.9,
+                    depthTest: true
+                });
+                
+                const sphere = new Mesh(geometry, material);
+                sphere.position.copy(vertex.position);
+                sphere.layers.mask = LAYER.MASK_HELPERS;
+                sphere.userData.vertexIndex = idx;
+                sphere.userData.isBottomHandle = true;
+                
+                this.group.add(sphere);
+                this.controlPoints.push(sphere);
+            }
+        });
+        
+        // Create one grey handle in the center of the roof
+        const topVertices = this.vertices.filter(v => v.type === 'top');
+        if (topVertices.length > 0) {
+            const center = new Vector3();
+            topVertices.forEach(v => center.add(v.position));
+            center.divideScalar(topVertices.length);
+            
+            const roofMaterial = new MeshLambertMaterial({
+                color: 0x888888,  // Grey
                 transparent: true,
                 opacity: 0.9,
                 depthTest: true
             });
             
-            const sphere = new Mesh(geometry, material);
-            sphere.position.copy(vertex.position);
-            sphere.layers.mask = LAYER.MASK_HELPERS;
-            sphere.userData.vertexIndex = idx;
+            this.roofCenterHandle = new Mesh(geometry, roofMaterial);
+            this.roofCenterHandle.position.copy(center);
+            this.roofCenterHandle.layers.mask = LAYER.MASK_HELPERS;
+            this.roofCenterHandle.userData.isRoofCenter = true;
             
-            this.group.add(sphere);
-            this.controlPoints.push(sphere);
-        });
+            this.group.add(this.roofCenterHandle);
+            this.controlPoints.push(this.roofCenterHandle);
+        }
     }
     
     /**
@@ -376,6 +411,14 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                 cp.material.dispose();
             });
             this.controlPoints = [];
+            
+            // Remove roof center handle
+            if (this.roofCenterHandle) {
+                this.group.remove(this.roofCenterHandle);
+                this.roofCenterHandle.geometry.dispose();
+                this.roofCenterHandle.material.dispose();
+                this.roofCenterHandle = null;
+            }
             
             if (Globals.editingBuilding === this) {
                 Globals.editingBuilding = null;
@@ -483,9 +526,12 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         
         this.raycaster.setFromCamera(mouseRay, view.camera);
         
-        // Get the vertex being dragged
-        const draggedVertex = this.vertices[this.draggingVertexIndex];
-        const isTopVertex = draggedVertex.type === 'top';
+        // Check if dragging the roof center handle
+        const isRoofCenter = this.draggingPoint.userData.isRoofCenter;
+        
+        // Get the vertex being dragged (if not roof center)
+        const draggedVertex = isRoofCenter ? null : this.vertices[this.draggingVertexIndex];
+        const isTopVertex = isRoofCenter || (draggedVertex && draggedVertex.type === 'top');
         
         let plane = new Plane();
         
@@ -512,12 +558,20 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         const newPosition = new Vector3();
         if (this.raycaster.ray.intersectPlane(plane, newPosition)) {
             if (isTopVertex) {
-                // For top vertices, calculate the new HEIGHT and apply to all tops
+                // For top vertices (or roof center), calculate the new HEIGHT and apply to all tops
                 // This keeps each top vertex directly above its corresponding bottom
                 
-                // Get the linked bottom vertex for the dragged top vertex
-                const bottomVertex = this.vertices[draggedVertex.linkedVertex];
-                const bottomPos = bottomVertex.position;
+                // Get a reference bottom vertex to calculate the new height
+                let referenceBottomVertex;
+                if (isRoofCenter) {
+                    // For roof center, use the first bottom vertex (index 0)
+                    referenceBottomVertex = this.vertices[0];
+                } else {
+                    // For individual top vertex, use its linked bottom
+                    referenceBottomVertex = this.vertices[draggedVertex.linkedVertex];
+                }
+                
+                const bottomPos = referenceBottomVertex.position;
                 const localUp = getLocalUpVector(bottomPos);
                 
                 // Calculate what the new height would be
@@ -530,18 +584,15 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                     newHeight = minHeight;
                 }
                 
-                // Apply this HEIGHT to all top vertices by iterating the ring
-                let currentIdx = this.draggingVertexIndex;
-                do {
-                    const topVertex = this.vertices[currentIdx];
+                // Apply this HEIGHT to all top vertices
+                const topVertices = this.vertices.filter(v => v.type === 'top');
+                topVertices.forEach(topVertex => {
                     const linkedBottom = this.vertices[topVertex.linkedVertex];
                     const upVector = getLocalUpVector(linkedBottom.position);
                     
                     // Position this top vertex directly above its bottom at newHeight
                     topVertex.position.copy(linkedBottom.position.clone().add(upVector.multiplyScalar(newHeight)));
-                    
-                    currentIdx = topVertex.next;
-                } while (currentIdx !== this.draggingVertexIndex);
+                });
                 
             } else {
                 // For bottom vertices, move the vertex and its two neighbors
@@ -621,7 +672,11 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             this.createControlPoints();
             
             // Re-identify the dragging point
-            this.draggingPoint = this.controlPoints[this.draggingVertexIndex];
+            if (isRoofCenter) {
+                this.draggingPoint = this.roofCenterHandle;
+            } else {
+                this.draggingPoint = this.controlPoints[this.draggingVertexIndex];
+            }
             
             setRenderOne(true);
         }
