@@ -1735,8 +1735,8 @@ export class CCustomManager {
         };
         
         // Add action buttons
-        menu.add(menuData, "exitEditMode").name("✓ Exit Edit Mode");
-        menu.add(menuData, "deleteBuilding").name("🗑️ Delete Building").setLabelColor('#ff4444');
+        menu.add(menuData, "exitEditMode").name("Exit Edit Mode");
+        menu.add(menuData, "deleteBuilding").name("Delete Building").setLabelColor('#ff4444');
         
         // Open the menu
         menu.open();
