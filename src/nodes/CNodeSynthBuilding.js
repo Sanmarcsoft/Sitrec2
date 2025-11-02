@@ -553,7 +553,12 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         if (intersects.length > 0) {
             // Hovering over an actual handle
             if (!this.hoveredHandle || this.hoveredHandle !== intersects[0].object) {
-                document.body.style.cursor = 'move';
+                // Use row-resize cursor for roof center handle, move for corner handles
+                if (intersects[0].object.userData.isRoofCenter) {
+                    document.body.style.cursor = 'row-resize';
+                } else {
+                    document.body.style.cursor = 'move';
+                }
                 this.hoveredHandle = intersects[0].object;
             }
         } else {
