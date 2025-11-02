@@ -327,6 +327,9 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         // Rebuild roof faces based on current roofline height
         this.buildRoofFaces();
         
+        // Recompute edges to include roof faces
+        this.computeEdges();
+        
         // Create BufferGeometry from vertices and faces
         const geometry = new BufferGeometry();
         
