@@ -9,7 +9,8 @@ import {
     keyHeld,
     NodeMan,
     setGPUMemoryMonitor,
-    setRenderOne
+    setRenderOne,
+    Synth3DManager
 } from "../Globals";
 import {GlobalDaySkyScene, GlobalNightSkyScene, GlobalScene, GlobalSunSkyScene} from "../LocalFrame";
 import {DRAG, makeMouseRay} from "../mouseMoveView";
@@ -1776,6 +1777,23 @@ export class CNodeView3D extends CNodeViewCanvas {
                         const groundPoint = intersect.point;
 
 //                        DebugSphere("DEBUGPIck"+par.frame, groundPoint, 2, 0xFFFF00)
+
+                        // Check if this is a synthetic 3D building - if so, enter edit mode
+                        if (objectID.startsWith('synthBuilding_')) {
+                            const building = Synth3DManager.getBuilding(objectID);
+                            if (building) {
+                                console.log(`Right-clicked on synthetic building: ${objectID}, entering edit mode`);
+                                
+                                // Enter edit mode (this will create handles and set up state)
+                                building.setEditMode(true);
+                                
+                                // Show the building edit menu at the mouse position (better UX than default position)
+                                // This will close the default-positioned menu created by setEditMode and show it at the cursor
+                                CustomManager.showBuildingEditingMenu(event.clientX, event.clientY, groundPoint);
+                                
+                                return; // Edit mode entered, we're done
+                            }
+                        }
 
                         // Get the node from NodeManager
                         const node = NodeMan.get(objectID);
