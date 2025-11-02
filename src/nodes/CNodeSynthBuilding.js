@@ -580,15 +580,11 @@ export class CNodeSynthBuilding extends CNode3DGroup {
      * Set edit mode on/off
      */
     setEditMode(enable) {
-        console.log(`setEditMode(${enable}) called for building:`, this.buildingID);
         this.editMode = enable;
         
         if (enable) {
             this.createControlPoints();
             Globals.editingBuilding = this;
-            
-            console.log(`  Created ${this.controlPoints.length} control points`);
-            console.log(`  Control points are on layer mask:`, this.controlPoints[0]?.layers.mask.toString(2));
             
             // Show GUI folder and expand it
             if (this.guiFolder) {
@@ -888,7 +884,6 @@ export class CNodeSynthBuilding extends CNode3DGroup {
      */
     onPointerDown(event) {
         if (!this.editMode) {
-            console.log("onPointerDown: NOT in edit mode");
             return;
         }
         if (event.button !== 0) return; // Only left mouse button
@@ -904,7 +899,6 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         
         const view = ViewMan.get("mainView");
         if (!view || !mouseInViewOnly(view, event.clientX, event.clientY)) {
-            console.log("onPointerDown: Not in view");
             return;
         }
         
@@ -913,18 +907,12 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         
         this.raycaster.setFromCamera(mouseRay, view.camera);
         
-        console.log("onPointerDown: Checking intersections...");
-        console.log("  Control points:", this.controlPoints.length);
-        console.log("  Raycaster layers:", this.raycaster.layers.mask.toString(2));
-        console.log("  Camera layers:", view.camera.layers.mask.toString(2));
-        
         // Capture state before any drag operation begins (for undo/redo)
         this.stateBeforeDrag = this.captureState();
         
         // Check for Alt/Option key - if pressed, duplicate the building and switch to editing the copy
         // Only duplicate if we haven't already done so for this event (prevent infinite recursion)
         if (event.altKey && !event._duplicatedBuilding) {
-            console.log("  Alt key detected - duplicating building");
             const duplicate = this.duplicate();
             if (duplicate) {
                 // Enter edit mode on the duplicate
@@ -951,8 +939,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         }
         const intersects = this.raycaster.intersectObjects(allHandles, false);
         
-        console.log("  Intersections found:", intersects.length);
-        
+
         if (intersects.length > 0) {
             // Hit an actual handle
             this.draggingPoint = intersects[0].object;
@@ -960,8 +947,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             this.isDragging = true;
             this.isRotating = false;
             
-            console.log("  Started dragging vertex:", this.draggingVertexIndex);
-            
+
             // Store the initial position of the handle for relative dragging
             this.dragInitialHandlePosition = this.draggingPoint.position.clone();
             
@@ -1016,7 +1002,6 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                     
                     // Project intersection onto plane and check if outside handle radius
                     if (this.isOutsideHandleInPlane(cornerVertexIndex, intersectionPoint)) {
-                        console.log("  Started rotation mode from corner", cornerVertexIndex);
                         this.isRotating = true;
                         this.isDragging = false;
                         
@@ -1065,7 +1050,6 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             this.raycaster.layers.mask = savedMask;
             
             if (meshIntersects.length > 0) {
-                console.log("  Started building translation mode from mesh click");
                 this.isDragging = true;
                 this.isRotating = false;
                 this.draggingPoint = {userData: {isBuildingMesh: true}};
@@ -1251,14 +1235,6 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                 const displacement = currentIntersection.clone().sub(this.dragInitialIntersection);
                 newPosition = this.dragInitialHandlePosition.clone().add(displacement);
                 
-                if (isRoofCenter) {
-                    console.log("Roof Center Movement Calc:");
-                    console.log("  dragInitialIntersection:", this.dragInitialIntersection);
-                    console.log("  currentIntersection:", currentIntersection);
-                    console.log("  displacement:", displacement);
-                    console.log("  displacement.length():", displacement.length());
-                }
-                
                 if (isRoofline) {
                     // For roofline handle, calculate the new HEIGHT and apply to both roofline vertices
                     // Get reference bottom position for height calculation
@@ -1321,13 +1297,6 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                 
                 // Calculate the HEIGHT CHANGE (delta) - only the movement from initial position
                 const heightDelta = newHeight - initialHeight;
-                
-                console.log("Roof Center Drag Debug:");
-                console.log("  dragInitialHandlePosition:", this.dragInitialHandlePosition);
-                console.log("  newPosition:", newPosition);
-                console.log("  initialHeight:", initialHeight);
-                console.log("  newHeight:", newHeight);
-                console.log("  heightDelta:", heightDelta);
                 
                 // Minimum height of 1 meter for top vertices
                 const minHeight = 1.0;
@@ -1600,7 +1569,6 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         this.guiFolder.add(editModeData, 'editMode').name('Edit Mode').onChange((value) => {
             // If enabling edit mode, first exit edit mode on any other building
             if (value && Globals.editingBuilding && Globals.editingBuilding !== this) {
-                console.log(`  Exiting edit mode on previous building: ${Globals.editingBuilding.buildingID}`);
                 Globals.editingBuilding.setEditMode(false);
             }
             this.setEditMode(value);
@@ -1725,8 +1693,6 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         
         // Use the manager's addBuilding to properly create and register the duplicate
         const duplicate = Synth3DManager.addBuilding(buildingData);
-        
-        console.log(`Duplicated building ${this.buildingID} -> ${duplicate.buildingID}`);
         
         return duplicate;
     }
