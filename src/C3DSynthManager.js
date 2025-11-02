@@ -45,6 +45,13 @@ export class C3DSynthManager extends CManager {
         if (this.exists(buildingID)) {
             const building = this.get(buildingID);
             
+            // First, exit edit mode if this building is being edited
+            // This will clean up control points, handles, menu, and Globals.editingBuilding
+            if (building.editMode || Globals.editingBuilding === building) {
+                console.log(`  Exiting edit mode for building ${buildingID} before removal`);
+                building.setEditMode(false);
+            }
+            
             // Use NodeMan.disposeRemove which handles both disposal and removal from NodeMan
             NodeMan.disposeRemove(building);
             
