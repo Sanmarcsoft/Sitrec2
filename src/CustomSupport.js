@@ -1320,6 +1320,12 @@ export class CCustomManager {
             return;
         }
         
+        // Check if we're in building editing mode
+        if (Globals.editingBuilding) {
+            this.showBuildingEditingMenu(mouseX, mouseY, groundPoint);
+            return;
+        }
+        
         // Convert ground point to LLA
         const groundLLA = EUSToLLA(groundPoint);
         const lat = groundLLA.x;
@@ -1465,6 +1471,18 @@ export class CCustomManager {
                 
                 console.log(`Created feature ${featureID} at ${lat}, ${lon}, ${alt}m`);
             },
+            addBuilding: () => {
+                // Close the menu
+                menu.destroy();
+                
+                // Start building creation mode
+                if (window.synth3DManager) {
+                    window.synth3DManager.startCreationMode();
+                    console.log("Building creation mode started. Click and drag to create a building footprint.");
+                } else {
+                    console.error("C3DSynthManager not initialized");
+                }
+            },
         };
         
         // Add location text as custom HTML (bright and selectable)
@@ -1482,6 +1500,9 @@ export class CCustomManager {
         // Add synthetic track options
         menu.add(menuData, "createTrackWithObject").name("Create Track with Object");
         menu.add(menuData, "createSyntheticTrack").name("Create Track (No Object)");
+        
+        // Add building creation option
+        menu.add(menuData, "addBuilding").name("Add Building");
 
         if (NodeMan.exists("terrainUI")) {
             const terrainUI = NodeMan.get("terrainUI");
@@ -1616,6 +1637,36 @@ export class CCustomManager {
             menu.add(menuData, "addGroundPoint").name(`Add Ground Point (Frame ${par.frame})`);
         }
         menu.add(menuData, "removeClosestPoint").name("Remove Closest Point");
+        menu.add(menuData, "exitEditMode").name("Exit Edit Mode");
+    }
+
+    /**
+     * Show context menu when right-clicking in building edit mode
+     */
+    showBuildingEditingMenu(mouseX, mouseY, groundPoint) {
+        const building = Globals.editingBuilding;
+        if (!building) {
+            console.warn("No building being edited");
+            return;
+        }
+        
+        const buildingName = building.name || building.buildingID;
+        
+        // Create the context menu
+        const menu = Globals.menuBar.createStandaloneMenu(`Edit: ${buildingName}`, mouseX, mouseY);
+        menu.open();
+        
+        // Create menu actions
+        const menuData = {
+            exitEditMode: () => {
+                // Exit edit mode
+                building.setEditMode(false);
+                console.log(`Exited edit mode for building ${buildingName}`);
+                menu.destroy();
+            }
+        };
+        
+        // Add menu items
         menu.add(menuData, "exitEditMode").name("Exit Edit Mode");
     }
 
