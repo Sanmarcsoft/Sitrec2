@@ -25,7 +25,7 @@ import {getLocalUpVector} from "../SphericalMath";
 import {EUSToLLA, LLAToEUS} from "../LLA-ECEF-ENU";
 import {makeMouseRay} from "../mouseMoveView";
 import {ViewMan} from "../CViewManager";
-import {CustomManager, Globals, guiMenus, setRenderOne, Synth3DManager} from "../Globals";
+import {CustomManager, Globals, guiMenus, setRenderOne, Synth3DManager, UndoManager} from "../Globals";
 import {mouseInViewOnly} from "../ViewUtils";
 
 export class CNodeSynthBuilding extends CNode3DGroup {
@@ -512,6 +512,48 @@ export class CNodeSynthBuilding extends CNode3DGroup {
     }
     
     /**
+     * Capture current building state for undo/redo
+     * Returns a deep copy of all vertex positions
+     */
+    captureState() {
+        return {
+            vertices: this.vertices.map(v => ({
+                position: v.position.clone(),
+                type: v.type,
+                next: v.next,
+                prev: v.prev,
+                linkedVertex: v.linkedVertex
+            }))
+        };
+    }
+    
+    /**
+     * Restore building state from a snapshot
+     * @param {Object} state - State object from captureState()
+     */
+    restoreState(state) {
+        // Restore vertices
+        this.vertices = state.vertices.map(v => ({
+            position: v.position.clone(),
+            type: v.type,
+            next: v.next,
+            prev: v.prev,
+            linkedVertex: v.linkedVertex
+        }));
+        
+        // Rebuild the mesh with new vertex positions
+        this.computeEdges();
+        this.buildMesh();
+        
+        // Update control points if in edit mode
+        if (this.editMode) {
+            this.createControlPoints();
+        }
+        
+        setRenderOne(true);
+    }
+    
+    /**
      * Set up event listeners for mouse interaction
      */
     setupEventListeners() {
@@ -721,6 +763,9 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         console.log("  Control points:", this.controlPoints.length);
         console.log("  Raycaster layers:", this.raycaster.layers.mask.toString(2));
         console.log("  Camera layers:", view.camera.layers.mask.toString(2));
+        
+        // Capture state before any drag operation begins (for undo/redo)
+        this.stateBeforeDrag = this.captureState();
         
         // Check for Alt/Option key - if pressed, duplicate the building and switch to editing the copy
         // Only duplicate if we haven't already done so for this event (prevent infinite recursion)
@@ -1186,6 +1231,34 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             if (view && view.controls) {
                 view.controls.enabled = true;
             }
+            
+            // Create undo action if we have a state before drag and UndoManager is available
+            if (this.stateBeforeDrag && UndoManager) {
+                const stateAfterDrag = this.captureState();
+                const stateBefore = this.stateBeforeDrag;
+                
+                // Only create undo if state actually changed
+                const stateChanged = JSON.stringify(stateBefore) !== JSON.stringify(stateAfterDrag);
+                
+                if (stateChanged) {
+                    const actionDescription = this.isRotating 
+                        ? `Rotate building "${this.name}"` 
+                        : `Edit building "${this.name}"`;
+                    
+                    UndoManager.add({
+                        undo: () => {
+                            this.restoreState(stateBefore);
+                        },
+                        redo: () => {
+                            this.restoreState(stateAfterDrag);
+                        },
+                        description: actionDescription
+                    });
+                }
+            }
+            
+            // Clear the stored state
+            this.stateBeforeDrag = null;
         }
         
         this.isDragging = false;

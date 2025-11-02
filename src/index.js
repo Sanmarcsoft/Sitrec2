@@ -27,6 +27,7 @@ import {
     setSitchEstablished,
     setSitchMan,
     setSynth3DManager,
+    setUndoManager,
     setUnits,
     setupGUIGlobals,
     setupGUIjetTweaks,
@@ -101,6 +102,7 @@ import {destroyGlobalProfiler, globalProfiler, initGlobalProfiler} from "./Visua
 import {fileSystemFetch} from "./fileSystemFetch";
 import {asyncOperationRegistry} from "./AsyncOperationRegistry";
 import {C3DSynthManager} from "./C3DSynthManager";
+import {undoManager} from "./UndoManager";
 
 // CRITICAL: Global context menu blocker - ensures system context menu NEVER appears
 // Uses capture mode (true) so it catches events before other listeners
@@ -1030,16 +1032,19 @@ async function initializeOnce() {
     setNodeFactory(new CNodeFactory(NodeMan))
     setSitchMan(new CSitchFactory())
     setSynth3DManager(new C3DSynthManager())
+    setUndoManager(undoManager)
     
     // Expose objects to window for testing purposes
     if (typeof window !== 'undefined') {
         window.NodeMan = NodeMan;
         window.DragDropHandler = DragDropHandler;
+        window.UndoManager = undoManager;
         
         // Set a flag to indicate that these objects are ready
         window.SITREC_OBJECTS_READY = {
             NodeMan: true,
             DragDropHandler: true,
+            UndoManager: true,
             timestamp: Date.now()
         };
         
