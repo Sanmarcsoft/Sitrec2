@@ -5,6 +5,8 @@
 import {CNode3DGroup} from "./CNode3DGroup";
 import {
     BufferGeometry,
+    CircleGeometry,
+    DoubleSide,
     Float32BufferAttribute,
     LineBasicMaterial,
     LineSegments,
@@ -343,9 +345,9 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         this.rotationHandles = [];
         
         const geometry = new SphereGeometry(3, 16, 16);  // 3m radius
-        const rotationGeometry = new SphereGeometry(6, 16, 16);  // 6m radius (2x diameter)
+        const rotationDiscGeometry = new CircleGeometry(6, 32);  // 6m radius flat disc
         
-        // Create yellow handles for bottom vertices + invisible rotation rings
+        // Create yellow handles for bottom vertices + invisible rotation discs
         this.vertices.forEach((vertex, idx) => {
             if (vertex.type === 'bottom') {
                 // Visible yellow handle
@@ -365,22 +367,36 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                 this.group.add(sphere);
                 this.controlPoints.push(sphere);
                 
-                // Invisible rotation ring around this corner (2x diameter)
+                // Get the two neighbor vertices to define the disc plane
+                const prevVertex = this.vertices[vertex.prev];
+                const nextVertex = this.vertices[vertex.next];
+                
+                // Calculate plane normal from corner and its two neighbors
+                const toPrev = prevVertex.position.clone().sub(vertex.position);
+                const toNext = nextVertex.position.clone().sub(vertex.position);
+                const planeNormal = new Vector3().crossVectors(toPrev, toNext).normalize();
+                
+                // Invisible rotation disc around this corner
                 const rotationMaterial = new MeshBasicMaterial({
                     color: 0xff0000,
                     transparent: true,
                     opacity: 0.0,  // Completely invisible
-                    depthTest: true
+                    depthTest: true,
+                    side: DoubleSide  // Detect from both sides of the disc
                 });
                 
-                const rotationRing = new Mesh(rotationGeometry, rotationMaterial);
-                rotationRing.position.copy(vertex.position);
-                rotationRing.layers.mask = LAYER.MASK_HELPERS;
-                rotationRing.userData.isRotationHandle = true;
-                rotationRing.userData.cornerVertexIndex = idx;  // Link to corner vertex
+                const rotationDisc = new Mesh(rotationDiscGeometry, rotationMaterial);
+                rotationDisc.position.copy(vertex.position);
                 
-                this.group.add(rotationRing);
-                this.rotationHandles.push(rotationRing);
+                // Orient the disc to align with the plane normal
+                rotationDisc.lookAt(vertex.position.clone().add(planeNormal));
+                
+                rotationDisc.layers.mask = LAYER.MASK_HELPERS;
+                rotationDisc.userData.isRotationHandle = true;
+                rotationDisc.userData.cornerVertexIndex = idx;  // Link to corner vertex
+                
+                this.group.add(rotationDisc);
+                this.rotationHandles.push(rotationDisc);
             }
         });
         
@@ -552,13 +568,9 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                     
                     // Corner rotation ring (for building rotation)
                     const cornerVertexIndex = rotationHandle.userData.cornerVertexIndex;
-                    const cornerPosition = this.vertices[cornerVertexIndex].position;
                     
-                    // Calculate distance from corner handle center
-                    const distanceFromCorner = intersectionPoint.distanceTo(cornerPosition);
-                    
-                    // Only show rotation cursor if outside the visible handle radius (3m)
-                    if (distanceFromCorner > 3) {
+                    // Project intersection onto plane and check if outside handle radius
+                    if (this.isOutsideHandleInPlane(cornerVertexIndex, intersectionPoint)) {
                         if (!this.hoveredHandle || !this.hoveredHandle.userData || !this.hoveredHandle.userData.isRotationRing) {
                             document.body.style.cursor = 'grab';
                             this.hoveredHandle = {userData: {isRotationRing: true, cornerVertexIndex: cornerVertexIndex}};
@@ -576,6 +588,60 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                 this.checkBuildingMeshHover();
             }
         }
+    }
+    
+    /**
+     * Project intersection point onto the plane defined by corner and its neighbors,
+     * then check if projected distance exceeds the visible handle radius
+     * AND if the intersection is on the outward side (away from building center)
+     */
+    isOutsideHandleInPlane(cornerVertexIndex, intersectionPoint) {
+        const cornerVertex = this.vertices[cornerVertexIndex];
+        const cornerPosition = cornerVertex.position;
+        
+        // Get the two neighbor vertices (prev and next in the ring)
+        const prevVertex = this.vertices[cornerVertex.prev];
+        const nextVertex = this.vertices[cornerVertex.next];
+        
+        // Define a plane using corner and its two neighbors
+        // Calculate two edge vectors
+        const toPrev = prevVertex.position.clone().sub(cornerPosition);
+        const toNext = nextVertex.position.clone().sub(cornerPosition);
+        
+        // Plane normal is the cross product of the two edges
+        const planeNormal = new Vector3().crossVectors(toPrev, toNext).normalize();
+        
+        // Project intersection point onto this plane
+        const toIntersection = intersectionPoint.clone().sub(cornerPosition);
+        const distanceToPlane = toIntersection.dot(planeNormal);
+        const projectedPoint = intersectionPoint.clone().sub(planeNormal.multiplyScalar(distanceToPlane));
+        
+        // Calculate distance from corner to projected point
+        const projectedDistance = projectedPoint.distanceTo(cornerPosition);
+        
+        // Check if projected distance exceeds visible handle radius (3m)
+        if (projectedDistance <= 3) {
+            return false;
+        }
+        
+        // Additional check: only detect rotation if clicking on the "outward" side
+        // X = projectedPoint (collision point on disk)
+        // A = cornerPosition (center of disk)
+        // F = buildingCentroid (center of floor)
+        // Only allow rotation if F->A is within 45° of A->X
+        if (this.buildingCentroid) {
+            const fromCenterToCorner = cornerPosition.clone().sub(this.buildingCentroid).normalize(); // F->A
+            const fromCornerToClick = projectedPoint.clone().sub(cornerPosition).normalize(); // A->X
+            
+            // Dot product > cos(45°) means angle < 45°
+            // cos(45°) = √2/2 ≈ 0.707
+            const dotProduct = fromCenterToCorner.dot(fromCornerToClick);
+            if (dotProduct <= Math.SQRT1_2) { // Math.SQRT1_2 = 1/√2 = cos(45°)
+                return false; // Click is not aligned enough with outward direction
+            }
+        }
+        
+        return true;
     }
     
     /**
@@ -693,13 +759,9 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                 if (rotationHandle.userData.cornerVertexIndex !== undefined && this.buildingCentroid) {
                     // Corner rotation ring (for building rotation)
                     const cornerVertexIndex = rotationHandle.userData.cornerVertexIndex;
-                    const cornerPosition = this.vertices[cornerVertexIndex].position;
                     
-                    // Calculate distance from corner handle center
-                    const distanceFromCorner = intersectionPoint.distanceTo(cornerPosition);
-                    
-                    // Only start rotation if outside the visible handle radius (3m)
-                    if (distanceFromCorner > 3) {
+                    // Project intersection onto plane and check if outside handle radius
+                    if (this.isOutsideHandleInPlane(cornerVertexIndex, intersectionPoint)) {
                         console.log("  Started rotation mode from corner", cornerVertexIndex);
                         this.isRotating = true;
                         this.isDragging = false;
