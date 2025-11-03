@@ -908,6 +908,44 @@ export class CGuiMenuBar {
         return visiblePercentage < 20;
     }
 
+    /**
+     * Ensure a standalone menu container is fully on screen
+     * If any part is off screen, move it back so it's entirely visible
+     * @param {HTMLElement} containerDiv - The container div for the standalone menu
+     */
+    ensureMenuOnScreen(containerDiv) {
+        // Get the container's current position and size
+        const rect = containerDiv.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        
+        // Parse current position
+        let left = parseInt(containerDiv.style.left);
+        let top = parseInt(containerDiv.style.top);
+        
+        // Check and adjust horizontal position
+        if (rect.left < 0) {
+            // Menu is off screen to the left
+            left = 0;
+        } else if (rect.right > viewportWidth) {
+            // Menu is off screen to the right
+            left = viewportWidth - rect.width;
+        }
+        
+        // Check and adjust vertical position
+        if (rect.top < 0) {
+            // Menu is off screen at the top
+            top = 0;
+        } else if (rect.bottom > viewportHeight) {
+            // Menu is off screen at the bottom
+            top = viewportHeight - rect.height;
+        }
+        
+        // Apply adjusted position
+        containerDiv.style.left = left + "px";
+        containerDiv.style.top = top + "px";
+    }
+
     applyModeStyles(gui) {
         const titleElement = gui.$title;
         
@@ -1430,6 +1468,9 @@ export class CGuiMenuBar {
                 document.addEventListener('contextmenu', gui._outsideContextMenuHandler);
             }, 100);
         }
+        
+        // Ensure the menu is fully on screen
+        this.ensureMenuOnScreen(containerDiv);
         
         return gui;
     }
