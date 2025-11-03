@@ -1801,9 +1801,14 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                 if (oppositeIdx !== -1) {
                     const opposite = this.vertices[oppositeIdx];
                     
-                    // Move neighbor1: project A's displacement onto the edge connecting opposite to neighbor1
-                    const edgeToNeighbor1 = neighbor1.position.clone().sub(opposite.position);
-                    const edgeDir1 = edgeToNeighbor1.clone().normalize();
+                    // Move neighbor1: project A's displacement onto the HORIZONTAL edge connecting opposite to neighbor1
+                    // First, project the 3D edge onto the horizontal plane
+                    const edgeToNeighbor1_3D = neighbor1.position.clone().sub(opposite.position);
+                    const verticalComp1 = edgeToNeighbor1_3D.dot(localUp);
+                    const edgeToNeighbor1_Horizontal = edgeToNeighbor1_3D.clone().sub(localUp.clone().multiplyScalar(verticalComp1));
+                    const edgeDir1 = edgeToNeighbor1_Horizontal.clone().normalize();
+                    
+                    // Now project the horizontal displacement onto the horizontal edge direction
                     const projectedMovement1 = horizontalDisp.dot(edgeDir1);
                     const neighbor1NewPos = neighbor1.position.clone().add(edgeDir1.multiplyScalar(projectedMovement1));
                     
@@ -1819,9 +1824,14 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                     const currentHeight1 = toTop1.dot(localUp1);
                     linkedTop1.position.copy(neighbor1.position.clone().add(localUp1.multiplyScalar(currentHeight1)));
                     
-                    // Move neighbor2: project A's displacement onto the edge connecting opposite to neighbor2
-                    const edgeToNeighbor2 = neighbor2.position.clone().sub(opposite.position);
-                    const edgeDir2 = edgeToNeighbor2.clone().normalize();
+                    // Move neighbor2: project A's displacement onto the HORIZONTAL edge connecting opposite to neighbor2
+                    // First, project the 3D edge onto the horizontal plane
+                    const edgeToNeighbor2_3D = neighbor2.position.clone().sub(opposite.position);
+                    const verticalComp2 = edgeToNeighbor2_3D.dot(localUp);
+                    const edgeToNeighbor2_Horizontal = edgeToNeighbor2_3D.clone().sub(localUp.clone().multiplyScalar(verticalComp2));
+                    const edgeDir2 = edgeToNeighbor2_Horizontal.clone().normalize();
+                    
+                    // Now project the horizontal displacement onto the horizontal edge direction
                     const projectedMovement2 = horizontalDisp.dot(edgeDir2);
                     const neighbor2NewPos = neighbor2.position.clone().add(edgeDir2.multiplyScalar(projectedMovement2));
                     
