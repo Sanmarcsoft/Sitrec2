@@ -93,10 +93,12 @@ export class C3DSynthManager extends CManager {
         const savedRotation = Globals.settings?.lastBuildingRotation || 0;
         if (savedRotation !== 0) {
             // Rotate the north and east vectors by the saved rotation
-            const rotatedNorth = north.clone().multiplyScalar(Math.cos(savedRotation))
-                                     .add(east.clone().multiplyScalar(Math.sin(savedRotation)));
-            const rotatedEast = east.clone().multiplyScalar(Math.cos(savedRotation))
-                                    .sub(north.clone().multiplyScalar(Math.sin(savedRotation)));
+            // Note: Negated to match Three.js applyAxisAngle convention
+            const angle = -savedRotation;
+            const rotatedNorth = north.clone().multiplyScalar(Math.cos(angle))
+                                     .add(east.clone().multiplyScalar(Math.sin(angle)));
+            const rotatedEast = east.clone().multiplyScalar(Math.cos(angle))
+                                    .sub(north.clone().multiplyScalar(Math.sin(angle)));
             
             north.copy(rotatedNorth.normalize());
             east.copy(rotatedEast.normalize());
