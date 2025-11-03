@@ -1731,25 +1731,27 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                 
             } else if (isTopVertex) {
                 // For top vertices, calculate the new HEIGHT and apply to that top only
-                
+                // NOT USED?
+
+                    assert(0, "Top vertex dragging is currently disabled in favor of roof center handle.");
                 // Get the linked bottom vertex
-                const referenceBottomVertex = this.vertices[draggedVertex.linkedVertex];
-                const bottomPos = referenceBottomVertex.position;
-                const localUp = getLocalUpVector(bottomPos);
-                
-                // Calculate what the new height would be
-                const toTop = newPosition.clone().sub(bottomPos);
-                let newHeight = toTop.dot(localUp);
-                
-                // Minimum height of 0.01 meter
-                const minHeight = 0.01;
-                if (newHeight < minHeight) {
-                    newHeight = minHeight;
-                }
-                
-                // Apply this HEIGHT to this top vertex only
-                const upVector = getLocalUpVector(bottomPos);
-                draggedVertex.position.copy(bottomPos.clone().add(upVector.multiplyScalar(newHeight)));
+                // const referenceBottomVertex = this.vertices[draggedVertex.linkedVertex];
+                // const bottomPos = referenceBottomVertex.position;
+                // const localUp = getLocalUpVector(bottomPos);
+                //
+                // // Calculate what the new height would be
+                // const toTop = newPosition.clone().sub(bottomPos);
+                // let newHeight = toTop.dot(localUp);
+                //
+                // // Minimum height of 0.01 meter
+                // const minHeight = 0.01;
+                // if (newHeight < minHeight) {
+                //     newHeight = minHeight;
+                // }
+                //
+                // // Apply this HEIGHT to this top vertex only
+                // const upVector = getLocalUpVector(bottomPos);
+                // draggedVertex.position.copy(bottomPos.clone().add(upVector.multiplyScalar(newHeight)));
                 
             } else {
                 // For bottom vertices, move the vertex and its two neighbors horizontally only
