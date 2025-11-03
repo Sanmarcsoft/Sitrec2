@@ -860,6 +860,51 @@ export class CNodeSynthBuilding extends CNode3DGroup {
     }
     
     /**
+     * Update handle scales to maintain constant screen size (size-invariant)
+     * Should be called from the render loop to keep handles at 40px regardless of camera distance
+     * @param {CNodeView3D} view - The view to use for screen-space scaling
+     */
+    updateHandleScales(view) {
+        if (!this.editMode || !view || !view.pixelsToMeters) {
+            return;
+        }
+        
+        const handlePixelSize = 20; // Target size in screen pixels for visible handles
+        const rotationDiscPixelSize = 60; // Larger size for invisible rotation discs (easier to hit)
+        
+        // Update sphere handles (bottom corner handles and roof handles)
+        this.controlPoints.forEach(handle => {
+            if (handle && handle.geometry && handle.geometry.type === 'SphereGeometry') {
+                const scale = view.pixelsToMeters(handle.position, handlePixelSize);
+                // SphereGeometry with radius 3m, so scale to get handlePixelSize on screen
+                handle.scale.set(scale / 3, scale / 3, scale / 3);
+            }
+        });
+        
+        // Update roof center handle (also a sphere)
+        if (this.roofCenterHandle) {
+            const scale = view.pixelsToMeters(this.roofCenterHandle.position, handlePixelSize);
+            this.roofCenterHandle.scale.set(scale / 3, scale / 3, scale / 3);
+        }
+        
+        // Update roofline handle (also a sphere)
+        if (this.rooflineHandle) {
+            const scale = view.pixelsToMeters(this.rooflineHandle.position, handlePixelSize);
+            this.rooflineHandle.scale.set(scale / 3, scale / 3, scale / 3);
+        }
+        
+        // Update rotation disc handles with LARGER size since they're invisible
+        // The larger size makes them much easier to interact with for rotation
+        this.rotationHandles.forEach(handle => {
+            if (handle && handle.geometry && handle.geometry.type === 'CircleGeometry') {
+                const scale = view.pixelsToMeters(handle.position, rotationDiscPixelSize);
+                // CircleGeometry with radius 6m, so scale to get rotationDiscPixelSize on screen
+                handle.scale.set(scale / 6, scale / 6, scale / 6);
+            }
+        });
+    }
+    
+    /**
      * Set edit mode on/off
      */
     setEditMode(enable) {

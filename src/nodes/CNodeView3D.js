@@ -38,7 +38,13 @@ import {
     WebGLRenderer,
     WebGLRenderTarget
 } from "three";
-import {DebugArrowAB, forceFilterChange, scaleArrows, updateTrackPositionIndicator} from "../threeExt";
+import {
+    DebugArrowAB,
+    forceFilterChange,
+    scaleArrows,
+    scaleBuildingHandles,
+    updateTrackPositionIndicator
+} from "../threeExt";
 import {CNodeViewCanvas} from "./CNodeViewCanvas";
 import {wgs84} from "../LLA-ECEF-ENU";
 import {getCameraNode} from "./CNodeCamera";
@@ -1116,6 +1122,14 @@ export class CNodeView3D extends CNodeViewCanvas {
         // Update the position indicator cone for the currently editing track
         updateTrackPositionIndicator(this);
         if (globalProfiler) globalProfiler.pop();
+
+        // Profile: Building Handle Scaling (only for mainView)
+        if (this.id === "mainView" && globalProfiler) globalProfiler.push('#9467bd', 'buildingHandles');
+        // Update building handles to maintain constant screen size (size-invariant at 40px)
+        if (this.id === "mainView") {
+            scaleBuildingHandles(this);
+        }
+        if (this.id === "mainView" && globalProfiler) globalProfiler.pop();
 
         // Profile: Render Target and Effects (typically the most expensive)
         if (globalProfiler) globalProfiler.push('#ff0000', 'renderTargetEffects');
