@@ -1164,9 +1164,21 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         // Calculate distance from corner to projected point
         const projectedDistance = projectedPoint.distanceTo(cornerPosition);
         
-        // Check if projected distance exceeds visible handle radius (3m)
-        if (projectedDistance <= 3) {
-            return false;
+        // Check if projected distance exceeds visible handle radius (20 pixels, scaled dynamically)
+        // The visible sphere handle is 3m base radius, scaled to 20px screen size
+        const view = ViewMan.get("mainView");
+        if (view && view.pixelsToMeters) {
+            const handlePixelSize = 20; // Must match updateHandleScales()
+            const scaledHandleRadius = view.pixelsToMeters(cornerPosition, handlePixelSize);
+            
+            if (projectedDistance <= scaledHandleRadius) {
+                return false;
+            }
+        } else {
+            // Fallback to fixed 3m if view not available
+            if (projectedDistance <= 3) {
+                return false;
+            }
         }
         
         // Additional check: only detect rotation if clicking on the "outward" side
