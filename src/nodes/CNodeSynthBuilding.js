@@ -1383,7 +1383,8 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                     if (this.isOutsideHandleInPlane(cornerVertexIndex, intersectionPoint)) {
                         this.isRotating = true;
                         this.isDragging = false;
-                        this.totalRotationThisSession = 0; // Reset accumulated rotation at start of rotation
+                        // Start from the previously saved rotation (absolute angle from initial orientation)
+                        this.totalRotationThisSession = Globals.settings?.lastBuildingRotation || 0;
                         
                         // Calculate initial angle in ground plane around building centroid
                         const localUp = getLocalUpVector(this.buildingCentroid);
@@ -1963,15 +1964,15 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             this.stateBeforeDrag = null;
         }
         
-        // If rotation just ended, save the total rotation to settings
-        if (this.isRotating && this.totalRotationThisSession !== 0) {
+        // If rotation just ended, save the absolute rotation angle to settings
+        if (this.isRotating) {
             // Normalize rotation to 0-2π range
             let normalizedRotation = this.totalRotationThisSession % (2 * Math.PI);
             if (normalizedRotation < 0) {
                 normalizedRotation += 2 * Math.PI;
             }
             
-            // Update settings with the new rotation (invisibly persisted)
+            // Update settings with the absolute rotation angle (invisibly persisted)
             Globals.settings.lastBuildingRotation = normalizedRotation;
             
             // Save settings asynchronously (don't await to avoid blocking UI)
@@ -1979,7 +1980,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                 console.warn("Failed to save building rotation to settings:", err);
             });
             
-            console.log(`Saved building rotation: ${(normalizedRotation * 180 / Math.PI).toFixed(1)}°`);
+            console.log(`Saved absolute building rotation: ${(normalizedRotation * 180 / Math.PI).toFixed(1)}°`);
         }
         
         this.isDragging = false;
