@@ -73,8 +73,12 @@ import {
     ATFLIR,
     bSphere,
     glareSphere,
-    glareSprite, setASphere,
-    setATFLIR, setBSphere, setGlareSphere, setGlareSprite,
+    glareSprite,
+    setASphere,
+    setATFLIR,
+    setBSphere,
+    setGlareSphere,
+    setGlareSprite,
     setTargetSphere,
     targetSphere,
     vizRadius
@@ -995,10 +999,8 @@ export function initViews() {
     }
 
     // mobile adjustments, no keyboard, no chart, UI closed
-    if (/Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent) ||
-        (/Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.platform)) ||
-        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 0)
-    ) {
+    // Note: Globals.isMobile is set early in index.js checkUserAgent()
+    if (Globals.isMobile) {
         gui.close()
         par.showChart = false;
         chartDiv.style.display = 'none';
