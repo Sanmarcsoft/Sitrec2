@@ -202,22 +202,40 @@ class ARModeManager {
         const camera = this.cameraNode.camera;
         if (!camera) return;
         
-        // Convert heading (0-360 degrees, 0 = North) to radians
-        // In Three.js, rotation around Y axis: 0 = +Z (South), π/2 = -X (West), π = -Z (North), 3π/2 = +X (East)
-        // So we need to convert: North (0°) should point to -Z, which is π radians
-        const headingRad = MathUtils.degToRad(this.compassHeading);
-        const yaw = Math.PI - headingRad; // Convert compass heading to Three.js Y rotation
-        
-        // Convert elevation to radians
-        // Positive elevation = looking up, negative = looking down
-        const pitch = MathUtils.degToRad(-this.elevationAngle);
-        
-        // Create rotation: first rotate around Y axis (yaw/heading), then around X axis (pitch/elevation)
-        const euler = new Euler(pitch, yaw, 0, 'YXZ');
-        camera.quaternion.setFromEuler(euler);
-        
-        // Update camera matrices
-        camera.updateMatrixWorld(true);
+        // Instead of directly rotating the camera, update the PTZ controller
+        // This allows AR mode to work with the Manual PTZ "Use Angles" system
+        const ptzController = NodeMan.get("ptzAngles", false);
+        if (ptzController) {
+
+            // Update PTZ controller with device orientation
+            // compassHeading: 0-360°, 0 = North (matches PTZ azimuth)
+            ptzController.az = this.compassHeading;
+            
+            // elevationAngle: positive = device tilted forward (looking down)
+            // PTZ el: positive = looking up, negative = looking down
+            ptzController.el = this.elevationAngle - 90; // Adjust so 0° = horizon
+            
+            // Don't need to call recalculateCascade - the PTZ controller
+            // will apply these values in its normal update cycle
+        } else {
+            // Fallback: if no PTZ controller, directly rotate camera (old behavior)
+            // Convert heading (0-360 degrees, 0 = North) to radians
+            // In Three.js, rotation around Y axis: 0 = +Z (South), π/2 = -X (West), π = -Z (North), 3π/2 = +X (East)
+            // So we need to convert: North (0°) should point to -Z, which is π radians
+            const headingRad = MathUtils.degToRad(this.compassHeading);
+            const yaw = Math.PI - headingRad; // Convert compass heading to Three.js Y rotation
+            
+            // Convert elevation to radians
+            // Positive elevation = looking up, negative = looking down
+            const pitch = MathUtils.degToRad(-this.elevationAngle);
+            
+            // Create rotation: first rotate around Y axis (yaw/heading), then around X axis (pitch/elevation)
+            const euler = new Euler(pitch, yaw, 0, 'YXZ');
+            camera.quaternion.setFromEuler(euler);
+            
+            // Update camera matrices
+            camera.updateMatrixWorld(true);
+        }
     }
 }
 
