@@ -1,7 +1,18 @@
 // A variety of functions related to the jet and the atflir pod orientation, and glare
 // so mostly related to Gimbal, GoFast, FLIR1 and Aguadilla
 
-import {EarthRadiusMiles, gui, guiMenus, guiPhysics, guiTweaks, infoDiv, NodeMan, setRenderOne, Sit} from "./Globals";
+import {
+    EarthRadiusMiles,
+    Globals,
+    gui,
+    guiMenus,
+    guiPhysics,
+    guiTweaks,
+    infoDiv,
+    NodeMan,
+    setRenderOne,
+    Sit
+} from "./Globals";
 import {par} from "./par";
 import {metersFromMiles, metersFromNM, radians} from "./utils";
 import {EA2XYZ, EAJP2PR, getLocalUpVector, PRJ2XYZ} from "./SphericalMath";
