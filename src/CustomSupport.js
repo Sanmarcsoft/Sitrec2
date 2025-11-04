@@ -1739,6 +1739,31 @@ export class CCustomManager {
             .name('Transparent')
             .onChange(() => building.rebuildMaterial());
         
+        // Add height controls
+        const heightFolder = menu.addFolder('Height');
+        
+        // Store controller reference on building so it can be updated
+        building.roofEdgeHeightController = heightFolder.add(building, 'roofAGL', 0.1, 100, 0.01)
+            .name('Roof Edge Height')
+            .onChange((value) => building.updateRoofEdgeHeight(value))
+            .listen();
+        
+        // Create computed property for ridgeline height (total height from ground)
+        const ridgelineHeightProxy = {
+            get height() {
+                return building.roofAGL + building.rooflineHeightAGL;
+            },
+            set height(value) {
+                const newRooflineHeight = Math.max(0, value - building.roofAGL);
+                building.updateRooflineHeight(newRooflineHeight);
+            }
+        };
+        
+        // Store controller reference on building so it can be updated
+        building.ridgelineHeightController = heightFolder.add(ridgelineHeightProxy, 'height', 0.1, 100, 0.01)
+            .name('Ridgeline Height')
+            .listen();
+        
         // Create menu actions
         const menuData = {
             exitEditMode: () => {
