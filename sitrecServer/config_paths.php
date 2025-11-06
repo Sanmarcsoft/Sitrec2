@@ -124,7 +124,33 @@ $server_config = [
 ];
 
 // if there is a FETCH_CONFIG parameter, then we are fetching the config
+// will also return environment variables that start with SITREC_
+// which can be used to override settings
+// and add new settings
+// add them on your web server or PHP-FPM configuration
+// for example in /opt/homebrew/etc/php/8.4/php-fpm.d/www.conf
+// e.g.
+// env[SITREC_TEST] = "some test string"
+// (requires php-fpm restart, e.g. brew services restart php )
+// or you can set clear_env = no in www.conf to allow passing env vars from the shell
+
 if (isset($_GET["FETCH_CONFIG"])) {
+	// Add all environment variables that start with SITREC_
+	foreach ($_ENV as $key => $value) {
+		if (strpos($key, 'SITREC_') === 0) {
+			$server_config[$key] = $value;
+		}
+	}
+	// Also check getenv() in case $_ENV is not populated
+	$env_vars = getenv();
+	if (is_array($env_vars)) {
+		foreach ($env_vars as $key => $value) {
+			if (strpos($key, 'SITREC_') === 0) {
+				$server_config[$key] = $value;
+			}
+		}
+	}
+	
 	header('Content-Type: application/json');
 	echo json_encode($server_config);
 	exit (0);

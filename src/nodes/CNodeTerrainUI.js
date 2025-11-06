@@ -143,6 +143,52 @@ export class CNodeTerrainUI extends CNode {
             }
         //}
 
+        // add any mapsources defined in the environment variable
+        // this allows Docker builds, etc, to specify different map sources
+        // a map source definition should be a JSON string
+        // like:
+        // env[SITREC_MAPTYPE_MAPBOX] = "{\"name\":\"MapBox\",\"urlTemplate\":\"https://api.mapbox.com/v4/mapbox.{layer}/{z}/{x}/{y}@2x.jpg80?access_token=pk.eyJ1IjoibWlja3dlc3QiLCJhIjoiY21ianEydHIwMGliaTJrcHB4cDgzbGZuaSJ9.J7jU9B_pz4Mo723klYpywQ\",\"layers\":{\"satellite\":{\"type\":\"jpg\"}},\"layer\":\"satellite\",\"minZoom\":0,\"maxZoom\":18,\"supportsOceanSurface\":true}"
+
+        // iterate over all Globals.env keys
+        // if the key starts with SITREC_MAPTYPE_, then we parse the value as JSON
+        // and add it to the mapSources
+        if (Globals.env) {
+            for (const envKey in Globals.env) {
+                if (envKey.startsWith('SITREC_MAPTYPE_')) {
+                    try {
+                        const mapConfig = JSON.parse(Globals.env[envKey]);
+                        // Extract the map type name from the env key (e.g., SITREC_MAPTYPE_MAPBOX -> MapBox)
+                        const mapTypeName = envKey.replace('SITREC_MAPTYPE_', '');
+                        
+                        // If the config has a urlTemplate, convert it to a mapURL function
+                        if (mapConfig.urlTemplate) {
+                            const template = mapConfig.urlTemplate;
+                            mapConfig.mapURL = (z, x, y) => {
+                                let url = template
+                                    .replace('{z}', z)
+                                    .replace('{x}', x)
+                                    .replace('{y}', y);
+                                
+                                // Replace layer placeholder if specified
+                                if (mapConfig.layer) {
+                                    url = url.replace('{layer}', mapConfig.layer);
+                                }
+                                
+                                return url;
+                            };
+                            // Remove the template property as it's no longer needed
+                            delete mapConfig.urlTemplate;
+                        }
+                        
+                        // Add to mapSources using the extracted name
+                        this.mapSources[mapTypeName] = mapConfig;
+                        console.log(`Added map source from environment: ${mapTypeName}`, mapConfig.name);
+                    } catch (e) {
+                        console.error(`Failed to parse map source from ${envKey}:`, e);
+                    }
+                }
+            }
+        }
 
         // extract a K/V pair from the mapSources
         // for use in the GUI.

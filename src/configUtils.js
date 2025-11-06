@@ -1,3 +1,5 @@
+import {Globals} from "./Globals.js";
+
 export const isConsole = (typeof window == 'undefined');
 
 // Serverless mode is determined at build time via webpack DefinePlugin
@@ -11,6 +13,7 @@ export async function checkServerlessMode() {
         console.log("Serverless mode (build-time flag):", isServerless);
     }
 }
+
 
 export async function getConfigFromServer() {
 
@@ -136,6 +139,9 @@ export async function setupConfigPaths() {
             console.log("SITREC_CACHE: ", SITREC_CACHE);
             console.log("SITREC_TERRAIN: ", SITREC_TERRAIN);
             console.log("SITREC_DEV_DOMAIN: ", SITREC_DEV_DOMAIN);
+
+            Globals.env = serverConfig;
+
 
             return;
         }
