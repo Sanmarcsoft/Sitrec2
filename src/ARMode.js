@@ -18,6 +18,10 @@ class ARModeManager {
         this.permissionGranted = false;
         this.isListening = false;
         
+        // Smoothing for iOS compass heading (to reduce jerkiness from integer values)
+        this.smoothedHeading = 0;
+        this.smoothingFactor = 0.2; // 0 = no smoothing, 1 = instant (adjust between 0.1-0.3)
+        
         // Detect iOS
         this.isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
                      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -91,6 +95,7 @@ class ARModeManager {
         let rawHeading = 0;
         
         // iOS: webkitCompassHeading gives true heading (0-360, 0 = North)
+        // Note: webkitCompassHeading is quantized to integer degrees on iOS
         // Note: webkitCompassHeading already accounts for screen orientation on iOS
         if (event.webkitCompassHeading !== undefined && event.webkitCompassHeading !== null) {
             rawHeading = event.webkitCompassHeading;
@@ -109,7 +114,23 @@ class ARModeManager {
         // webkitCompassHeading gives the direction the DEVICE top is pointing
         // We need to adjust it to show the direction the SCREEN top is pointing
         // screenOrientation: 0 (portrait), 90 (landscape-left), 270 (landscape-right), 180 (upside down)
-        this.compassHeading = (rawHeading + this.screenOrientation + 360) % 360;
+        let adjustedHeading = (rawHeading + this.screenOrientation + 360) % 360;
+        
+        // Apply exponential smoothing on iOS to reduce jerkiness from integer quantization
+        // This interpolates between integer degree values for smoother movement
+        if (this.isIOS && event.webkitCompassHeading !== undefined) {
+            // Handle wraparound at 0/360 boundary
+            let diff = adjustedHeading - this.smoothedHeading;
+            if (diff > 180) diff -= 360;
+            if (diff < -180) diff += 360;
+            
+            this.smoothedHeading = (this.smoothedHeading + diff * this.smoothingFactor + 360) % 360;
+            this.compassHeading = this.smoothedHeading;
+        } else {
+            // Android: use raw heading (already has decimal precision)
+            this.compassHeading = adjustedHeading;
+            this.smoothedHeading = adjustedHeading; // Keep in sync
+        }
         
         // Calculate elevation using simple gamma correction
         // Gamma goes 0 to -90 then 90 to 0
@@ -134,12 +155,12 @@ class ARModeManager {
         }
         this.elevationAngle = correctedElevation;
         
-        // DEBUG: Log values in landscape mode
-        if (this.screenOrientation === 90 || this.screenOrientation === 270) {
-            console.log(`Landscape (${this.screenOrientation}°): ` +
-                       `alpha=${this.alpha.toFixed(1)}, beta=${this.beta.toFixed(1)}, gamma=${this.gamma.toFixed(1)}, ` +
-                       `elevation=${this.elevationAngle.toFixed(1)}°`);
-        }
+        // DEBUG: Log values in landscape mode (disabled for performance)
+        // if (this.screenOrientation === 90 || this.screenOrientation === 270) {
+        //     console.log(`Landscape (${this.screenOrientation}°): ` +
+        //                `alpha=${this.alpha.toFixed(1)}, beta=${this.beta.toFixed(1)}, gamma=${this.gamma.toFixed(1)}, ` +
+        //                `elevation=${this.elevationAngle.toFixed(1)}°`);
+        // }
     }
     
     startListening() {
