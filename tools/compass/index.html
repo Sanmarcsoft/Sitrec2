@@ -277,7 +277,7 @@
 
     <script type="module">
         // Import the shared DeviceOrientationCompass library
-        import { DeviceOrientationCompass } from '../src/DeviceOrientationCompass.js';
+        import { DeviceOrientationCompass } from '../src/DeviceOrientationCompass.js?v=2';
 
         // Create compass instance
         const compass = new DeviceOrientationCompass();
@@ -367,13 +367,13 @@
         }
 
         function getElevationDescription(degrees) {
-            if (degrees < -60) return 'Face Up';
-            if (degrees < -30) return 'Tilted Up';
-            if (degrees < -10) return 'Slightly Up';
+            if (degrees < -60) return 'Face Down';
+            if (degrees < -30) return 'Tilted Down';
+            if (degrees < -10) return 'Slightly Down';
             if (degrees < 10) return 'Level';
-            if (degrees < 30) return 'Slightly Down';
-            if (degrees < 60) return 'Tilted Down';
-            return 'Face Down';
+            if (degrees < 30) return 'Slightly Up';
+            if (degrees < 60) return 'Tilted Up';
+            return 'Face Up';
         }
 
         function updateStatus(message, isError) {

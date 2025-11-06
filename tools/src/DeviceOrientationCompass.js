@@ -324,7 +324,7 @@ export class DeviceOrientationCompass {
             // Portrait mode (0° or 180°) - use beta
             correctedElevation = this.beta;
         }
-        this.elevationAngle = correctedElevation;
+        this.elevationAngle = correctedElevation - 90; // Adjust so 0° = point at horizon, positive = up, negative = down
         
         // Notify callback if provided
         if (this.onUpdate) {

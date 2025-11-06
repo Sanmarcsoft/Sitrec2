@@ -119,12 +119,11 @@ class ARModeManager {
             
             // elevationAngle is already adjusted for screen orientation
             // It represents the tilt of the device:
-            // - 0° = flat/face up
-            // - 90° = upright (horizon)
-            // - 180° = face down
-            // PTZ el convention: positive = up, 0 = horizon, negative = down
-            // So: PTZ el = elevationAngle - 90
-            ptzController.el = elevationAngle - 90;
+            // - -90° = flat/face up
+            // - 0° = upright (horizon)
+            // - 90° = face down
+            // PTZ el convention is the same: positive = up, 0 = horizon, negative = down
+            ptzController.el = elevationAngle;
             
             // Don't need to call recalculateCascade - the PTZ controller
             // will apply these values in its normal update cycle
