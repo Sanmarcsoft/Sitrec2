@@ -131,6 +131,12 @@ export class   CNodeCompassUI extends CNodeViewUI {
         // Prevent default to avoid triggering mouse events afterward
         e.preventDefault();
         
+        // Store initial touch position for movement detection
+        if (e.touches.length > 0) {
+            this.touchStartX = e.touches[0].clientX;
+            this.touchStartY = e.touches[0].clientY;
+        }
+        
         // For lookView on mobile, start long-press detection for AR mode
         if (view?.id === "lookView" && Globals.isMobile) {
             console.log("Starting long-press timer for AR mode (touch)");
@@ -179,13 +185,14 @@ export class   CNodeCompassUI extends CNodeViewUI {
         // Allow small movements (< 10px) to account for natural finger wobble
         if (this.longPressTimer && e.touches.length > 0) {
             const touch = e.touches[0];
-            const rect = this.canvas.getBoundingClientRect();
+            
+            // Calculate movement distance from initial touch position
             const moveDistance = Math.sqrt(
-                Math.pow(touch.clientX - rect.left - rect.width/2, 2) +
-                Math.pow(touch.clientY - rect.top - rect.height/2, 2)
+                Math.pow(touch.clientX - this.touchStartX, 2) +
+                Math.pow(touch.clientY - this.touchStartY, 2)
             );
             
-            // Only cancel if moved more than 10 pixels
+            // Only cancel if moved more than 10 pixels from initial position
             if (moveDistance > 10) {
                 console.log("Significant movement detected - canceling long-press timer");
                 e.preventDefault();

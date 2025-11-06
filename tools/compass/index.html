@@ -19,10 +19,10 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             padding: 20px;
             color: white;
-            overflow: hidden;
+            overflow-y: auto;
         }
 
         .container {
@@ -339,10 +339,12 @@
                 updateStatus('✓ Active (iOS)', false);
             } 
             // Android with absolute orientation
-            else if (event.alpha !== null) {
-                // Formula from working examples: Math.abs(alpha - 360)
-                // This gives heading where 0 = North
-                rawHeading = Math.abs(event.alpha - 360);
+            else if (event.alpha !== null && event.beta !== null && event.gamma !== null) {
+                // Formula that works in any device orientation (flat, upright, tilted)
+                // This accounts for device tilt using beta and gamma
+                rawHeading = -(rawAlpha + rawBeta * rawGamma / 90);
+                // Normalize to [0, 360) range
+                rawHeading = rawHeading - Math.floor(rawHeading / 360) * 360;
                 
                 if (isAbsolute) {
                     updateStatus('✓ Active (absolute)', false);

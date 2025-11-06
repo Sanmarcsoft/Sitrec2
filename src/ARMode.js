@@ -97,10 +97,12 @@ class ARModeManager {
             this.isAbsolute = true;
         } 
         // Android with absolute orientation
-        else if (event.alpha !== null) {
-            // Formula from working examples: Math.abs(alpha - 360)
-            // This gives heading where 0 = North
-            rawHeading = Math.abs(event.alpha - 360);
+        else if (event.alpha !== null && event.beta !== null && event.gamma !== null) {
+            // Formula that works in any device orientation (flat, upright, tilted)
+            // This accounts for device tilt using beta and gamma
+            rawHeading = -(this.alpha + this.beta * this.gamma / 90);
+            // Normalize to [0, 360) range
+            rawHeading = rawHeading - Math.floor(rawHeading / 360) * 360;
         }
         
         // Adjust heading based on screen orientation
