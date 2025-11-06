@@ -23,6 +23,12 @@ class CDragDropHandler {
     }
 
     addDropArea() {
+
+        if (Globals.isMobile) {
+            console.log("Mobile device detected, skipping drag-and-drop zone");
+            return;
+        }
+        
         if (this.dropZone !== undefined) {
             console.warn("DropZone already exists");
             return;
