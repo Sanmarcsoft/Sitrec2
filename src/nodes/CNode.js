@@ -423,6 +423,11 @@ class CNode {
     // or a number (which will be wrapped in a CNodeConstant)
     addInput(key, nodeID, optional = false) {
         assert(this.in.key === undefined, `Adding input ${key} that is already defined`)
+        assert(typeof key === 'string', "Input key must be a string")
+
+        // assert also that it will not be coerced to a number, as that will break the inputs ordering
+        assert(Globals.exportTagNumber < 2009002 || isNaN(Number(key)), "Input key must not be a number string")
+
         var node;
         if (nodeID instanceof CNode) {
             node = nodeID

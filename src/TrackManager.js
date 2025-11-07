@@ -22,7 +22,7 @@ import {CNodeControllerMatrix, CNodeControllerTrackPosition} from "./nodes/CNode
 import {MISB} from "./MISBUtils";
 // Removed mathjs import - using native JavaScript Number.isFinite or typeof checks
 import {CNodeMISBDataTrack, makeLOSNodeFromTrackAngles, removeLOSNodeColumnNodes} from "./nodes/CNodeMISBData";
-import {KMLToMISB} from "./KMLUtils";
+import {getValidIndexedTrackInFolder, KMLToMISB} from "./KMLUtils";
 import {CNodeTrackFromMISB} from "./nodes/CNodeTrackFromMISB";
 import {assert} from "./assert.js";
 import {getLocalSouthVector, getLocalUpVector, pointOnSphereBelow} from "./SphericalMath";
@@ -1062,16 +1062,18 @@ class CTrackManager extends CManager {
                 if (Array.isArray(indexedTrack)) {
                     // first check if there's more data after this
                     // so we can set moreTracks to true
-                    if (kml.kml.Folder.Folder[trackIndex + 1] !== undefined) {
+                    if (getValidIndexedTrackInFolder(indexedTrack, trackIndex+1) !== null) {
                         moreTracks = true;
                     }
-                    indexedTrack = indexedTrack[trackIndex];
+                    indexedTrack = getValidIndexedTrackInFolder(indexedTrack,trackIndex);
                     // make a dummy short name with the index
                     shortName = trackFileName + "_" + trackIndex;
                     found = true;
                     // We are default to the filename, and it's typically long and confusing
                     // This should not happen, and we might want to address it if it arises
                 }
+
+                assert(indexedTrack, `KML track index ${trackIndex} not found in file ${trackFileName} in findShortName`)
 
                 if (indexedTrack.name !== undefined) {
                     let match = indexedTrack.name['#text'].match(/([A-Z0-9\-]+) track/);
@@ -1234,7 +1236,15 @@ class CTrackManager extends CManager {
                 }
             }
         }
-        
+
+
+        // if the short name is a number string, then prepend a #
+        // for backwards compatibility, do not do this for loaded sitches prior to 2.9.2
+        if (Globals.exportTagNumber >= 2009002 && !isNaN(Number(shortName))) {
+            console.warn("Track short name is numeric only, prepending # to make it a valid name: ", shortName);
+            shortName = "#" + shortName;
+        }
+
         // Limit short name to 10 characters
         // shortName = shortName.substring(0, 10);
         //

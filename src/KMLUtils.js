@@ -185,19 +185,35 @@ export function getKMLTrackWhenCoord(kml, trackIndex, when, coord, info) {
             // ADSB Exchange
 
             let trackFolder = kml.kml.Folder.Folder
+            tracks = trackFolder.Placemark;
 
             //
             if (Array.isArray(trackFolder)) {
                 console.log("Multiple Track ADSB-Exchange, using index "+trackIndex)
                 // there are multiple tracks, so we need to select the right one
-                trackFolder = kml.kml.Folder.Folder[trackIndex]
+                // we iterate over them, counting only valid tracks (with Placemark)
+
+                const possibleTrack = getValidIndexedTrackInFolder(trackFolder, trackIndex);
+                if (!possibleTrack) {
+                    console.log("Reached end of getKMLTrackWhenCoord, for track index "+trackIndex+", but found no valid track")
+                    return false;
+                }
+                trackFolder = possibleTrack;
+                tracks = possibleTrack.Placemark;
+
             }
-            tracks = trackFolder.Placemark;
+
+            if (!tracks) {
+                console.log("Reached end of getKMLTrackWhenCoord, for track index "+trackIndex+", but found no valid track")
+                return false;
+            }
+
 
             info.name = trackFolder.name["#text"].split(" ")[0];
         } else {
             // exported from Google earth, maybe via ADSB Exchange
-            tracks = kml.kml.Folder.Placemark.name["#text"];
+            assert(0, "Unknown KML format - no Document or Folder.Folder")
+            tracks = kml.kml.Folder.Placemark; // Probably this, but not sure
         }
     }
 
@@ -282,6 +298,27 @@ export function doesKMLContainTrack(kml) {
     return valid;
 }
 
+
+export function getValidIndexedTrackInFolder(trackFolder, trackIndex) {
+    const numTracks = trackFolder.length;
+    let validTracks = 0;
+    let possibleTrack = null;
+    for (let i=0;i<numTracks;i++) {
+        possibleTrack = trackFolder[i];
+        // a valid track will have a Placemark entry
+        // we MIGHT want to do more validation here later
+        if (possibleTrack.Placemark !== undefined) {
+            validTracks++;
+            if (validTracks-1 === trackIndex) {
+                return possibleTrack;
+                break;
+            }
+        } else {
+//            console.warn("getKMLTrackWhenCoord: ADSB-Exchange trackFolder["+i+"] has no Placemark, SKIPPING")
+        }
+    }
+    return null;
+}
 
 // DJI SRT format is in six lines:
 // 3
