@@ -2259,6 +2259,7 @@ export class CCustomManager {
             "sitchName",  // the same for the save file of the custom sitch
             "aFrame",
             "bFrame",
+            "ignores",
         ]
 
         const globalsNeeded = [
@@ -2343,6 +2344,28 @@ export class CCustomManager {
         // convert to a string
         const str = JSON.stringify(out, null, 2)
         return str;
+    }
+
+    // Site ignores is a list of id strings to ignore next time a file is loaded
+    // like if you load a KMZ with pins in it, it will create editable pins
+    // which will be saved automatically
+    // so reloading the same KMZ will create duplicates
+    // so we need to ignore those IDs next time
+    // this mostly is for serialization.
+    ignore(id) {
+        if (Sit.ignores === undefined) {
+            Sit.ignores = [];
+        }
+        if (!Sit.ignores.includes(id)) {
+            Sit.ignores.push(id);
+        }
+    }
+
+    shouldIgnore(id) {
+        if (Sit.ignores === undefined) {
+            return false;
+        }
+        return Sit.ignores.includes(id);
     }
 
     serialize(name, version, local = false) {

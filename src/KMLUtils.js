@@ -4,9 +4,10 @@ import {MISB, MISBFields} from "./MISBUtils";
 import {assert} from "./assert.js";
 import {CNodeTrackFromLLAArray} from "./nodes/CNodeTrack";
 import {CNodeDisplayTrack} from "./nodes/CNodeDisplayTrack";
-import {NodeMan} from "./Globals";
+import {CustomManager, NodeMan} from "./Globals";
 import * as LAYERS from "./LayerMasks";
 import {timeStrToEpoch} from "./DateTimeUtils";
+import {FeatureManager} from "./CFeatureManager";
 
 export function parseXml(xml, arrayTags)
 {
@@ -690,7 +691,7 @@ export function extractKMLObjects(root, kml=root, depth=0) {
 
 // iterate over the k,v pairs in the kml object, this will also iterate over the arrays
     for (let [key, value] of Object.entries(kml)) {
-      //  console.log("  ".repeat(depth),  key, value);
+//        console.log("  ".repeat(depth),  key, value);
 
         // we want to ignore the "Trail" line associated with the FR24 KML
         // So if this is a folder with 2 entries, and the first one is "Route" and the second one is "Trail", then skip it
@@ -715,7 +716,41 @@ export function extractKMLObjects(root, kml=root, depth=0) {
         }
         // if it's an object, then recurse
         else if (typeof value === 'object') {
-            extractKMLObjects(root,value, depth+1)
+            // check to see if it's a point object.
+            // and make a feature pin
+
+            if (
+                value.name
+                && value.name["#text"]
+                && value.Point
+                && value.Point.coordinates
+            ) {
+                const coords = extractCoordinates(value.Point)[0];
+
+                // Since serializatioin is handled by the FeatureManager,
+                // we need to record that this feature is to be ignored if loaded again
+                // (i.e. from a saved sitch file)
+
+                const id = NodeMan.getUniqueID(value.name["#text"]);
+                // we create a unique id that only this exact pin will have
+                // by combining the name with the coordinates
+                const ignoreID = value.name["#text"]+coords[0]+","+coords[1]+","+coords[2];
+                if (CustomManager.shouldIgnore(ignoreID)) {
+                    console.log("Ignoring KML Point feature "+ignoreID);
+                } else {
+
+                    FeatureManager.addFeature({
+                        id: id,
+                        text: value.name["#text"],
+                        positionLLA: {lat: coords[0], lon: coords[1], alt: coords[2]},
+                    })
+
+                    CustomManager.ignore(ignoreID)
+                }
+
+            } else {
+                extractKMLObjects(root, value, depth + 1)
+            }
         }
     }
 }

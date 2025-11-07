@@ -42,7 +42,7 @@ class CFeatureManager extends CManager {
     removeFeature(id) {
         if (this.exists(id)) {
             const featureNode = this.get(id);
-            
+
             // Dispose the node (removes arrow, sprite, etc.)
             if (featureNode.dispose) {
                 featureNode.dispose();
