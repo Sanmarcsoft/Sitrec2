@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PX4 ULog Viewer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px;
+            border-radius: 5px;
+            z-index: 100;
+            max-width: 350px;
+        }
+        #controls h3 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+        }
+        #fileInput {
+            margin-bottom: 10px;
+        }
+        #info {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+            font-size: 12px;
+            max-width: 350px;
+        }
+        .control-group {
+            margin-bottom: 10px;
+        }
+        label {
+            display: block;
+            margin-bottom: 3px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        input[type="file"] {
+            font-size: 12px;
+        }
+        button {
+            padding: 5px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .stat {
+            margin: 3px 0;
+        }
+        .checkbox-group {
+            margin: 5px 0;
+        }
+        .checkbox-group label {
+            display: inline;
+            font-weight: normal;
+            margin-left: 5px;
+        }
+        #status {
+            font-size: 11px;
+            color: #666;
+            margin-top: 5px;
+            font-style: italic;
+        }
+        #errorMsg {
+            color: #c00;
+            font-size: 11px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    <div id="controls">
+        <h3>PX4 ULog Viewer</h3>
+        <div class="control-group">
+            <label for="fileInput">Load ULog File (.ulg):</label>
+            <input type="file" id="fileInput" accept=".ulg">
+        </div>
+        <div class="control-group">
+            <label>Display Options:</label>
+            <div class="checkbox-group">
+                <input type="checkbox" id="showGroundPlane" checked>
+                <label for="showGroundPlane">Ground Plane</label>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="showVelocityVectors">
+                <label for="showVelocityVectors">Velocity Vectors</label>
+            </div>
+        </div>
+        <div class="control-group">
+            <button id="resetCamera">Reset Camera</button>
+            <button id="exportTrackCSV" disabled>Export Track CSV</button>
+            <button id="exportAllCSV" disabled>Export All Data CSV</button>
+        </div>
+        <div id="status"></div>
+        <div id="errorMsg"></div>
+    </div>
+    <div id="info">
+        <div class="stat">Track Points: <span id="pointCount">0</span></div>
+        <div class="stat">Total Messages: <span id="messageCount">0</span></div>
+        <div class="stat">Duration: <span id="duration">-</span> seconds</div>
+        <div class="stat">Start Time: <span id="startTime">-</span></div>
+        <div class="stat">Position Range: <span id="posRange">-</span></div>
+        <div class="stat">Altitude Range: <span id="altRange">-</span> m</div>
+        <div class="stat">Controls: Left-click to orbit, Right-click to pan, Scroll to zoom</div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "./three.js/three.module.js",
+            "three/addons/": "./three.js/addons/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        
+        const px4Module = await import(`./px4lib.js?v=${Date.now()}`);
+        const ULogParser = px4Module.ULogParser;
+
+        let scene, camera, renderer, controls;
+        let trackLine, groundPlane, velocityVectors;
+        let parseResult = null;
+        let trackData = [];
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb);
+
+            camera = new THREE.PerspectiveCamera(
+                60,
+                window.innerWidth / window.innerHeight,
+                0.1,
+                100000
+            );
+            camera.position.set(200, 200, 200);
+            camera.lookAt(0, 0, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.getElementById('container').appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = false;
+            controls.minDistance = 1;
+            controls.maxDistance = 50000;
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(100, 200, 100);
+            scene.add(directionalLight);
+
+            createGroundPlane();
+            createAxes();
+
+            window.addEventListener('resize', onWindowResize);
+
+            document.getElementById('fileInput').addEventListener('change', handleFileSelect);
+            document.getElementById('resetCamera').addEventListener('click', resetCamera);
+            document.getElementById('exportTrackCSV').addEventListener('click', exportTrackCSV);
+            document.getElementById('exportAllCSV').addEventListener('click', exportAllCSV);
+            
+            document.getElementById('showGroundPlane').addEventListener('change', (e) => {
+                if (groundPlane) groundPlane.visible = e.target.checked;
+            });
+            document.getElementById('showVelocityVectors').addEventListener('change', (e) => {
+                if (velocityVectors) velocityVectors.visible = e.target.checked;
+            });
+
+            animate();
+        }
+
+        function createGroundPlane() {
+            const size = 1000;
+            const divisions = 20;
+            
+            const gridHelper = new THREE.GridHelper(size, divisions, 0x444444, 0x888888);
+            groundPlane = new THREE.Group();
+            groundPlane.add(gridHelper);
+            
+            const planeGeometry = new THREE.PlaneGeometry(size, size);
+            const planeMaterial = new THREE.MeshBasicMaterial({
+                color: 0x90EE90,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.2
+            });
+            const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+            plane.rotation.x = Math.PI / 2;
+            groundPlane.add(plane);
+            
+            scene.add(groundPlane);
+        }
+
+        function createAxes() {
+            const axesHelper = new THREE.AxesHelper(100);
+            scene.add(axesHelper);
+
+            const arrowHelper = new THREE.ArrowHelper(
+                new THREE.Vector3(0, 0, -1),
+                new THREE.Vector3(0, 0, 0),
+                50,
+                0xff0000,
+                10,
+                5
+            );
+            scene.add(arrowHelper);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function resetCamera() {
+            if (trackData.length > 0) {
+                const bounds = calculateBounds(trackData);
+                const center = new THREE.Vector3(
+                    (bounds.maxX + bounds.minX) / 2,
+                    (bounds.maxZ + bounds.minZ) / 2,
+                    (bounds.maxY + bounds.minY) / 2
+                );
+                const size = Math.max(
+                    bounds.maxX - bounds.minX,
+                    bounds.maxY - bounds.minY,
+                    bounds.maxZ - bounds.minZ
+                );
+                const distance = size * 2;
+                
+                camera.position.set(
+                    center.x + distance * 0.5,
+                    center.y + distance * 0.5,
+                    center.z + distance * 0.5
+                );
+                controls.target.copy(center);
+                controls.update();
+            } else {
+                camera.position.set(200, 200, 200);
+                controls.target.set(0, 0, 0);
+                controls.update();
+            }
+        }
+
+        async function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            setStatus('Loading file...');
+            setError('');
+
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                
+                setStatus('Parsing ULog data...');
+                const parser = new ULogParser();
+                parseResult = await parser.parse(arrayBuffer);
+                
+                setStatus('Processing track data...');
+                processTrackData(parseResult);
+                
+                setStatus('Rendering visualization...');
+                visualizeTrack();
+                updateInfo();
+                
+                document.getElementById('exportTrackCSV').disabled = false;
+                document.getElementById('exportAllCSV').disabled = false;
+                
+                setStatus('Ready');
+            } catch (error) {
+                console.error('Error loading file:', error);
+                setError('Error: ' + error.message);
+                setStatus('');
+            }
+        }
+
+        function setStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+
+        function setError(message) {
+            document.getElementById('errorMsg').textContent = message;
+        }
+
+        function processTrackData(result) {
+            trackData = [];
+
+            if (!result.points || result.points.length === 0) {
+                throw new Error('No position data found in ULog file');
+            }
+
+            let refLat = null, refLon = null, refAlt = null;
+
+            for (const point of result.points) {
+                if (point.lat !== undefined && point.lon !== undefined) {
+                    if (refLat === null) {
+                        refLat = point.lat;
+                        refLon = point.lon;
+                        refAlt = point.alt || 0;
+                    }
+
+                    const x = (point.lon - refLon) * 111320 * Math.cos(refLat * Math.PI / 180);
+                    const y = (point.lat - refLat) * 110540;
+                    const z = (point.alt || 0) - refAlt;
+
+                    trackData.push({
+                        x, y, z,
+                        vx: point.vx,
+                        vy: point.vy,
+                        vz: point.vz,
+                        timestamp: point.timestamp
+                    });
+                } else if (point.x !== undefined && point.y !== undefined) {
+                    trackData.push({
+                        x: point.x,
+                        y: point.y,
+                        z: point.z || 0,
+                        vx: point.vx,
+                        vy: point.vy,
+                        vz: point.vz,
+                        timestamp: point.timestamp
+                    });
+                }
+            }
+
+            if (trackData.length === 0) {
+                throw new Error('Could not process any track points');
+            }
+        }
+
+        function visualizeTrack() {
+            if (trackLine) {
+                scene.remove(trackLine);
+                trackLine.geometry.dispose();
+                trackLine.material.dispose();
+            }
+
+            if (velocityVectors) {
+                scene.remove(velocityVectors);
+            }
+
+            const points = trackData.map(p => new THREE.Vector3(p.x, p.z, p.y));
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const material = new THREE.LineBasicMaterial({ 
+                color: 0xff0000,
+                linewidth: 2
+            });
+            trackLine = new THREE.Line(geometry, material);
+            scene.add(trackLine);
+
+            const sphereGeometry = new THREE.SphereGeometry(2, 8, 8);
+            const startMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            const endMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            
+            const startPoint = trackData[0];
+            const startSphere = new THREE.Mesh(sphereGeometry, startMaterial);
+            startSphere.position.set(startPoint.x, startPoint.z, startPoint.y);
+            scene.add(startSphere);
+            
+            const endPoint = trackData[trackData.length - 1];
+            const endSphere = new THREE.Mesh(sphereGeometry, endMaterial);
+            endSphere.position.set(endPoint.x, endPoint.z, endPoint.y);
+            scene.add(endSphere);
+
+            velocityVectors = new THREE.Group();
+            const velocityScale = 5;
+            
+            for (let i = 0; i < trackData.length; i += Math.max(1, Math.floor(trackData.length / 50))) {
+                const p = trackData[i];
+                if (p.vx !== undefined && p.vy !== undefined && p.vz !== undefined) {
+                    const velocity = Math.sqrt(p.vx * p.vx + p.vy * p.vy + p.vz * p.vz);
+                    if (velocity > 0.1) {
+                        const dir = new THREE.Vector3(p.vx, p.vz, p.vy).normalize();
+                        const arrow = new THREE.ArrowHelper(
+                            dir,
+                            new THREE.Vector3(p.x, p.z, p.y),
+                            velocity * velocityScale,
+                            0x0000ff,
+                            5,
+                            3
+                        );
+                        velocityVectors.add(arrow);
+                    }
+                }
+            }
+            velocityVectors.visible = document.getElementById('showVelocityVectors').checked;
+            scene.add(velocityVectors);
+
+            resetCamera();
+        }
+
+        function calculateBounds(data) {
+            let minX = Infinity, maxX = -Infinity;
+            let minY = Infinity, maxY = -Infinity;
+            let minZ = Infinity, maxZ = -Infinity;
+
+            for (const p of data) {
+                minX = Math.min(minX, p.x);
+                maxX = Math.max(maxX, p.x);
+                minY = Math.min(minY, p.y);
+                maxY = Math.max(maxY, p.y);
+                minZ = Math.min(minZ, p.z);
+                maxZ = Math.max(maxZ, p.z);
+            }
+
+            return { minX, maxX, minY, maxY, minZ, maxZ };
+        }
+
+        function updateInfo() {
+            document.getElementById('pointCount').textContent = trackData.length;
+            document.getElementById('messageCount').textContent = parseResult.allData.length;
+
+            if (trackData.length > 0) {
+                const firstTime = trackData[0].timestamp;
+                const lastTime = trackData[trackData.length - 1].timestamp;
+                const duration = (lastTime - firstTime).toFixed(2);
+                document.getElementById('duration').textContent = duration;
+
+                const startDate = new Date(firstTime * 1000);
+                document.getElementById('startTime').textContent = startDate.toISOString();
+
+                const bounds = calculateBounds(trackData);
+                const rangeX = (bounds.maxX - bounds.minX).toFixed(1);
+                const rangeY = (bounds.maxY - bounds.minY).toFixed(1);
+                document.getElementById('posRange').textContent = `${rangeX}m × ${rangeY}m`;
+
+                const altRange = `${bounds.minZ.toFixed(1)} to ${bounds.maxZ.toFixed(1)}`;
+                document.getElementById('altRange').textContent = altRange;
+            }
+        }
+
+        function exportTrackCSV() {
+            if (!parseResult) return;
+
+            const parser = new ULogParser();
+            const csv = parser.exportTrackToCSV(parseResult);
+            
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'px4_track.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function exportAllCSV() {
+            if (!parseResult) return;
+
+            const parser = new ULogParser();
+            const csv = parser.exportToCSV(parseResult);
+            
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'px4_all_data.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        init();
+    </script>
+</body>
+</html>

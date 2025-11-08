@@ -107,3 +107,43 @@ To modify the visualization:
 ### Three.js Library
 
 The `three.js/` directory contains just the essential Three.js files (core module + OrbitControls addon) downloaded from the CDN. This provides the simplicity of a single-file install while eliminating runtime CDN dependencies.
+
+## PX4 ULog Viewer
+
+**Files:** `px4-viewer.html`, `px4lib.js`
+
+A simple JavaScript implementation for parsing and visualizing PX4 ULog files, inspired by [PX4 Flight Review](https://github.com/PX4/flight_review).
+
+### Features
+
+- **ULog Parser** (`px4lib.js`): Binary parser for ULogV1 format files
+  - Extracts position data from `vehicle_global_position`, `vehicle_local_position`, and `vehicle_gps_position`
+  - Supports all standard ULog message types (Format, Info, Parameter, Data, etc.)
+  - Two CSV export modes: track-only or complete message dump
+  
+- **3D Viewer** (`px4-viewer.html`): Interactive web-based visualization
+  - Flight path rendered in 3D space
+  - GPS coordinates automatically converted to local ENU frame
+  - Start (green) and end (red) markers
+  - Optional velocity vector display
+  - Ground reference plane with grid
+  - Auto-fit camera with orbit/pan/zoom controls
+  - Export track or all data as CSV
+
+### Usage
+
+1. Open `px4-viewer.html` in a web browser
+2. Click "Load ULog File" and select a `.ulg` file
+3. The track will be parsed and displayed automatically
+4. Use export buttons to save data as CSV
+
+**Note:** Sample ULog files can be downloaded from [PX4 Flight Review](https://review.px4.io) for testing.
+
+### Controls
+
+- **Left-click + drag**: Orbit camera
+- **Right-click + drag**: Pan camera
+- **Scroll wheel**: Zoom
+- **Reset Camera**: Auto-fit view to track
+
+See [PX4_README.md](PX4_README.md) for detailed documentation.

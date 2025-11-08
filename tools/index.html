@@ -80,11 +80,30 @@
         </p>
     </div>
 
+    <div class="tool">
+        <h3>PX4 ULog Viewer</h3>
+        <p>Parse and visualize PX4 flight logs (ULog format) in 3D with CSV export capabilities.</p>
+        <p><strong>Features:</strong></p>
+        <ul>
+            <li>Binary ULog parser supporting ULogV1 format</li>
+            <li>3D flight path visualization with auto-fit camera</li>
+            <li>GPS to local coordinate conversion (ENU frame)</li>
+            <li>Start/end position markers (green/red spheres)</li>
+            <li>Optional velocity vector display</li>
+            <li>Export track data or complete message dump to CSV</li>
+        </ul>
+        <a href="px4-viewer.html">Open PX4 Viewer</a>
+        <p style="margin-top: 10px;">
+            Sample files: <a href="https://review.px4.io" class="sample-link" target="_blank" rel="noopener">PX4 Flight Review</a>
+        </p>
+    </div>
+
     <h2>Usage</h2>
     <ol>
-        <li>Export LOS data from Sitrec using the "CSV" button on any LOS node</li>
+        <li>For LOS Viewer: Export LOS data from Sitrec using the "CSV" button on any LOS node</li>
+        <li>For PX4 Viewer: Obtain a .ulg file from PX4 autopilot or Flight Review</li>
         <li>Open the appropriate tool from the list above</li>
-        <li>Load your exported CSV file</li>
+        <li>Load your file</li>
         <li>Interact with the visualization</li>
     </ol>
 
