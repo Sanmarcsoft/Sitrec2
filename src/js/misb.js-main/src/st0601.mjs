@@ -46,86 +46,113 @@ export function parse(buffer, options = {}) {
 	let checksumFound = false;
 	
 	while (i < parsedLength && !checksumFound) {
-		const { key, keyLength } = klv.getKey(packet.subarray(i, packet.length));
+		try {
+			const { key, keyLength } = klv.getKey(packet.subarray(i, packet.length));
 
-		// Check for suspicious key values that indicate padding or corruption
-		if (keyLength > 1 && key > 200) {
-			// Long-form key with suspiciously high value - likely padding
-			options.debug === true && console.debug(
-				`ST0601: Stopping parse at position ${i}. Encountered suspicious key value ${key} (0x${key.toString(16)}) which appears to be padding or end marker. Remaining bytes: ${parsedLength - i}`
+			// Check for suspicious key values that indicate padding or corruption
+			if (keyLength > 1 && key > 200) {
+				// Long-form key with suspiciously high value - likely padding
+				options.debug === true && console.debug(
+					`ST0601: Stopping parse at position ${i}. Encountered suspicious key value ${key} (0x${key.toString(16)}) which appears to be padding or end marker. Remaining bytes: ${parsedLength - i}`
+				);
+				break;
+			}
+
+			let { berHeader, berLength, contentLength } = klv.getBer(packet[i + keyLength]);
+			if (contentLength === null) {
+				contentLength = klv.getContentLength(
+					packet.subarray(
+						i + keyLength + berHeader,
+						i + keyLength + berHeader + berLength
+					)
+				); // read content after key and length // i + key.length
+			}
+
+			const totalBytesNeeded = keyLength + berHeader + berLength + contentLength;
+			const remainingInParsedLength = parsedLength - i;
+			const remainingInActualPacket = packet.length - i;
+
+			// Check for buffer overflow
+			if (parsedLength < i + keyLength + berHeader + berLength + contentLength) {
+				const actualContentAvailable = remainingInParsedLength - keyLength - berHeader - berLength;
+				
+				if (actualContentAvailable > 0 && options.parsePartial) {
+					const remainingBytes = packet.subarray(i, Math.min(i + 20, packet.length));
+					const hexDump = asHexString(remainingBytes);
+					console.warn(
+						`ST0601: Buffer overflow at position ${i}.\n` +
+						`  Item key ${key} claims ${contentLength} bytes but only ${actualContentAvailable} available.\n` +
+						`  Remaining bytes (hex): ${hexDump}\n` +
+						`  Attempting partial parse with ${actualContentAvailable} bytes.`
+					);
+					contentLength = actualContentAvailable;
+				} else {
+					console.warn(
+						`ST0601: Buffer overflow at position ${i}. Item key ${key} requires ${totalBytesNeeded} bytes, but only ${remainingInParsedLength} bytes remain. Skipping remaining items.`
+					);
+					break;
+				}
+			}
+
+			// const valueBuffer = packet.subarray(
+			const valueBuffer = new DataView(
+				packet.buffer,
+				packet.byteOffset + i + keyLength + berHeader + berLength,
+				contentLength
+			); // read content after key and length
+
+			const parsed =
+				options.value !== false ? convert(key, valueBuffer, options) : { key };
+
+			if (typeof parsed.value === "string")
+				parsed.value = parsed.value.replace(/[^\x20-\x7E]+/g, "");
+
+			if (options.debug === true) {
+				if (key === 2) {
+					console.debug(
+						key,
+						contentLength,
+						parsed.name,
+						`${new Date(parsed.value / 1000)}${parsed.unit || ""}`,
+						valueBuffer
+					);
+				} else {
+					console.debug(
+						key,
+						contentLength,
+						parsed.name,
+						`${parsed.value}${parsed.unit || ""}`,
+						valueBuffer
+					);
+				}
+			}
+			if (options.debug || options.payload || options.value === false) {
+				parsed.packet = asHexString(
+					new Uint8Array(
+						valueBuffer.buffer,
+						valueBuffer.byteOffset,
+						valueBuffer.byteLength
+					)
+				);
+			}
+
+			values.push(parsed);
+
+			// Checksum (key 1) should be the last field in ST0601
+			if (key === 1) {
+				checksumFound = true;
+				options.debug === true && console.debug(
+					`ST0601: Checksum found at position ${i}. Stopping parse. Remaining bytes in packet: ${parsedLength - (i + keyLength + berHeader + berLength + contentLength)}`
+				);
+			}
+
+			i += keyLength + berHeader + berLength + contentLength; // advance past key, length and value bytes
+		} catch (error) {
+			console.warn(
+				`ST0601: Error parsing item at position ${i}: ${error.message}. Skipping remaining items.`
 			);
 			break;
 		}
-
-		let { berHeader, berLength, contentLength } = klv.getBer(packet[i + keyLength]);
-		if (contentLength === null) {
-			contentLength = klv.getContentLength(
-				packet.subarray(
-					i + keyLength + berHeader,
-					i + keyLength + berHeader + berLength
-				)
-			); // read content after key and length // i + key.length
-		}
-
-		// const valueBuffer = packet.subarray(
-		const valueBuffer = new DataView(
-			packet.buffer,
-			packet.byteOffset + i + keyLength + berHeader + berLength,
-			contentLength
-		); // read content after key and length
-
-		if (parsedLength < i + keyLength + berHeader + berLength + contentLength) {
-			throw new Error(
-				`ST0601: Buffer overflow at position ${i}. Item key ${key} requires ${keyLength + berHeader + berLength + contentLength} bytes (key: ${keyLength}, BER header: ${berHeader}, BER length: ${berLength}, content: ${contentLength}), but only ${parsedLength - i} bytes remain in packet`
-			);
-		}
-
-		const parsed =
-			options.value !== false ? convert(key, valueBuffer, options) : { key };
-
-		if (typeof parsed.value === "string")
-			parsed.value = parsed.value.replace(/[^\x20-\x7E]+/g, "");
-
-		if (options.debug === true) {
-			if (key === 2) {
-				console.debug(
-					key,
-					contentLength,
-					parsed.name,
-					`${new Date(parsed.value / 1000)}${parsed.unit || ""}`,
-					valueBuffer
-				);
-			} else {
-				console.debug(
-					key,
-					contentLength,
-					parsed.name,
-					`${parsed.value}${parsed.unit || ""}`,
-					valueBuffer
-				);
-			}
-		}
-		if (options.debug || options.payload || options.value === false) {
-			parsed.packet = asHexString(
-				new Uint8Array(
-					valueBuffer.buffer,
-					valueBuffer.byteOffset,
-					valueBuffer.byteLength
-				)
-			);
-		}
-
-		values.push(parsed);
-
-		// Checksum (key 1) should be the last field in ST0601
-		if (key === 1) {
-			checksumFound = true;
-			options.debug === true && console.debug(
-				`ST0601: Checksum found at position ${i}. Stopping parse. Remaining bytes in packet: ${parsedLength - (i + keyLength + berHeader + berLength + contentLength)}`
-			);
-		}
-
-		i += keyLength + berHeader + berLength + contentLength; // advance past key, length and value bytes
 	}
 
 	const checksum = values.find((klv) => klv.key === 1);

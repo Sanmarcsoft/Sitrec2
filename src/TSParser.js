@@ -187,19 +187,10 @@ export class TSParser {
                     offset += chunk.length;
                 }
 
-                // Extract elementary stream data from PES packets for video and other streams
-                // PES packets contain headers that must be removed to get the raw elementary stream
+                // The concatenated data is already elementary stream data
+                // PES headers were stripped during TS packet extraction (lines 136-156)
                 let finalData = concatenatedData;
                 console.log(`extractTSStreams: PID ${pid}, codec_type: ${streamInfo.codec_type}, codec_name: ${streamInfo.codec_name}, concatenated: ${concatenatedData.length} bytes`);
-                
-                // Apply PES extraction for KLV streams only
-                // This removes PES packet headers and gives us pure elementary stream data
-                if (streamInfo.codec_name === 'klv') {
-                    console.log(`extractTSStreams: Applying PES extraction for PID ${pid} (${streamInfo.codec_name} stream)`);
-                    const beforeSize = concatenatedData.length;
-                    finalData = TSParser.extractElementaryStreamFromPES(concatenatedData);
-                    console.log(`extractTSStreams: After PES extraction for PID ${pid}: ${finalData.length} bytes (was ${beforeSize} bytes)`);
-                }
 
                 // Determine file extension based on codec
                 let extension;
@@ -373,7 +364,6 @@ export class TSParser {
 
         // If no PES packets found, return original data (might be already elementary stream)
         if (elementaryStreamChunks.length === 0) {
-            console.log('extractElementaryStreamFromPES: No PES packets found, returning original data');
             return pesData;
         }
 
@@ -387,7 +377,6 @@ export class TSParser {
             resultOffset += chunk.length;
         }
 
-//        console.log(`extractElementaryStreamFromPES: Extracted ${elementaryStreamChunks.length} PES packets, ${totalLength} bytes of elementary stream data`);
         return result;
     }
 
