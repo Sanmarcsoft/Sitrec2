@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PX4 ULog Test/Debug Tool</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+        h1 {
+            color: #4ec9b0;
+        }
+        h2 {
+            color: #569cd6;
+            margin-top: 20px;
+        }
+        .control-group {
+            margin: 20px 0;
+            padding: 15px;
+            background: #252526;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+        }
+        button {
+            padding: 8px 16px;
+            font-size: 14px;
+            cursor: pointer;
+            background: #0e639c;
+            color: white;
+            border: 1px solid #007acc;
+            border-radius: 3px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #1177bb;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .output {
+            background: #1e1e1e;
+            border: 1px solid #3e3e42;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .stat {
+            margin: 8px 0;
+            color: #ce9178;
+        }
+        .stat-label {
+            color: #4ec9b0;
+            font-weight: bold;
+        }
+        .error {
+            color: #f48771;
+            background: #2d1517;
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 3px solid #f48771;
+        }
+        .success {
+            color: #4ec9b0;
+            background: #1a2e1e;
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 3px solid #4ec9b0;
+        }
+        .warning {
+            color: #dcdcaa;
+            background: #2d2a1e;
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 3px solid #dcdcaa;
+        }
+        .progress {
+            color: #569cd6;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        th, td {
+            text-align: left;
+            padding: 8px;
+            border-bottom: 1px solid #3e3e42;
+        }
+        th {
+            color: #4ec9b0;
+            background: #252526;
+        }
+        tr:hover {
+            background: #2a2d2e;
+        }
+    </style>
+</head>
+<body>
+    <h1>PX4 ULog Test/Debug Tool</h1>
+    
+    <div class="control-group">
+        <label for="fileInput">Load ULog File (.ulg):</label><br><br>
+        <input type="file" id="fileInput" accept=".ulg">
+    </div>
+
+    <div class="control-group">
+        <button id="analyzeFile" disabled>Analyze File</button>
+        <button id="listMessages" disabled>List All Message Types</button>
+        <button id="sampleData" disabled>Sample Data (First 100 Records)</button>
+        <button id="searchPosition" disabled>Search Position Messages</button>
+        <button id="exportSmallCSV" disabled>Export First 1000 Records CSV</button>
+        <button id="exportByType" disabled>Export By Message Type</button>
+    </div>
+
+    <div id="output"></div>
+
+    <script type="module">
+        const px4Module = await import(`./px4lib.js?v=${Date.now()}`);
+        const ULogParser = px4Module.ULogParser;
+
+        let parseResult = null;
+        let fileBuffer = null;
+
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            const div = document.createElement('div');
+            div.className = type === 'error' ? 'error' : type === 'success' ? 'success' : type === 'warning' ? 'warning' : type === 'progress' ? 'progress' : 'output';
+            div.textContent = message;
+            output.appendChild(div);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function logHTML(html, className = 'output') {
+            const output = document.getElementById('output');
+            const div = document.createElement('div');
+            div.className = className;
+            div.innerHTML = html;
+            output.appendChild(div);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function clearOutput() {
+            document.getElementById('output').innerHTML = '';
+        }
+
+        document.getElementById('fileInput').addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            clearOutput();
+            log(`File selected: ${file.name}`, 'success');
+            log(`File size: ${(file.size / 1024 / 1024).toFixed(2)} MB`, 'info');
+            log(`Loading file into memory...`, 'progress');
+
+            try {
+                fileBuffer = await file.arrayBuffer();
+                log(`File loaded successfully (${fileBuffer.byteLength} bytes)`, 'success');
+                
+                log(`Parsing ULog file...`, 'progress');
+                const parser = new ULogParser();
+                parseResult = await parser.parse(fileBuffer);
+                
+                log(`Parse completed!`, 'success');
+                log(`Track points found: ${parseResult.points?.length || 0}`, 'info');
+                log(`Total data messages: ${parseResult.allData?.length || 0}`, 'info');
+                log(`Message formats: ${Object.keys(parseResult.formats || {}).length}`, 'info');
+                log(`Parameters: ${parseResult.parameters?.size || 0}`, 'info');
+                
+                document.getElementById('analyzeFile').disabled = false;
+                document.getElementById('listMessages').disabled = false;
+                document.getElementById('sampleData').disabled = false;
+                document.getElementById('searchPosition').disabled = false;
+                document.getElementById('exportSmallCSV').disabled = false;
+                document.getElementById('exportByType').disabled = false;
+            } catch (error) {
+                log(`Error: ${error.message}`, 'error');
+                log(error.stack, 'error');
+            }
+        });
+
+        document.getElementById('analyzeFile').addEventListener('click', () => {
+            if (!parseResult) return;
+            
+            clearOutput();
+            log('=== FILE ANALYSIS ===', 'success');
+            
+            log(`\n<span class="stat-label">Basic Stats:</span>`, 'stat');
+            log(`  Total data messages: ${parseResult.allData?.length || 0}`, 'stat');
+            log(`  Track points extracted: ${parseResult.points?.length || 0}`, 'stat');
+            log(`  Message formats defined: ${Object.keys(parseResult.formats || {}).length}`, 'stat');
+            log(`  Parameters: ${parseResult.parameters?.size || 0}`, 'stat');
+            log(`  Info fields: ${parseResult.info?.size || 0}`, 'stat');
+            
+            if (parseResult.allData && parseResult.allData.length > 0) {
+                const messageTypes = {};
+                parseResult.allData.forEach(msg => {
+                    const type = msg._msgName || 'unknown';
+                    messageTypes[type] = (messageTypes[type] || 0) + 1;
+                });
+                
+                log(`\n<span class="stat-label">Message Type Distribution:</span>`, 'stat');
+                const sorted = Object.entries(messageTypes).sort((a, b) => b[1] - a[1]);
+                
+                let table = '<table><tr><th>Message Type</th><th>Count</th><th>%</th></tr>';
+                const total = parseResult.allData.length;
+                sorted.forEach(([type, count]) => {
+                    const pct = ((count / total) * 100).toFixed(2);
+                    table += `<tr><td>${type}</td><td>${count.toLocaleString()}</td><td>${pct}%</td></tr>`;
+                });
+                table += '</table>';
+                logHTML(table);
+            }
+            
+            if (parseResult.info && parseResult.info.size > 0) {
+                log(`\n<span class="stat-label">Info Fields:</span>`, 'stat');
+                for (const [key, value] of parseResult.info) {
+                    log(`  ${key}: ${value}`, 'info');
+                }
+            }
+            
+            if (parseResult.parameters && parseResult.parameters.size > 0) {
+                log(`\n<span class="stat-label">First 20 Parameters:</span>`, 'stat');
+                let count = 0;
+                for (const [key, value] of parseResult.parameters) {
+                    if (count++ >= 20) break;
+                    log(`  ${key}: ${value}`, 'info');
+                }
+                if (parseResult.parameters.size > 20) {
+                    log(`  ... and ${parseResult.parameters.size - 20} more`, 'info');
+                }
+            }
+        });
+
+        document.getElementById('listMessages').addEventListener('click', () => {
+            if (!parseResult) return;
+            
+            clearOutput();
+            log('=== ALL MESSAGE FORMATS ===', 'success');
+            
+            const formats = Object.keys(parseResult.formats || {}).sort();
+            log(`Total formats: ${formats.length}\n`, 'info');
+            
+            formats.forEach(formatName => {
+                const fields = parseResult.formats[formatName];
+                log(`${formatName}:`, 'stat');
+                fields.forEach(field => {
+                    const typeStr = field.type.isArray 
+                        ? `${field.type.baseType}[${field.type.arraySize}]`
+                        : field.type.baseType;
+                    log(`  - ${field.name}: ${typeStr}`, 'info');
+                });
+                log('', 'info');
+            });
+        });
+
+        document.getElementById('sampleData').addEventListener('click', () => {
+            if (!parseResult || !parseResult.allData) return;
+            
+            clearOutput();
+            log('=== FIRST 100 DATA MESSAGES ===', 'success');
+            
+            const sample = parseResult.allData.slice(0, 100);
+            sample.forEach((msg, idx) => {
+                log(`\nMessage ${idx}: ${msg._msgName}`, 'stat');
+                const keys = Object.keys(msg).filter(k => !k.startsWith('_'));
+                keys.forEach(key => {
+                    let value = msg[key];
+                    if (Array.isArray(value)) {
+                        value = `[${value.slice(0, 5).join(', ')}${value.length > 5 ? '...' : ''}]`;
+                    } else if (typeof value === 'bigint') {
+                        value = value.toString();
+                    }
+                    log(`  ${key}: ${value}`, 'info');
+                });
+            });
+        });
+
+        document.getElementById('searchPosition').addEventListener('click', () => {
+            if (!parseResult || !parseResult.allData) return;
+            
+            clearOutput();
+            log('=== SEARCHING FOR POSITION-RELATED MESSAGES ===', 'success');
+            
+            const keywords = ['position', 'gps', 'local', 'global', 'location', 'lat', 'lon', 'alt', 'altitude'];
+            
+            log('\n<span class="stat-label">Message types containing position keywords:</span>', 'stat');
+            const messageTypes = new Set(parseResult.allData.map(d => d._msgName));
+            const positionTypes = [...messageTypes].filter(type => 
+                keywords.some(kw => type.toLowerCase().includes(kw))
+            ).sort();
+            
+            if (positionTypes.length > 0) {
+                positionTypes.forEach(type => {
+                    const count = parseResult.allData.filter(d => d._msgName === type).length;
+                    log(`  ${type}: ${count} messages`, 'info');
+                });
+                
+                log('\n<span class="stat-label">Sample from each position type:</span>', 'stat');
+                positionTypes.forEach(type => {
+                    const sample = parseResult.allData.find(d => d._msgName === type);
+                    if (sample) {
+                        log(`\n${type}:`, 'success');
+                        const keys = Object.keys(sample).filter(k => !k.startsWith('_'));
+                        keys.forEach(key => {
+                            let value = sample[key];
+                            if (Array.isArray(value)) {
+                                value = `[${value.slice(0, 5).join(', ')}${value.length > 5 ? '...' : ''}]`;
+                            } else if (typeof value === 'bigint') {
+                                value = value.toString();
+                            }
+                            log(`  ${key}: ${value}`, 'info');
+                        });
+                    }
+                });
+            } else {
+                log('No position-related message types found!', 'error');
+            }
+            
+            log('\n<span class="stat-label">Searching message formats for position fields:</span>', 'stat');
+            const formats = Object.keys(parseResult.formats || {});
+            formats.forEach(formatName => {
+                const fields = parseResult.formats[formatName];
+                const posFields = fields.filter(f => 
+                    keywords.some(kw => f.name.toLowerCase().includes(kw))
+                );
+                if (posFields.length > 0) {
+                    log(`\n${formatName}:`, 'success');
+                    posFields.forEach(field => {
+                        const typeStr = field.type.isArray 
+                            ? `${field.type.baseType}[${field.type.arraySize}]`
+                            : field.type.baseType;
+                        log(`  - ${field.name}: ${typeStr}`, 'info');
+                    });
+                }
+            });
+        });
+
+        document.getElementById('exportSmallCSV').addEventListener('click', () => {
+            if (!parseResult || !parseResult.allData) return;
+            
+            try {
+                log('Exporting first 1000 records to CSV...', 'progress');
+                
+                const subset = parseResult.allData.slice(0, 1000);
+                
+                const allFields = new Set();
+                subset.forEach(record => {
+                    Object.keys(record).forEach(key => {
+                        if (!key.startsWith('_')) {
+                            allFields.add(key);
+                        }
+                    });
+                });
+
+                const fields = ['_msgName', ...Array.from(allFields).sort()];
+                let csv = fields.join(',') + '\n';
+
+                for (const record of subset) {
+                    const row = fields.map(field => {
+                        const value = record[field];
+                        if (value === undefined || value === null) return '';
+                        if (Array.isArray(value)) return `"${value.join(';')}"`;
+                        if (typeof value === 'bigint') return value.toString();
+                        if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
+                            return `"${value.replace(/"/g, '""')}"`;
+                        }
+                        return value;
+                    });
+                    csv += row.join(',') + '\n';
+                }
+
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'px4_first_1000.csv';
+                a.click();
+                URL.revokeObjectURL(url);
+                
+                log('Export completed!', 'success');
+            } catch (error) {
+                log(`Error exporting: ${error.message}`, 'error');
+            }
+        });
+
+        document.getElementById('exportByType').addEventListener('click', () => {
+            if (!parseResult || !parseResult.allData) return;
+            
+            try {
+                log('Grouping messages by type...', 'progress');
+                
+                const messagesByType = {};
+                parseResult.allData.forEach(msg => {
+                    const type = msg._msgName || 'unknown';
+                    if (!messagesByType[type]) {
+                        messagesByType[type] = [];
+                    }
+                    messagesByType[type].push(msg);
+                });
+                
+                log(`Found ${Object.keys(messagesByType).length} different message types`, 'info');
+                
+                const types = Object.keys(messagesByType).sort();
+                types.forEach(type => {
+                    const messages = messagesByType[type];
+                    log(`Exporting ${type} (${messages.length} messages)...`, 'progress');
+                    
+                    const allFields = new Set();
+                    messages.forEach(record => {
+                        Object.keys(record).forEach(key => {
+                            if (!key.startsWith('_')) {
+                                allFields.add(key);
+                            }
+                        });
+                    });
+
+                    const fields = Array.from(allFields).sort();
+                    let csv = fields.join(',') + '\n';
+
+                    messages.forEach(record => {
+                        const row = fields.map(field => {
+                            const value = record[field];
+                            if (value === undefined || value === null) return '';
+                            if (Array.isArray(value)) return `"${value.join(';')}"`;
+                            if (typeof value === 'bigint') return value.toString();
+                            if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
+                                return `"${value.replace(/"/g, '""')}"`;
+                            }
+                            return value;
+                        });
+                        csv += row.join(',') + '\n';
+                    });
+
+                    const blob = new Blob([csv], { type: 'text/csv' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `px4_${type.replace(/[^a-z0-9]/gi, '_')}.csv`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                });
+                
+                log(`Exported ${types.length} CSV files!`, 'success');
+            } catch (error) {
+                log(`Error exporting: ${error.message}`, 'error');
+            }
+        });
+    </script>
+</body>
+</html>

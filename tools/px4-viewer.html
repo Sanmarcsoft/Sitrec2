@@ -574,14 +574,28 @@
         function exportAllCSV() {
             if (!parseResult) return;
 
+            const maxRows = 10000;
+            const totalRows = parseResult.allData.length;
+            
+            if (totalRows > maxRows) {
+                const proceed = confirm(
+                    `This file contains ${totalRows.toLocaleString()} messages.\n\n` +
+                    `To prevent browser memory issues, only the first ${maxRows.toLocaleString()} messages will be exported.\n\n` +
+                    `Click OK to continue, or Cancel to abort.`
+                );
+                if (!proceed) return;
+            }
+
             const parser = new ULogParser();
-            const csv = parser.exportToCSV(parseResult);
+            const csv = parser.exportToCSV(parseResult, { maxRows });
             
             const blob = new Blob([csv], { type: 'text/csv' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'px4_all_data.csv';
+            a.download = totalRows > maxRows 
+                ? `px4_all_data_first_${maxRows}.csv` 
+                : 'px4_all_data.csv';
             a.click();
             URL.revokeObjectURL(url);
         }

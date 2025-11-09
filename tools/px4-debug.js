@@ -1,3 +1,5 @@
+import fs from 'fs';
+
 function crc16Xmodem(bytes, init = 0x0000) {
     let crc = init & 0xFFFF;
     for (let i = 0; i < bytes.length; i++) {
@@ -10,7 +12,7 @@ function crc16Xmodem(bytes, init = 0x0000) {
     return crc;
 }
 
-export class ULogParser {
+class ULogParser {
     constructor() {
         this.formats = new Map();
         this.messages = new Map();
@@ -94,12 +96,7 @@ export class ULogParser {
         this.info.set('version', version);
         this.info.set('timestamp', timestamp);
 
-        console.log(`ULog version: 0x${version.toString(16)}, timestamp: 0x${timestamp.toString(16)}`);
-        console.log(`Header parsed. Starting messages at offset 0x${offset.toString(16)}`);
-        console.log(`First 180 bytes of file:`, this.readBytes(view, 0, 180).map(b => b.toString(16).padStart(2, '0')).join(' '));
-
         this.hasChecksums = this.detectChecksums(view, offset);
-        console.log(`Checksum detection: ${this.hasChecksums ? 'present' : 'not present'}`);
 
         let messageCount = 0;
         let firstUnknownOffset = null;
@@ -109,23 +106,13 @@ export class ULogParser {
             
             const msgStartOffset = offset;
             
-            if (messageCount < 5) {
-                const peek20 = this.readBytes(view, offset, Math.min(20, view.byteLength - offset));
-                console.log(`Offset 0x${offset.toString(16)}, next 20 bytes:`, peek20.map(b => b.toString(16).padStart(2, '0')).join(' '));
-            }
-            
             const msgSize = view.getUint16(offset, true);
             offset += 2;
 
             const msgType = view.getUint8(offset);
             offset += 1;
-            
-            if (messageCount < 5) {
-                console.log(`Message #${messageCount} at offset 0x${msgStartOffset.toString(16)}: size=0x${msgSize.toString(16)}, type=0x${msgType.toString(16)} '${String.fromCharCode(msgType)}'`);
-            }
 
             if (offset + msgSize > view.byteLength) {
-                console.warn(`Message at offset 0x${(offset-3).toString(16)} has size 0x${msgSize.toString(16)} which exceeds file length. Stopping parse.`);
                 break;
             }
             
@@ -134,14 +121,7 @@ export class ULogParser {
             const validTypes = [70, 73, 77, 80, 65, 68, 66, 76, 82, 83, 79, 67, 81];
             if (!validTypes.includes(msgType) && firstUnknownOffset === null) {
                 firstUnknownOffset = offset - 3;
-                console.error(`First unknown message type at offset 0x${firstUnknownOffset.toString(16)}:`);
-                console.error(`  Message #${messageCount}`);
-                console.error(`  Size: 0x${msgSize.toString(16)}`);
-                console.error(`  Type: 0x${msgType.toString(16)} '${String.fromCharCode(msgType)}'`);
-                console.error(`  Previous 10 bytes:`, this.readBytes(view, Math.max(0, offset - 13), 10).map(b => b.toString(16).padStart(2, '0')).join(' '));
-                console.error(`  Next 10 bytes:`, this.readBytes(view, offset, 10).map(b => b.toString(16).padStart(2, '0')).join(' '));
                 
-                console.log('Searching for next valid message type...');
                 let found = false;
                 let bestMatch = null;
                 for (let searchOffset = offset; searchOffset < Math.min(offset + 100, view.byteLength - 3); searchOffset++) {
@@ -150,11 +130,8 @@ export class ULogParser {
                     if (validTypes.includes(testType) && testSize > 0 && testSize < 10000) {
                         if (!bestMatch) {
                             bestMatch = searchOffset;
-                            console.log(`  Found valid message at offset 0x${searchOffset.toString(16)}: size=0x${testSize.toString(16)}, type=0x${testType.toString(16)} ('${String.fromCharCode(testType)}')`);
-                            console.log(`  Gap bytes (offset 0x${offset.toString(16)} to 0x${searchOffset.toString(16)}):`, this.readBytes(view, offset, searchOffset - offset).map(b => b.toString(16).padStart(2, '0')).join(' '));
                             
                             if (searchOffset === offset + 2) {
-                                console.log('  -> Exactly 2 bytes off! This might be a padding/alignment issue.');
                                 offset = searchOffset;
                                 continue;
                             }
@@ -164,10 +141,8 @@ export class ULogParser {
                 }
                 
                 if (messageCount < 5 && !bestMatch) {
-                    console.error(`Stopping parse due to early unknown message type.`);
                     throw new Error(`Invalid ULog format: unknown message type 0x${msgType.toString(16)} at offset 0x${firstUnknownOffset.toString(16)} (message #${messageCount})`);
                 } else if (bestMatch && bestMatch !== offset) {
-                    console.log(`Skipped to offset 0x${bestMatch.toString(16)} to recover from parse error`);
                     offset = bestMatch;
                     messageCount--;
                     continue;
@@ -209,10 +184,6 @@ export class ULogParser {
                         break;
                     case 81: // 'Q' - Parameter Default
                         break;
-                    default:
-                        if (messageCount < 100) {
-                            console.warn(`Unknown message type: 0x${msgType.toString(16)} ('${String.fromCharCode(msgType)}') at offset 0x${(offset-3).toString(16)}`);
-                        }
                 }
             } catch (e) {
                 console.error(`Error parsing message type '${String.fromCharCode(msgType)}' at offset 0x${(offset-3).toString(16)}:`, e);
@@ -221,27 +192,6 @@ export class ULogParser {
             offset += msgSize;
             
             if (this.hasChecksums) {
-                const msgBytes = new Uint8Array(3 + msgSize);
-                msgBytes[0] = msgSize & 0xFF;
-                msgBytes[1] = (msgSize >>> 8) & 0xFF;
-                msgBytes[2] = msgType;
-                for (let i = 0; i < msgSize; i++) {
-                    msgBytes[3 + i] = view.getUint8(msgStartOffset + 3 + i);
-                }
-                
-                const calculatedCrc = crc16Xmodem(msgBytes);
-                const fileCrcLow = view.getUint8(offset);
-                const fileCrcHigh = view.getUint8(offset + 1);
-                const fileCrc = fileCrcLow | (fileCrcHigh << 8);
-                
-                if (calculatedCrc !== fileCrc) {
-                    if (messageCount < 100) {
-                        console.error(`CRC mismatch at message #${messageCount} (offset 0x${offset.toString(16)}): calculated=0x${calculatedCrc.toString(16)}, file=0x${fileCrc.toString(16)}`);
-                    }
-                } else if (messageCount < 5) {
-                    console.log(`CRC OK for message #${messageCount}: 0x${calculatedCrc.toString(16)}`);
-                }
-                
                 offset += 2;
             }
             
@@ -271,19 +221,15 @@ export class ULogParser {
 
     parseFlagBits(view) {
         if (view.byteLength < 16) {
-            console.warn('Flag Bits message too short');
             return;
         }
 
         const compatFlags = view.getBigUint64(0, true);
         const incompatFlags = view.getBigUint64(8, true);
         
-        console.log(`Flag Bits: compat=0x${compatFlags.toString(16)}, incompat=0x${incompatFlags.toString(16)}`);
-        
         const INCOMPAT_FLAG0_DATA_APPENDED_MASK = 1n;
         if (incompatFlags & INCOMPAT_FLAG0_DATA_APPENDED_MASK) {
             const numAppendedOffsets = (view.byteLength - 16) / 8;
-            console.log(`File has appended data. 0x${numAppendedOffsets.toString(16)} appended offsets.`);
             this.info.set('has_appended_data', true);
             
             const appendedOffsets = [];
@@ -291,13 +237,6 @@ export class ULogParser {
                 appendedOffsets.push(view.getBigUint64(16 + i * 8, true));
             }
             this.info.set('appended_offsets', appendedOffsets);
-        }
-        
-        if (incompatFlags !== 0n) {
-            console.warn(`Incompatible flags detected: 0x${incompatFlags.toString(16)}`);
-            if (incompatFlags & ~INCOMPAT_FLAG0_DATA_APPENDED_MASK) {
-                console.error('Unknown incompatibility flags - file may not parse correctly');
-            }
         }
     }
 
@@ -615,68 +554,112 @@ export class ULogParser {
         const field = format.find(f => f.name === fieldName);
         return field ? field.type : null;
     }
+}
 
-    exportToCSV(result, options = {}) {
-        if (!result || !result.allData || result.allData.length === 0) {
-            return '';
-        }
-
-        const maxRows = options.maxRows || 10000;
-        const dataToExport = result.allData.slice(0, maxRows);
-
-        const allFields = new Set();
-        dataToExport.forEach(record => {
-            Object.keys(record).forEach(key => {
-                if (!key.startsWith('_')) {
-                    allFields.add(key);
-                }
-            });
+async function analyzeFile(filePath) {
+    console.log('=== PX4 ULog Debug Tool ===\n');
+    console.log(`Reading file: ${filePath}`);
+    
+    const buffer = fs.readFileSync(filePath);
+    console.log(`File size: ${(buffer.length / 1024 / 1024).toFixed(2)} MB\n`);
+    
+    console.log('Parsing ULog file...');
+    const parser = new ULogParser();
+    const result = await parser.parse(buffer.buffer);
+    
+    console.log('✓ Parse completed!\n');
+    
+    console.log('=== BASIC STATS ===');
+    console.log(`Track points found: ${result.points?.length || 0}`);
+    console.log(`Total data messages: ${result.allData?.length || 0}`);
+    console.log(`Message formats: ${result.formats?.size || 0}`);
+    console.log(`Parameters: ${result.parameters?.size || 0}`);
+    console.log(`Info fields: ${result.info?.size || 0}`);
+    
+    if (result.allData && result.allData.length > 0) {
+        console.log('\n=== MESSAGE TYPE DISTRIBUTION ===');
+        const messageTypes = {};
+        result.allData.forEach(msg => {
+            const type = msg._msgName || 'unknown';
+            messageTypes[type] = (messageTypes[type] || 0) + 1;
         });
-
-        const fields = ['_msgName', ...Array.from(allFields).sort()];
         
-        const chunks = [fields.join(',') + '\n'];
-
-        for (const record of dataToExport) {
-            const row = fields.map(field => {
-                const value = record[field];
-                if (value === undefined || value === null) return '';
-                if (Array.isArray(value)) return `"${value.join(';')}"`;
-                if (typeof value === 'bigint') return value.toString();
-                if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
-                    return `"${value.replace(/"/g, '""')}"`;
-                }
-                return value;
-            });
-            chunks.push(row.join(',') + '\n');
+        const sorted = Object.entries(messageTypes).sort((a, b) => b[1] - a[1]);
+        const total = result.allData.length;
+        
+        console.log(`Total types: ${sorted.length}\n`);
+        sorted.slice(0, 20).forEach(([type, count]) => {
+            const pct = ((count / total) * 100).toFixed(2);
+            console.log(`  ${type.padEnd(35)} ${count.toString().padStart(8)} (${pct}%)`);
+        });
+        if (sorted.length > 20) {
+            console.log(`  ... and ${sorted.length - 20} more types`);
         }
-
-        return chunks.join('');
     }
-
-    exportTrackToCSV(result) {
-        if (!result || !result.points || result.points.length === 0) {
-            return '';
-        }
-
-        const allFields = new Set();
-        result.points.forEach(point => {
-            Object.keys(point).forEach(key => allFields.add(key));
+    
+    console.log('\n=== POSITION-RELATED MESSAGE TYPES ===');
+    const keywords = ['position', 'gps', 'local', 'global', 'location'];
+    const messageTypes = new Set(result.allData.map(d => d._msgName));
+    const positionTypes = [...messageTypes].filter(type => 
+        keywords.some(kw => type.toLowerCase().includes(kw))
+    ).sort();
+    
+    if (positionTypes.length > 0) {
+        positionTypes.forEach(type => {
+            const count = result.allData.filter(d => d._msgName === type).length;
+            console.log(`  ${type}: ${count} messages`);
         });
         
-        const fields = Array.from(allFields).sort();
-        let csv = fields.join(',') + '\n';
-
-        for (const point of result.points) {
-            const row = fields.map(field => {
-                const value = point[field];
-                if (value === undefined || value === null) return '';
-                if (typeof value === 'number' && !isFinite(value)) return 'NaN';
-                return value;
+        console.log('\n=== SAMPLE DATA FROM POSITION TYPES ===');
+        positionTypes.forEach(type => {
+            const sample = result.allData.find(d => d._msgName === type);
+            if (sample) {
+                console.log(`\n${type}:`);
+                const keys = Object.keys(sample).filter(k => !k.startsWith('_')).slice(0, 15);
+                keys.forEach(key => {
+                    let value = sample[key];
+                    if (Array.isArray(value)) {
+                        value = `[${value.slice(0, 3).join(', ')}...]`;
+                    } else if (typeof value === 'bigint') {
+                        value = value.toString();
+                    }
+                    console.log(`  ${key}: ${value}`);
+                });
+                if (Object.keys(sample).filter(k => !k.startsWith('_')).length > 15) {
+                    console.log(`  ... and ${Object.keys(sample).filter(k => !k.startsWith('_')).length - 15} more fields`);
+                }
+            }
+        });
+    } else {
+        console.log('  No position-related message types found!');
+    }
+    
+    console.log('\n=== ALL MESSAGE FORMATS WITH POSITION FIELDS ===');
+    const formats = [...result.formats.keys()].sort();
+    formats.forEach(formatName => {
+        const fields = result.formats.get(formatName);
+        const posFields = fields.filter(f => 
+            keywords.some(kw => f.name.toLowerCase().includes(kw)) ||
+            ['lat', 'lon', 'alt', 'altitude', 'x', 'y', 'z'].includes(f.name.toLowerCase())
+        );
+        if (posFields.length > 0) {
+            console.log(`\n${formatName}:`);
+            posFields.forEach(field => {
+                const typeStr = field.type.isArray 
+                    ? `${field.type.baseType}[${field.type.arraySize}]`
+                    : field.type.baseType;
+                console.log(`  - ${field.name}: ${typeStr}`);
             });
-            csv += row.join(',') + '\n';
         }
-
-        return csv;
+    });
+    
+    console.log('\n=== INFO FIELDS ===');
+    if (result.info && result.info.size > 0) {
+        for (const [key, value] of result.info) {
+            console.log(`  ${key}: ${value}`);
+        }
     }
 }
+
+const filePath = process.argv[2] || '/Users/mick/flight_review/app/data/downloaded/3747b396-c3f1-4498-833b-6ccedffc3ea7.ulg';
+analyzeFile(filePath).catch(console.error);
