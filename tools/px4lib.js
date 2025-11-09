@@ -18,6 +18,58 @@ export class ULogParser {
         this.parameters = new Map();
         this.info = new Map();
         this.multiData = new Map();
+        this.hasChecksums = false;
+    }
+
+    detectChecksums(view, startOffset) {
+        const validTypes = [70, 73, 77, 80, 65, 68, 66, 76, 82, 83, 79, 67, 81];
+        let offset = startOffset;
+        let validCount = 0;
+        
+        for (let i = 0; i < 3; i++) {
+            if (offset + 3 > view.byteLength) break;
+            
+            const msgSize = view.getUint16(offset, true);
+            const msgType = view.getUint8(offset + 2);
+            
+            if (!validTypes.includes(msgType) || msgSize === 0 || msgSize > 10000) {
+                break;
+            }
+            
+            if (offset + 3 + msgSize + 2 > view.byteLength) break;
+            
+            const msgBytes = new Uint8Array(3 + msgSize);
+            msgBytes[0] = msgSize & 0xFF;
+            msgBytes[1] = (msgSize >>> 8) & 0xFF;
+            msgBytes[2] = msgType;
+            for (let j = 0; j < msgSize; j++) {
+                msgBytes[3 + j] = view.getUint8(offset + 3 + j);
+            }
+            
+            const calculatedCrc = crc16Xmodem(msgBytes);
+            const fileCrcLow = view.getUint8(offset + 3 + msgSize);
+            const fileCrcHigh = view.getUint8(offset + 3 + msgSize + 1);
+            const fileCrc = fileCrcLow | (fileCrcHigh << 8);
+            
+            if (calculatedCrc !== fileCrc) {
+                break;
+            }
+            
+            const nextOffset = offset + 3 + msgSize + 2;
+            if (nextOffset + 3 <= view.byteLength) {
+                const nextSize = view.getUint16(nextOffset, true);
+                const nextType = view.getUint8(nextOffset + 2);
+                
+                if (!validTypes.includes(nextType) || nextSize === 0 || nextSize > 10000) {
+                    break;
+                }
+            }
+            
+            validCount++;
+            offset = nextOffset;
+        }
+        
+        return validCount === 3;
     }
 
     async parse(arrayBuffer) {
@@ -45,6 +97,9 @@ export class ULogParser {
         console.log(`ULog version: 0x${version.toString(16)}, timestamp: 0x${timestamp.toString(16)}`);
         console.log(`Header parsed. Starting messages at offset 0x${offset.toString(16)}`);
         console.log(`First 180 bytes of file:`, this.readBytes(view, 0, 180).map(b => b.toString(16).padStart(2, '0')).join(' '));
+
+        this.hasChecksums = this.detectChecksums(view, offset);
+        console.log(`Checksum detection: ${this.hasChecksums ? 'present' : 'not present'}`);
 
         let messageCount = 0;
         let firstUnknownOffset = null;
@@ -165,7 +220,7 @@ export class ULogParser {
 
             offset += msgSize;
             
-            if (this.version >= 2) {
+            if (this.hasChecksums) {
                 const msgBytes = new Uint8Array(3 + msgSize);
                 msgBytes[0] = msgSize & 0xFF;
                 msgBytes[1] = (msgSize >>> 8) & 0xFF;
@@ -184,7 +239,7 @@ export class ULogParser {
                         console.error(`CRC mismatch at message #${messageCount} (offset 0x${offset.toString(16)}): calculated=0x${calculatedCrc.toString(16)}, file=0x${fileCrc.toString(16)}`);
                     }
                 } else if (messageCount < 5) {
-                    console.log(`ULog v2: CRC OK for message #${messageCount}: 0x${calculatedCrc.toString(16)}`);
+                    console.log(`CRC OK for message #${messageCount}: 0x${calculatedCrc.toString(16)}`);
                 }
                 
                 offset += 2;
