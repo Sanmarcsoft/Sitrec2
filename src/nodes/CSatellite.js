@@ -1173,7 +1173,15 @@ export class CSatellite {
      */
     updateSats(satType) {
         // get the start time
-        const startTime = GlobalDateTimeNode.dateNow;
+        let startTime = GlobalDateTimeNode.dateStart;
+
+        // if the startTime is greater than 48 hours ago, set it to that
+        const now = new Date();
+        const someTimeAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+        if (startTime > someTimeAgo) {
+            startTime = someTimeAgo;
+        }
+
 
         // go back one day so the TLE's are all before the current time
         // server will add one day to the date to cover things.
