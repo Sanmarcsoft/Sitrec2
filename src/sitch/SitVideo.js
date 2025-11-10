@@ -13,7 +13,7 @@ export const SitVideo = {
     fps: 30,
     frames: 0,
     aFrame: 0,
-    bFrame: 0,
+//    bFrame: 0,
 
 
     setup: function() {
