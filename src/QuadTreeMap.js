@@ -721,9 +721,20 @@ export class QuadTreeMap {
             this.activateTile(tile.x, tile.y, tile.z, tileLayers);
             children.forEach(child => {
                 if (child) {
-                    this.deactivateTile(child, tileLayers, true);
+                    this.deactivateBranch(child, tileLayers, true);
                 }
             });
+        }
+    }
+
+    deactivateBranch(tile, layerMask = 0, instant = false) {
+        // deactivate this tile
+        this.deactivateTile(tile, layerMask, instant);
+        if (tile.children) {
+            // recursively deactivate children
+            for (let child of tile.children) {
+                this.deactivateBranch(child, layerMask, instant);
+            }
         }
     }
 

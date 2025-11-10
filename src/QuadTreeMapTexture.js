@@ -260,7 +260,8 @@ class QuadTreeMapTexture extends QuadTreeMap {
 
     }
 
-    // set the layer mask on the tile's mesh and skirt mesh
+
+
 
     deactivateTile(tile, layerMask = 0, instant = false) {
       //  let tile = this.getTile(x, y, z);
@@ -281,7 +282,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
         if (!this.areaIsCovered(tile, layerMask)) {
             this.dumpChildrenAndParents(tile)
 
-            assert(0, `Deactivating tile ${z}/${x}/${y} which does not have full coverage, layerMask=${layerMask}`);
+            assert(0, `Deactivating tile ${tile.key} which does not have full coverage, layerMask=${layerMask}`);
         }
 
         if (instant) {
