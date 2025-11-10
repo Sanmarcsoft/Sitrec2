@@ -262,8 +262,8 @@ class QuadTreeMapTexture extends QuadTreeMap {
 
     // set the layer mask on the tile's mesh and skirt mesh
 
-    deactivateTile(x, y, z, layerMask = 0, instant = false) {
-        let tile = this.getTile(x, y, z);
+    deactivateTile(tile, layerMask = 0, instant = false) {
+      //  let tile = this.getTile(x, y, z);
         if (tile === undefined) {
             return;
         }

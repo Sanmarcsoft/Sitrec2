@@ -547,7 +547,7 @@ export class QuadTreeMap {
             const allChildrenReady = this.areaCoveredByDescendants(tile, tileLayers)
             
             if (allChildrenReady) {
-                this.deactivateTile(tile.x, tile.y, tile.z, tileLayers, true);
+                this.deactivateTile(tile, tileLayers, true);
             }
         });
     }
@@ -690,13 +690,13 @@ export class QuadTreeMap {
         // (even if using parent data - that's valid for display, just lower quality)
         if (isTextureMap) {
             if (this.areaCoveredByDescendants(tile, tileLayers)) {
-                this.deactivateTile(tile.x, tile.y, tile.z, tileLayers, true); // instant=true to hide parent immediately
+                this.deactivateTile(tile, tileLayers, true); // instant=true to hide parent immediately
             }
             // Otherwise parent stays active until children are ready
             // (deactivateParentsWithLoadedChildren will handle it on next frame)
         } else {
             // Elevation maps: always deactivate parent immediately
-            this.deactivateTile(tile.x, tile.y, tile.z, tileLayers);
+            this.deactivateTile(tile, tileLayers);
         }
     }
 
@@ -704,10 +704,16 @@ export class QuadTreeMap {
      * Merge children back to parent if they're all active in this view
      */
     mergeChildrenIfPossible(tile, tileLayers) {
+
+        // THIS NEEDS TO CONSIDER ALL THE DESCENDANTS, NOT JUST THE IMMEDIATE CHILDREN
+        // AND DEACTIVE THEM ALL
+        // also fixe where it's not finding any elevation data!!!!!
+
+
         const children = this.getChildren(tile);
         if (!children) return;
 
-        const allChildrenActiveInView = children.every(child => 
+        const allChildrenActiveInView = children.every(child =>
             child && (child.tileLayers & tileLayers)
         );
 
@@ -715,7 +721,7 @@ export class QuadTreeMap {
             this.activateTile(tile.x, tile.y, tile.z, tileLayers);
             children.forEach(child => {
                 if (child) {
-                    this.deactivateTile(child.x, child.y, child.z, tileLayers, true);
+                    this.deactivateTile(child, tileLayers, true);
                 }
             });
         }

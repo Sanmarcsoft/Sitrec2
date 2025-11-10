@@ -278,9 +278,9 @@ export class QuadTreeMapElevation extends QuadTreeMap {
 
     }
 
-    deactivateTile(x, y, z, layerMask = 0) {
+    deactivateTile(tile, layerMask = 0) {
         // console.log("DUMMY deactivateTile Elevation ", x, y, z);
-        let tile = this.getTile(x, y, z);
+        //let tile = this.getTile(x, y, z);
         if (tile === undefined) {
             return;
         }
