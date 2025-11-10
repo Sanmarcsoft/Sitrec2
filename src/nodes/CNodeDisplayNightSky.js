@@ -132,22 +132,44 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
         // Initialize Earth's Shadow properties before GUI
 
-        satGUI.add(this.satellites,"updateLEOSats").name("Load LEO Satellites For Date")
-            .onChange(function (x) {this.parent.close()})
-            .tooltip("Get the latest LEO Satellite TLE data for the set simulator date/time. This will download the data from the internet, so it may take a few seconds.\nWill also enable the satellites to be displayed in the night sky.")
+        if (Globals.env.SITREC_USE_CUSTOM_TLE) {
 
-        satGUI.add(this.satellites,"updateStarlink").name("Load CURRENT Starlink")
-            .onChange(function (x) {this.parent.close()})
-            .tooltip("Get the CURRENT (not historical, now, real time) Starlink satellite positions. This will download the data from the internet, so it may take a few seconds.\n")
+            const menuName = Globals.env.SITREC_CUSTOM_TLE_MENU_NAME || "Custom Satellites";
+            const tooltipText = Globals.env.SITREC_CUSTOM_TLE_TOOLTIP || "Load custom TLE data for satellites from the custom source.";
 
-        satGUI.add(this.satellites,"updateSLOWSats").name("(Experimental) Load SLOW Satellites")
-            .onChange(function (x) {this.parent.close()})
-            .tooltip("Get the latest SLOW Satellite TLE data for the set simulator date/time. This will download the data from the internet, so it may take a few seconds.\nWill also enable the satellites to be displayed in the night sky. Might time-out for recent dates")
 
-        satGUI.add(this.satellites,"updateALLSats").name("(Experimental) Load ALL Satellites")
-            .onChange(function (x) {this.parent.close()})
-            .tooltip("Get the latest Satellite TLE data for ALL the satellites for the set simulator date/time. This will download the data from the internet, so it may take a few seconds.\nWill also enable the satellites to be displayed in the night sky. Might time-out for recent dates")
+            satGUI.add(this.satellites,"updateCustomSats").name(menuName)
+                .onChange(function (x) {this.parent.close()})
+                .tooltip(tooltipText)
 
+        }
+
+        if (Globals.env.SITREC_ENABLE_DEFAULT_TLE_SOURCES) {
+
+            satGUI.add(this.satellites, "updateLEOSats").name("Load LEO Satellites For Date")
+                .onChange(function (x) {
+                    this.parent.close()
+                })
+                .tooltip("Get the latest LEO Satellite TLE data for the set simulator date/time. This will download the data from the internet, so it may take a few seconds.\nWill also enable the satellites to be displayed in the night sky.")
+
+            satGUI.add(this.satellites, "updateStarlink").name("Load CURRENT Starlink")
+                .onChange(function (x) {
+                    this.parent.close()
+                })
+                .tooltip("Get the CURRENT (not historical, now, real time) Starlink satellite positions. This will download the data from the internet, so it may take a few seconds.\n")
+
+            satGUI.add(this.satellites, "updateSLOWSats").name("(Experimental) Load SLOW Satellites")
+                .onChange(function (x) {
+                    this.parent.close()
+                })
+                .tooltip("Get the latest SLOW Satellite TLE data for the set simulator date/time. This will download the data from the internet, so it may take a few seconds.\nWill also enable the satellites to be displayed in the night sky. Might time-out for recent dates")
+
+            satGUI.add(this.satellites, "updateALLSats").name("(Experimental) Load ALL Satellites")
+                .onChange(function (x) {
+                    this.parent.close()
+                })
+                .tooltip("Get the latest Satellite TLE data for ALL the satellites for the set simulator date/time. This will download the data from the internet, so it may take a few seconds.\nWill also enable the satellites to be displayed in the night sky. Might time-out for recent dates")
+        }
 
         satGUI.add(this.satellites, 'flareAngle', 0, 20, 0.1).listen().name("Flare Angle Spread").tooltip("Maximum angle of the reflected view vector for a flare to be visible\ni.e. the range of angles between the vector from the satellite to the sun and the vector from the camera to the satellite reflected off the bottom of the satellite (which is parallel to the ground)")
         this.addSimpleSerial("flareAngle")

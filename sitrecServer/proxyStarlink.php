@@ -42,7 +42,7 @@ if (!preg_match("/^\d{4}-\d{2}-\d{2}$/", $request)) {
 }
 
 // Whitelist the allowed types explicitly
-$allowed_types = ["", "LEO", "ALL", "SLOW", "LEOALL"];
+$allowed_types = ["", "LEO", "ALL", "SLOW", "LEOALL", "CUSTOM"];
 
 $type = isset($_GET["type"]) ? $_GET["type"] : "";
 if (!in_array($type, $allowed_types, true)) {
@@ -76,6 +76,37 @@ if ($type == "ALL") {
     $url = "https://www.space-track.org/basicspacedata/query/class/gp_history/CREATION_DATE/" . $request . "--" . $nextDay . "/orderby/NORAD_CAT_ID,EPOCH/format/3le";
 }
 
+// CUSTOM TLE handling
+if ($type == "CUSTOM") {
+    $customTleUrl = getenv('CUSTOM_TLE');
+    if (!$customTleUrl) {
+        exit("CUSTOM_TLE not configured");
+    }
+    
+    $dateParts = explode('-', $request);
+    if (count($dateParts) != 3) {
+        exit("Invalid date format for CUSTOM TLE");
+    }
+    
+    $year = (int)$dateParts[0];
+    $month = (int)$dateParts[1];
+    $day = (int)$dateParts[2];
+    
+    if ($year < 1900 || $year > 2100) {
+        exit("Invalid year for CUSTOM TLE (must be 1900-2100)");
+    }
+    
+    if ($month < 1 || $month > 12) {
+        exit("Invalid month for CUSTOM TLE (must be 1-12)");
+    }
+    
+    if ($day < 1 || $day > 31) {
+        exit("Invalid day for CUSTOM TLE (must be 1-31)");
+    }
+    
+    $url = sprintf($customTleUrl, $day, $month, $year);
+}
+
 // if the getTLECustom function is defined, use that to get the URL
 if (function_exists('getTLECustom')) {
     $url = getTLECustom($request, $nextDay, $type, $url);
@@ -85,82 +116,96 @@ if (function_exists('getTLECustom')) {
 // encode angle brackets for compatibility with cURL
 $url = encodeAngleBrackets($url);
 
+// Determine if we should cache
+$caching = true;
+if ($type == "CUSTOM" && !getenv('CACHE_CUSTOM_TLE')) {
+    $caching = false;
+}
+
 // File naming setup
 $baseFileName = $request . $type;
 $cachedTLE = $starlink_cache . $baseFileName . ".tle";
 $cachedZIP = $starlink_cache . $baseFileName . ".tle.zip";
 
-
-if ($zipIt) {
-// If the .zip file already exists, return it
-    if (file_exists($cachedZIP)) {
-        header("Location: " . $cachedZIP);
-        exit();
-    }
-
-// If there's an existing .tle file, zip it and return
-    if (file_exists($cachedTLE)) {
-        if (zipTLE($cachedTLE, $cachedZIP, $baseFileName . ".tle")) {
-            unlink($cachedTLE);
+if ($caching) {
+    if ($zipIt) {
+        if (file_exists($cachedZIP)) {
             header("Location: " . $cachedZIP);
             exit();
-        } else {
-            exit("Failed to create ZIP from existing TLE");
+        }
+
+        if (file_exists($cachedTLE)) {
+            if (zipTLE($cachedTLE, $cachedZIP, $baseFileName . ".tle")) {
+                unlink($cachedTLE);
+                header("Location: " . $cachedZIP);
+                exit();
+            } else {
+                exit("Failed to create ZIP from existing TLE");
+            }
+        }
+    } else {
+        if (file_exists($cachedTLE)) {
+            header("Location: " . $cachedTLE);
+            exit();
         }
     }
+}
+
+// For CUSTOM type, use simple GET request without Space-Track login
+if ($type == "CUSTOM") {
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    $data = curl_exec($ch);
+    $http_status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
 } else {
-// If the .tle file already exists, return it
-    if (file_exists($cachedTLE)) {
-        header("Location: " . $cachedTLE);
-        exit();
+    // retrieve Space-Track login credentials from environment
+    $username = getenv('SPACEDATA_USERNAME');
+    $password = getenv('SPACEDATA_PASSWORD');
+
+    // Space-Track.org login URL
+    $loginUrl = 'https://www.space-track.org/ajaxauth/login';
+
+    // Space-Track.org data query URL (calculated earlier)
+    $dataUrl = $url;
+
+    // Initialize cURL session
+    $ch = curl_init();
+
+    // Set cURL options for login
+    curl_setopt($ch, CURLOPT_URL, $loginUrl);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query(['identity' => $username, 'password' => $password]));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HEADER, true);
+    curl_setopt($ch, CURLOPT_COOKIEJAR, 'cookies.txt'); // Save cookies for subsequent requests
+    curl_setopt($ch, CURLOPT_COOKIEFILE, 'cookies.txt'); // Use saved cookies
+
+    // Execute login request
+    $response = curl_exec($ch);
+    $http_status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+    // Check for login errors
+    if ($http_status !== 200) {
+        echo $response;
+        die('Login failed. Check your credentials.');
     }
+
+    // Set cURL options for data query
+    curl_setopt($ch, CURLOPT_URL, $dataUrl);
+    curl_setopt($ch, CURLOPT_POST, false);
+    curl_setopt($ch, CURLOPT_HTTPGET, true);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HEADER, false); // Set to false to exclude headers from the response
+
+    // Execute data query request
+    $data = curl_exec($ch);
+    $http_status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+    // Close cURL session
+    curl_close($ch);
 }
-
-// retrieve Space-Track login credentials from environment
-$username = getenv('SPACEDATA_USERNAME');
-$password = getenv('SPACEDATA_PASSWORD');
-
-// Space-Track.org login URL
-$loginUrl = 'https://www.space-track.org/ajaxauth/login';
-
-// Space-Track.org data query URL (calculated earlier)
-$dataUrl = $url;
-
-// Initialize cURL session
-$ch = curl_init();
-
-// Set cURL options for login
-curl_setopt($ch, CURLOPT_URL, $loginUrl);
-curl_setopt($ch, CURLOPT_POST, true);
-curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query(['identity' => $username, 'password' => $password]));
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HEADER, true);
-curl_setopt($ch, CURLOPT_COOKIEJAR, 'cookies.txt'); // Save cookies for subsequent requests
-curl_setopt($ch, CURLOPT_COOKIEFILE, 'cookies.txt'); // Use saved cookies
-
-// Execute login request
-$response = curl_exec($ch);
-$http_status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-// Check for login errors
-if ($http_status !== 200) {
-    echo $response;
-    die('Login failed. Check your credentials.');
-}
-
-// Set cURL options for data query
-curl_setopt($ch, CURLOPT_URL, $dataUrl);
-curl_setopt($ch, CURLOPT_POST, false);
-curl_setopt($ch, CURLOPT_HTTPGET, true);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HEADER, false); // Set to false to exclude headers from the response
-
-// Execute data query request
-$data = curl_exec($ch);
-$http_status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-// Close cURL session
-curl_close($ch);
 
 
 // Check for data query errors, and zero length data
@@ -181,25 +226,43 @@ if ($type == "" && strpos($lines[0], "STARLINK") === false) {
     die('STARLINK is not in the first line of the data.');
 }
 
-// Write the raw TLE file
-if (file_put_contents($cachedTLE, $data) === false) {
-    exit("Failed to write TLE cache file");
-}
-
-if ($zipIt) {
-// Create zip archive from TLE file
-    if (!zipTLE($cachedTLE, $cachedZIP, $baseFileName . ".tle")) {
-        exit("Failed to create zip file");
+if ($caching) {
+    if (file_put_contents($cachedTLE, $data) === false) {
+        exit("Failed to write TLE cache file");
     }
 
-// Delete the .tle file after zipping
-    unlink($cachedTLE);
+    if ($zipIt) {
+        if (!zipTLE($cachedTLE, $cachedZIP, $baseFileName . ".tle")) {
+            exit("Failed to create zip file");
+        }
 
-// Redirect to .zip file
-    header("Location: " . $cachedZIP);
+        unlink($cachedTLE);
+
+        header("Location: " . $cachedZIP);
+    } else {
+        header("Location: " . $cachedTLE);
+    }
 } else {
-// Redirect to .tle file
-    header("Location: " . $cachedTLE);
+    if ($zipIt) {
+        $tempTLE = tempnam(sys_get_temp_dir(), 'tle_');
+        $tempZIP = $tempTLE . '.zip';
+        
+        file_put_contents($tempTLE, $data);
+        
+        if (zipTLE($tempTLE, $tempZIP, $baseFileName . ".tle")) {
+            unlink($tempTLE);
+            header('Content-Type: application/zip');
+            header('Content-Disposition: attachment; filename="' . $baseFileName . '.tle.zip"');
+            readfile($tempZIP);
+            unlink($tempZIP);
+        } else {
+            unlink($tempTLE);
+            exit('Failed to create zip file');
+        }
+    } else {
+        header('Content-Type: text/plain');
+        echo $data;
+    }
 }
 
 exit();

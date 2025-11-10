@@ -1132,6 +1132,11 @@ export class CSatellite {
         }
     }
 
+
+    updateCustomSats() {
+        this.updateSats("CUSTOM");
+    }
+
     /**
      * Update Starlink constellation (current, not historical)
      */
