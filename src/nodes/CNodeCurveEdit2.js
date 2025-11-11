@@ -1,9 +1,9 @@
 import {CNodeTrack} from "./CNodeTrack";
-import {CNodeViewCanvas2D} from "./CNodeViewCanvas";
 import {setRenderOne, Sit, UndoManager} from "../Globals";
 import {par} from "../par";
+import {CNodeTabbedCanvasView} from "./CNodeTabbedCanvasView";
 
-export class CNodeCurveEditorView2 extends CNodeViewCanvas2D {
+export class CNodeCurveEditorView2 extends CNodeTabbedCanvasView {
     constructor(v) {
         v.menuName = v.menuName ?? v.editorConfig.yLabel;
         super(v);
