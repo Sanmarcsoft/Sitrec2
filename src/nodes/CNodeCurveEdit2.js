@@ -118,6 +118,58 @@ export class CNodeCurveEditorView2 extends CNodeViewCanvas2D {
         this.draggedPointIndex = null;
     }
     
+    interpolateValue(frame, points) {
+        if (points.length === 0) return 0;
+        if (points.length === 1) return points[0].y;
+        
+        if (frame < points[0].x) {
+            const dx = points[1].x - points[0].x;
+            const dy = points[1].y - points[0].y;
+            const slope = dy / dx;
+            return points[0].y + slope * (frame - points[0].x);
+        }
+        
+        if (frame > points[points.length - 1].x) {
+            const lastIdx = points.length - 1;
+            const dx = points[lastIdx].x - points[lastIdx - 1].x;
+            const dy = points[lastIdx].y - points[lastIdx - 1].y;
+            const slope = dy / dx;
+            return points[lastIdx].y + slope * (frame - points[lastIdx].x);
+        }
+        
+        for (let i = 0; i < points.length - 1; i++) {
+            if (frame >= points[i].x && frame <= points[i + 1].x) {
+                const t = (frame - points[i].x) / (points[i + 1].x - points[i].x);
+                return points[i].y + t * (points[i + 1].y - points[i].y);
+            }
+        }
+        
+        return points[points.length - 1].y;
+    }
+    
+    calculateStep(range, availablePixels) {
+        const targetTicks = 8;
+        const roughStep = range / targetTicks;
+        
+        if (roughStep <= 0) return 1;
+        
+        const power = Math.floor(Math.log10(roughStep));
+        const normalized = roughStep / Math.pow(10, power);
+        
+        let niceStep;
+        if (normalized < 1.5) {
+            niceStep = 1;
+        } else if (normalized < 3.5) {
+            niceStep = 2;
+        } else if (normalized < 7.5) {
+            niceStep = 5;
+        } else {
+            niceStep = 10;
+        }
+        
+        return niceStep * Math.pow(10, power);
+    }
+    
     renderCanvas(frame) {
         super.renderCanvas(frame);
         
@@ -130,7 +182,8 @@ export class CNodeCurveEditorView2 extends CNodeViewCanvas2D {
         const graphWidth = width - margin * 2;
         const graphHeight = height - margin * 2;
         
-        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, width, height);
         
         ctx.strokeStyle = '#444';
         ctx.fillStyle = '#ddd';
@@ -141,9 +194,14 @@ export class CNodeCurveEditorView2 extends CNodeViewCanvas2D {
         ctx.rect(margin, margin, graphWidth, graphHeight);
         ctx.stroke();
         
+        const xRange = this.maxX - this.minX;
+        const yRange = this.maxY - this.minY;
+        const dynamicXStep = this.calculateStep(xRange, graphWidth);
+        const dynamicYStep = this.calculateStep(yRange, graphHeight);
+        
         ctx.strokeStyle = '#666';
         ctx.lineWidth = 1;
-        for (let x = this.minX; x <= this.maxX; x += this.xStep) {
+        for (let x = Math.ceil(this.minX / dynamicXStep) * dynamicXStep; x <= this.maxX; x += dynamicXStep) {
             const screen = this.graphToScreen(x, this.minY);
             ctx.beginPath();
             ctx.moveTo(screen.x, margin);
@@ -153,15 +211,17 @@ export class CNodeCurveEditorView2 extends CNodeViewCanvas2D {
             ctx.fillText(x.toString(), screen.x - 10, margin + graphHeight + 20);
         }
         
-        for (let y = this.minY; y <= this.maxY; y += this.yStep) {
+        ctx.textAlign = 'right';
+        for (let y = Math.ceil(this.minY / dynamicYStep) * dynamicYStep; y <= this.maxY; y += dynamicYStep) {
             const screen = this.graphToScreen(this.minX, y);
             ctx.beginPath();
             ctx.moveTo(margin, screen.y);
             ctx.lineTo(margin + graphWidth, screen.y);
             ctx.stroke();
             
-            ctx.fillText(y.toString(), 10, screen.y + 5);
+            ctx.fillText(y.toString(), margin - 5, screen.y + 5);
         }
+        ctx.textAlign = 'left';
         
         ctx.fillStyle = '#fff';
         ctx.font = '14px sans-serif';
@@ -174,6 +234,30 @@ export class CNodeCurveEditorView2 extends CNodeViewCanvas2D {
         ctx.restore();
         
         if (this.points.length > 1) {
+            const firstX = this.points[0].x;
+            const lastX = this.points[this.points.length - 1].x;
+            const step = (this.maxX - this.minX) / graphWidth;
+            
+            if (this.minX < firstX) {
+                ctx.strokeStyle = 'rgba(74, 170, 255, 0.5)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                let started = false;
+                for (let x = this.minX; x <= firstX; x += step) {
+                    const y = this.interpolateValue(x, this.points);
+                    const screen = this.graphToScreen(x, y);
+                    if (!started) {
+                        ctx.moveTo(screen.x, screen.y);
+                        started = true;
+                    } else {
+                        ctx.lineTo(screen.x, screen.y);
+                    }
+                }
+                const screen = this.graphToScreen(firstX, this.points[0].y);
+                ctx.lineTo(screen.x, screen.y);
+                ctx.stroke();
+            }
+            
             ctx.strokeStyle = '#4af';
             ctx.lineWidth = 2;
             ctx.beginPath();
@@ -186,6 +270,20 @@ export class CNodeCurveEditorView2 extends CNodeViewCanvas2D {
                 }
             }
             ctx.stroke();
+            
+            if (this.maxX > lastX) {
+                ctx.strokeStyle = 'rgba(74, 170, 255, 0.5)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                const startScreen = this.graphToScreen(lastX, this.points[this.points.length - 1].y);
+                ctx.moveTo(startScreen.x, startScreen.y);
+                for (let x = lastX; x <= this.maxX; x += step) {
+                    const y = this.interpolateValue(x, this.points);
+                    const screen = this.graphToScreen(x, y);
+                    ctx.lineTo(screen.x, screen.y);
+                }
+                ctx.stroke();
+            }
         }
         
         ctx.fillStyle = '#4af';
@@ -255,8 +353,20 @@ export class CNodeCurveEditor2 extends CNodeTrack {
         if (points.length === 0) return 0;
         if (points.length === 1) return points[0].y;
         
-        if (frame <= points[0].x) return points[0].y;
-        if (frame >= points[points.length - 1].x) return points[points.length - 1].y;
+        if (frame < points[0].x) {
+            const dx = points[1].x - points[0].x;
+            const dy = points[1].y - points[0].y;
+            const slope = dy / dx;
+            return points[0].y + slope * (frame - points[0].x);
+        }
+        
+        if (frame > points[points.length - 1].x) {
+            const lastIdx = points.length - 1;
+            const dx = points[lastIdx].x - points[lastIdx - 1].x;
+            const dy = points[lastIdx].y - points[lastIdx - 1].y;
+            const slope = dy / dx;
+            return points[lastIdx].y + slope * (frame - points[lastIdx].x);
+        }
         
         for (let i = 0; i < points.length - 1; i++) {
             if (frame >= points[i].x && frame <= points[i + 1].x) {
