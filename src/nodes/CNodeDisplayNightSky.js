@@ -607,6 +607,15 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
             this.text += par.validPct ? "In Range:" + par.validPct.toFixed(1) + "%" : "";
 
+            // if validPct < 95%, make text red, if 99-100 yellow, if 100% green
+            if (par.validPct < 95) {
+                this.color = "#ff8080";
+            } else if (par.validPct < 100) {
+                this.color = "#ffff00";
+            } else {
+                this.color = "#00ff00";
+            }
+
         });
 
 //        console.log("Done with CNodeDisplayNightSky constructor")
