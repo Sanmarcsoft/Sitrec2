@@ -568,7 +568,8 @@ export class CCustomManager {
             const fovEditor = new CNodeCurveEditor2(
                 {
                     id: "fovEditor",
-                    visible: true,
+                    menuName: "FOV Editor",
+                    visible: false,
                     left: 0, top: 0.5, width: -1, height: 0.5,
                     draggable: true, resizable: true, freeAspect: true, shiftDrag: false,
                     editorConfig: {

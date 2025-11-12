@@ -1220,7 +1220,7 @@ async function initializeOnce() {
     addGUIMenu("traverse", "Traverse").tooltip( "Traverse controls\nThe traverse object is the object that traverses the lines of sight - i.e. the UAP we are interested in\nThis menu defined how the traverse object moves and behaves");
 
     var _guiShowHide = addGUIMenu("showhide", "Show/Hide").tooltip("Showing or hiding views, object and other elements");
-    var _guiShowHideViews = addGUIFolder("showhideviews", "Views", "showhide").tooltip("Show of hide views (windows) like the look view, the video, the main view, and various graphs");
+    var _guiShowHideViews = addGUIFolder("showhideviews", "Views", "showhide").tooltip("Show or hide views (windows) like the look view, the video, the main view, and various graphs");
     var _guiTweaks = addGUIMenu("effects", "Effects" ).tooltip("S pecial effects like blur, pixelation, and color adjustments that are applied to the final image in the look view");
     addGUIMenu("lighting", "Lighting").tooltip("The lighting of the scene, like the sun and the ambient light");
     addGUIMenu("contents", "Contents").tooltip("The contents of the scene, mostly used for tracks");

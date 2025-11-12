@@ -5,6 +5,8 @@ class CNodeTabbedCanvasView extends CNodeViewCanvas2D {
     constructor(v) {
         super(v);
 
+        this.menuName = v.menuName ?? 'Menu';
+
         this.createTabMenu();
         this.setupTabDragging();
     }
@@ -20,7 +22,7 @@ class CNodeTabbedCanvasView extends CNodeViewCanvas2D {
         this.tabMenu = new GUI({
             container: menuContainer,
             autoPlace: false,
-            title: this.menuName || 'Menu',
+            title: this.menuName ?? 'Menu',
             closeFolders: false
         });
         this.tabMenu.domElement.style.position = 'relative';
@@ -31,7 +33,8 @@ class CNodeTabbedCanvasView extends CNodeViewCanvas2D {
                 this.show(false);
             }
         };
-        this.tabMenu.add(closeObj, 'close').name('Close');
+        this.tabMenu.add(closeObj, 'close').name('Hide')
+            .tooltip("Hide this tabbed canvas view\nTo show it again, use the 'Show/Hide -> Views' menu.");
 
         this.tabMenu.close();
 

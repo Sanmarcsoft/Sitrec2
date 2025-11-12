@@ -5,7 +5,7 @@ import {CNodeTabbedCanvasView} from "./CNodeTabbedCanvasView";
 
 export class CNodeCurveEditorView2 extends CNodeTabbedCanvasView {
     constructor(v) {
-        v.menuName = v.menuName ?? v.editorConfig.yLabel;
+        v.menuName = v.menuName ?? v.editorConfig.yLabel ?? "Curve Editor";
         super(v);
         
         const config = v.editorConfig;
@@ -76,7 +76,8 @@ export class CNodeCurveEditorView2 extends CNodeTabbedCanvasView {
             .name('Default Snap')
             .onChange((value) => {
                 this.defaultSnap = value;
-            });
+            })
+        .tooltip("When enabled, points will snap to horizontal alignment by default while dragging.\nHold Shift (while dragging) to to the opposite");
     }
     
     screenToGraph(screenX, screenY) {

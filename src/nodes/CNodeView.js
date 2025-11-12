@@ -183,6 +183,7 @@ class CNodeView extends CNode {
                     this.recalculate();
                 }
             })
+                .tooltip("Show/Hide the view: " + name);
         }
 
     }
