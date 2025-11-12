@@ -40,8 +40,10 @@ export class CNodeCurveEditorView2 extends CNodeTabbedCanvasView {
         this.dragStartLineP2 = null;
         this.lockAxis = null;
         this.snapToY = null;
+        this.defaultSnap = config.defaultSnap ?? true;
         
         this.setupMouseHandlers();
+        this.addMenuItems();
     }
     
     captureState() {
@@ -63,6 +65,18 @@ export class CNodeCurveEditorView2 extends CNodeTabbedCanvasView {
         
         this.documentMoveHandler = (e) => this.onMouseMove(e);
         this.documentUpHandler = (e) => this.onMouseUp(e);
+    }
+    
+    addMenuItems() {
+        const snapSettings = {
+            defaultSnap: this.defaultSnap
+        };
+        
+        this.tabMenu.add(snapSettings, 'defaultSnap')
+            .name('Default Snap')
+            .onChange((value) => {
+                this.defaultSnap = value;
+            });
     }
     
     screenToGraph(screenX, screenY) {
@@ -376,8 +390,8 @@ export class CNodeCurveEditorView2 extends CNodeTabbedCanvasView {
             const currentGraph = this.screenToGraph(e.clientX, e.clientY);
             let dx = currentGraph.x - this.dragStartPoint.x;
             let dy = currentGraph.y - this.dragStartPoint.y;
-            
-            if (!e.shiftKey && this.dragStartPoint) {
+
+            if (this.defaultSnap !== e.shiftKey && this.dragStartPoint) {
                 const currentScreen = this.graphToScreen(currentGraph.x, currentGraph.y);
                 const startScreen = this.graphToScreen(this.dragStartPoint.x, this.dragStartPoint.y);
                 
@@ -405,6 +419,22 @@ export class CNodeCurveEditorView2 extends CNodeTabbedCanvasView {
             this.points[p2].x = Math.max(this.minX, Math.min(this.maxX, this.dragStartLineP2.x + dx));
             this.points[p2].y = Math.max(this.minY, Math.min(this.maxY, this.dragStartLineP2.y + dy));
             
+            if (this.defaultSnap !== e.shiftKey) {
+                const p1Screen = this.graphToScreen(this.points[p1].x, this.points[p1].y);
+                const p2Screen = this.graphToScreen(this.points[p2].x, this.points[p2].y);
+                for (let i = 0; i < this.points.length; i++) {
+                    if (i !== p1 && i !== p2) {
+                        const otherScreen = this.graphToScreen(this.points[i].x, this.points[i].y);
+                        if (Math.abs(p1Screen.y - otherScreen.y) < 4) {
+                            this.points[p1].y = this.points[i].y;
+                        }
+                        if (Math.abs(p2Screen.y - otherScreen.y) < 4) {
+                            this.points[p2].y = this.points[i].y;
+                        }
+                    }
+                }
+            }
+            
             for (let i = p1 - 1; i >= 0; i--) {
                 if (this.points[i].x >= this.points[i + 1].x - 1) {
                     this.points[i].x = this.points[i + 1].x - 1;
@@ -430,7 +460,7 @@ export class CNodeCurveEditorView2 extends CNodeTabbedCanvasView {
             let newX = Math.max(this.minX, Math.min(this.maxX, graph.x));
             let newY = Math.max(this.minY, Math.min(this.maxY, graph.y));
             
-            if (!e.shiftKey && this.dragStartPoint) {
+            if (this.defaultSnap !== e.shiftKey && this.dragStartPoint) {
 
                 const newScreen = this.graphToScreen(newX, newY);
                 const startScreen = this.graphToScreen(this.dragStartPoint.x, this.dragStartPoint.y);
@@ -452,14 +482,16 @@ export class CNodeCurveEditorView2 extends CNodeTabbedCanvasView {
             }
             
             this.snapToY = null;
-            const newScreen = this.graphToScreen(newX, newY);
-            for (let i = 0; i < this.points.length; i++) {
-                if (i !== this.draggedPointIndex) {
-                    const otherScreen = this.graphToScreen(this.points[i].x, this.points[i].y);
-                    if (Math.abs(newScreen.y - otherScreen.y) < 4) {
-                        newY = this.points[i].y;
-                        this.snapToY = newY;
-                        break;
+            if (this.defaultSnap === e.shiftKey) {
+                const newScreen = this.graphToScreen(newX, newY);
+                for (let i = 0; i < this.points.length; i++) {
+                    if (i !== this.draggedPointIndex) {
+                        const otherScreen = this.graphToScreen(this.points[i].x, this.points[i].y);
+                        if (Math.abs(newScreen.y - otherScreen.y) < 4) {
+                            newY = this.points[i].y;
+                            this.snapToY = newY;
+                            break;
+                        }
                     }
                 }
             }
@@ -871,6 +903,7 @@ export class CNodeCurveEditor2 extends CNodeTrack {
         return {
             ...super.modSerialize(),
             points: flatPoints,
+            defaultSnap: this.editorView.defaultSnap,
         };
     }
     
@@ -884,6 +917,10 @@ export class CNodeCurveEditor2 extends CNodeTrack {
             }
             this.editorView.setPoints(points);
             this.recalculate();
+        }
+        
+        if (v.defaultSnap !== undefined) {
+            this.editorView.defaultSnap = v.defaultSnap;
         }
     }
     
