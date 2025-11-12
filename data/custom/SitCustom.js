@@ -476,7 +476,7 @@ sitch = {
         draggable: true, resizable: true, freeAspect: true, shiftDrag: false,
         editorConfig: {
             useRegression: true,
-            minX: 0, maxX: "Sit.frames", minY: -0, maxY: 100,
+            minX: 0, maxX: "Sit.frames", minY: 0.1, maxY: 100,
             xLabel: "Frame", xStep: 1, yLabel: "FOV", yStep: 5,
             points: [0, 30,100,30,400,30,900,30]
         },

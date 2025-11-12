@@ -38,6 +38,7 @@ export class CNodeCurveEditorView2 extends CNodeTabbedCanvasView {
         this.dragStartPoint = null;
         this.dragStartLineP1 = null;
         this.dragStartLineP2 = null;
+        this.lockAxis = null;
         
         this.setupMouseHandlers();
     }
@@ -229,13 +230,14 @@ export class CNodeCurveEditorView2 extends CNodeTabbedCanvasView {
                 x: this.points[this.draggedPointIndex].x,
                 y: this.points[this.draggedPointIndex].y
             };
+            this.lockAxis = null;
             this.isDragging = true;
             document.addEventListener('pointermove', this.documentMoveHandler);
             document.addEventListener('pointerup', this.documentUpHandler);
             return;
         }
         
-        if (e.shiftKey && this.isInsideGraphArea(x, y)) {
+        if (e.ctrlKey && this.isInsideGraphArea(x, y)) {
             e.preventDefault();
             e.stopPropagation();
             this.stateBeforeDrag = this.captureState();
@@ -254,6 +256,7 @@ export class CNodeCurveEditorView2 extends CNodeTabbedCanvasView {
             
             this.draggedPointIndex = insertIndex;
             this.dragStartPoint = {x: newPoint.x, y: newPoint.y};
+            this.lockAxis = null;
             this.isDragging = true;
             document.addEventListener('pointermove', this.documentMoveHandler);
             document.addEventListener('pointerup', this.documentUpHandler);
@@ -272,6 +275,7 @@ export class CNodeCurveEditorView2 extends CNodeTabbedCanvasView {
             const p2 = this.draggedLineIndex + 1;
             this.dragStartLineP1 = {x: this.points[p1].x, y: this.points[p1].y};
             this.dragStartLineP2 = {x: this.points[p2].x, y: this.points[p2].y};
+            this.lockAxis = null;
             this.isDragging = true;
             this.isDraggingLine = true;
             this.lastMouseX = e.clientX;
@@ -379,11 +383,17 @@ export class CNodeCurveEditorView2 extends CNodeTabbedCanvasView {
                 const deltaX = Math.abs(currentScreen.x - startScreen.x);
                 const deltaY = Math.abs(currentScreen.y - startScreen.y);
                 
-                if (deltaX > deltaY) {
+                if (this.lockAxis === null && (deltaX >= 5 || deltaY >= 5)) {
+                    this.lockAxis = deltaX > deltaY ? 'X' : 'Y';
+                }
+                
+                if (this.lockAxis === 'X') {
                     dy = 0;
-                } else {
+                } else if (this.lockAxis === 'Y') {
                     dx = 0;
                 }
+            } else {
+                this.lockAxis = null;
             }
             
             const p1 = this.draggedLineIndex;
@@ -427,11 +437,17 @@ export class CNodeCurveEditorView2 extends CNodeTabbedCanvasView {
                 const deltaX = Math.abs(newScreen.x - startScreen.x);
                 const deltaY = Math.abs(newScreen.y - startScreen.y);
 
-                if (deltaX > deltaY) {
+                if (this.lockAxis === null && (deltaX >= 5 || deltaY >= 5)) {
+                    this.lockAxis = deltaX > deltaY ? 'X' : 'Y';
+                }
+
+                if (this.lockAxis === 'X') {
                     newY = this.dragStartPoint.y;
-                } else {
+                } else if (this.lockAxis === 'Y') {
                     newX = this.dragStartPoint.x;
                 }
+            } else {
+                this.lockAxis = null;
             }
             
             this.points[this.draggedPointIndex].x = newX;
@@ -497,6 +513,7 @@ export class CNodeCurveEditorView2 extends CNodeTabbedCanvasView {
         this.dragStartPoint = null;
         this.dragStartLineP1 = null;
         this.dragStartLineP2 = null;
+        this.lockAxis = null;
         
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
@@ -844,6 +861,11 @@ export class CNodeCurveEditor2 extends CNodeTrack {
     }
     
     getValueFrame(f) {
-        return this.array[Math.floor(f)];
+        let y = this.array[Math.floor(f)];
+        if (y < this.editorView.minY)
+            y = this.editorView.minY;
+        if (y > this.editorView.maxY)
+            y = this.editorView.maxY;
+        return y
     }
 }
