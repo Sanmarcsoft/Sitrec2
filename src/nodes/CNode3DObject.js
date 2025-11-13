@@ -595,8 +595,13 @@ export class CNode3DObject extends CNode3DGroup {
         this.color = v.color;
         this.layers = v.layers; // usually undefined, as the camera handles layers
 
-        let menuName = this.props.name ?? this.id;
-        this.gui = guiMenus.objects.addFolder("3D Ob: " + menuName).close()
+        this.menuName = this.props.name ?? this.id;
+        /// if more that 20 characters, truncate from the middle
+        if (this.menuName.length > 20) {
+            this.menuName = this.menuName.substring(0, 10) + "..." + this.menuName.substring(this.menuName.length - 7);
+        }
+
+        this.gui = guiMenus.objects.addFolder("3D Ob: " + this.menuName).close()
         this.common = {}
         this.geometryParams = {};
         this.materialParams = {};

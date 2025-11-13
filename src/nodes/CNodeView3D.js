@@ -1828,8 +1828,10 @@ export class CNodeView3D extends CNodeViewCanvas {
                         const node = NodeMan.get(objectID);
                         if (node && node.gui) {
                             // Create a draggable window with the node's GUI controls
-                            const menuTitle = `3D Ob: ${objectID}`;
-                            
+                            const menuTitle = node.menuName;
+
+
+
                             // Create a standalone menu and mirror the object's GUI folder
                             // Use the same approach as tracks for consistency
                             const standaloneMenu = Globals.menuBar.createStandaloneMenu(menuTitle, event.clientX, event.clientY, true);
