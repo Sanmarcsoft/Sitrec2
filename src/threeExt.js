@@ -384,6 +384,16 @@ export function updateTrackPositionIndicator(view) {
     
     // Update the position indicator
     splineEditor.updatePositionIndicator(position, view);
+    
+    // Update the widget handle scales to maintain constant screen size
+    if (splineEditor.transformControl && splineEditor.transformControl.updateHandleScales) {
+        splineEditor.transformControl.updateHandleScales(view);
+    }
+    
+    // Update control point cube scales to maintain constant screen size
+    if (splineEditor.updateCubeScales) {
+        splineEditor.updateCubeScales(view);
+    }
 }
 
 /**

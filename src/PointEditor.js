@@ -1,4 +1,4 @@
-import {TransformControls} from "three/addons/controls/TransformControls.js";
+import {PointEditorWidget} from "./PointEditorWidget.js";
 import {
     BoxGeometry,
     ConeGeometry,
@@ -63,6 +63,7 @@ export class PointEditor {
         this.splineHelperObjects = [];  // the objects that are the control points
         this.frameNumbers = []          // matching frame numbers
         this.positions = [];            // positions of the above
+        this.selectedCube = null;       // the currently selected cube (hidden when widget is attached)
 
         this.scene = _scene
         this.camera = _camera
@@ -79,37 +80,19 @@ export class PointEditor {
         this.numPoints = 0;
 
         // this.geometry is the object used as a control point on the curve
-        // in this case it's a cube. Defaults to 20m
-        // might be better to have its size view dependent
-        // as it gets lost now, and is too big close up
-        this.geometry = new BoxGeometry( 20, 20, 20 );
+        // in this case it's a 1x1x1 cube, scaled via pixelsToMeters to be view-invariant
+        // will be 1/10 the diameter of the disk (4px)
+        this.geometry = new BoxGeometry( 1, 1, 1 );
 
-        // a TransformControl is an interactive object that you can attach to
-        // another object to move it around the world
+        // a PointEditorWidget is an interactive object that you can attach to
+        // another object to move it around the world (horizontally or vertically)
         // here it's attached to control points when we mouse over them
-        this.transformControl = new TransformControls(this.camera, this.renderer.domElement);
+        this.transformControl = new PointEditorWidget(this.camera, this.renderer.domElement);
         this.transformControl.addEventListener('change', () => setRenderOne());
         this.transformControl.addEventListener('dragging-changed', (event) => {
             controls.enabled = !event.value;
         });
         const gizmo = this.transformControl.getHelper();
-        
-        // Set the gizmo to use HELPERS layer so it's only visible in main view, not look view
-        const setLayersRecursive = (obj) => {
-            if (obj && obj.layers) {
-                obj.layers.mask = LAYER.MASK_HELPERS;
-            }
-            if (obj && obj.children) {
-                obj.children.forEach(child => setLayersRecursive(child));
-            }
-        };
-        setLayersRecursive(gizmo);
-        
-        // Set the TransformControls' internal raycaster to also see HELPERS layer
-        const gizmoRaycaster = this.transformControl.getRaycaster();
-        if (gizmoRaycaster) {
-            gizmoRaycaster.layers.mask = LAYER.MASK_HELPERS;
-        }
         
         this.scene.add(gizmo);
 
@@ -718,6 +701,28 @@ export class PointEditor {
         this.dirty = true;
         setRenderOne(true);
 
+    }
+
+    /**
+     * Update the scale of all control point cubes to maintain constant screen size
+     * This should be called from the render loop to keep cubes at a fixed pixel size
+     * @param {CNodeView3D} view - The view to use for screen-space scaling
+     */
+    updateCubeScales(view) {
+        if (!view || !view.pixelsToMeters) {
+            return;
+        }
+        
+        if (view.id !== "mainView") {
+            return;
+        }
+        
+        const cubePixelSize = 20;
+        
+        for (let cube of this.splineHelperObjects) {
+            const cubeMeters = view.pixelsToMeters(cube.position, cubePixelSize);
+            cube.scale.set(cubeMeters, cubeMeters, cubeMeters);
+        }
     }
 
     /**

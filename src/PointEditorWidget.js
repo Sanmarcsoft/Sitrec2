@@ -1,0 +1,408 @@
+import {
+    CircleGeometry,
+    ConeGeometry,
+    CylinderGeometry,
+    DoubleSide,
+    EventDispatcher,
+    Group,
+    Mesh,
+    MeshBasicMaterial,
+    Plane,
+    Raycaster,
+    Vector2,
+    Vector3
+} from "three";
+import * as LAYER from "./LayerMasks";
+import {getLocalUpVector} from "./SphericalMath";
+import {ViewMan} from "./CViewManager";
+import {mouseInViewOnly, mouseToViewNormalized} from "./ViewUtils";
+
+function createArrowGeometry() {
+    const shaftRadius = 0.05;
+    const headRadius = 0.12;
+    const shaftHeight = 1.4;
+    const headHeight = 0.8;
+    
+    const shaftGeometry = new CylinderGeometry(shaftRadius, shaftRadius, shaftHeight, 8);
+    const headGeometry = new ConeGeometry(headRadius, headHeight, 8);
+    
+    const group = new Group();
+    const shaftMesh = new Mesh(shaftGeometry);
+    const headMesh = new Mesh(headGeometry);
+    
+    shaftMesh.position.y = -0.2;
+    headMesh.position.y = 0.9;
+    
+    group.add(shaftMesh);
+    group.add(headMesh);
+    
+    return group;
+}
+
+export class PointEditorWidget extends EventDispatcher {
+    constructor(camera, renderer) {
+        super();
+        
+        this.camera = camera;
+        this.renderer = renderer;
+        
+        this.object = null;
+        this.group = new Group();
+        
+        this.raycaster = new Raycaster();
+        this.raycaster.layers.mask = LAYER.MASK_HELPERS;
+        this.pointer = new Vector2();
+        
+        this.isDragging = false;
+        this.isPointerDown = false;
+        this.pointerDownButton = -1;
+        this.dragPlane = new Plane();
+        this.dragStart = new Vector3();
+        this.dragStartWorld = new Vector3();
+        this.dragStartLocalUp = new Vector3();
+        this.dragStartIntersect = new Vector3(); // Initial plane intersection point
+        this.startClosestPoint = new Vector3(); // Closest point on localUp line to initial ray
+        
+        this.activeDragMode = null; // 'horizontal' or 'vertical'
+        this.draggedHandle = null; // which handle was hit on pointerdown
+        
+        this.handles = {
+            disc: null,
+            arrowUp: null,
+            arrowDown: null
+        };
+        
+        this.createHandles();
+        
+        this.boundPointerMove = (e) => this.onPointerMove(e);
+        this.boundPointerDown = (e) => this.onPointerDown(e);
+        this.boundPointerUp = (e) => this.onPointerUp(e);
+        
+        document.addEventListener('pointermove', this.boundPointerMove);
+        document.addEventListener('pointerdown', this.boundPointerDown);
+        document.addEventListener('pointerup', this.boundPointerUp);
+    }
+    
+    createHandles() {
+        const discGeometry = new CircleGeometry(1, 32);
+        const discMaterial = new MeshBasicMaterial({
+            color: 0x00ff00,
+            transparent: true,
+            opacity: 0.6,
+            side: DoubleSide,
+            depthTest: true,
+            depthWrite: false
+        });
+        
+        this.handles.disc = new Mesh(discGeometry, discMaterial);
+        this.handles.disc.userData.type = 'horizontal';
+        this.handles.disc.layers.mask = LAYER.MASK_HELPERS;
+        this.group.add(this.handles.disc);
+        
+        const arrowMaterial = new MeshBasicMaterial({
+            color: 0xff0000,
+            transparent: true,
+            opacity: 0.6,
+            depthTest: true,
+            depthWrite: false
+        });
+        
+        this.handles.arrowUp = createArrowGeometry();
+        this.handles.arrowUp.userData.type = 'vertical_up';
+        this.handles.arrowUp.layers.mask = LAYER.MASK_HELPERS;
+        this.handles.arrowUp.traverse(child => {
+            if (child.isMesh) {
+                child.material = arrowMaterial;
+                child.layers.mask = LAYER.MASK_HELPERS;
+                child.userData.type = 'vertical_up';
+            }
+        });
+        this.group.add(this.handles.arrowUp);
+        
+        this.handles.arrowDown = createArrowGeometry();
+        this.handles.arrowDown.userData.type = 'vertical_down';
+        this.handles.arrowDown.layers.mask = LAYER.MASK_HELPERS;
+        this.handles.arrowDown.traverse(child => {
+            if (child.isMesh) {
+                child.material = arrowMaterial;
+                child.layers.mask = LAYER.MASK_HELPERS;
+                child.userData.type = 'vertical_down';
+            }
+        });
+        this.group.add(this.handles.arrowDown);
+    }
+    
+    attach(object) {
+        if (this.object === object) return;
+        
+        this.object = object;
+        this.group.position.copy(object.position);
+        this.updateOrientation();
+        this.updateHandleScales();
+        
+        object.visible = false;
+        this.dispatchEvent({ type: 'attachedToObject', value: object });
+    }
+    
+    detach() {
+        const wasDragging = this.isDragging;
+        if (this.object) {
+            this.object.visible = true;
+            this.dispatchEvent({ type: 'detachedFromObject', value: this.object });
+        }
+        this.object = null;
+        this.isDragging = false;
+        this.isPointerDown = false;
+        this.activeDragMode = null;
+        this.draggedHandle = null;
+        this.dragStartIntersect.set(0, 0, 0);
+        if (wasDragging) {
+            this.dispatchEvent({ type: 'dragging-changed', value: false });
+        }
+    }
+    
+    updateOrientation() {
+        if (!this.object) return;
+        
+        this.dragStartLocalUp = getLocalUpVector(this.object.position);
+        
+        const localUp = this.dragStartLocalUp.clone();
+        
+        this.handles.disc.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), localUp);
+        
+        this.handles.arrowUp.position.set(0, 0, 0);
+        this.handles.arrowUp.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), localUp);
+        
+        this.handles.arrowDown.position.set(0, 0, 0);
+        this.handles.arrowDown.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), localUp.clone().multiplyScalar(-1));
+    }
+    
+    updateHandleScales(view) {
+        if (!this.object || !view || !view.pixelsToMeters) {
+            return;
+        }
+        
+        if (view.id !== "mainView") {
+            return;
+        }
+        
+        const discPixelSize = 40;
+        const arrowPixelSize = 30;
+        
+        const discMeters = view.pixelsToMeters(this.object.position, discPixelSize);
+        const arrowMeters = view.pixelsToMeters(this.object.position, arrowPixelSize);
+        
+        this.handles.disc.scale.set(discMeters, discMeters, 1);
+        
+        this.handles.arrowUp.scale.set(arrowMeters / 0.5, arrowMeters, arrowMeters / 0.5);
+        this.handles.arrowDown.scale.set(arrowMeters / 0.5, arrowMeters, arrowMeters / 0.5);
+    }
+    
+    setupRaycasterForEvent(event) {
+        const view = ViewMan.get("mainView");
+        
+        if (!view) {
+            return false;
+        }
+        
+        if (!mouseInViewOnly(view, event.clientX, event.clientY)) {
+            return false;
+        }
+        
+        const [px, py] = mouseToViewNormalized(view, event.clientX, event.clientY);
+        this.pointer.x = px;
+        this.pointer.y = py;
+        
+        this.raycaster.setFromCamera(this.pointer, this.camera);
+        
+        return true;
+    }
+    
+    onPointerDown(event) {
+        if (!this.object || !this.setupRaycasterForEvent(event)) {
+            return;
+        }
+        
+        const intersects = this.raycaster.intersectObjects([
+            this.handles.disc,
+            this.handles.arrowUp,
+            this.handles.arrowDown
+        ], true);
+        
+        if (intersects.length === 0) {
+            return;
+        }
+        
+        const intersected = intersects[0].object;
+        let dragType = intersected.userData.type;
+        
+        if (!dragType && intersected.parent) {
+            dragType = intersected.parent.userData.type;
+        }
+        
+        console.log('onPointerDown: intersected object:', intersected.name, 'dragType:', dragType);
+        
+        this.isPointerDown = true;
+        this.pointerDownButton = event.button;
+        this.draggedHandle = dragType;
+        this.dragStart.copy(this.pointer);
+        this.dragStartWorld.copy(this.object.position);
+        this.dragStartLocalUp.copy(getLocalUpVector(this.object.position));
+        
+        if (dragType === 'horizontal') {
+            this.activeDragMode = 'horizontal';
+            this.setupHorizontalDragPlane();
+            const startIntersect = this.raycaster.ray.intersectPlane(this.dragPlane, new Vector3());
+            if (startIntersect) {
+                this.dragStartIntersect.copy(startIntersect);
+            }
+        } else if (dragType === 'vertical_up' || dragType === 'vertical_down') {
+            this.activeDragMode = 'vertical';
+            const closest = this.getClosestPointOnLineToRay(
+                this.dragStartWorld,
+                this.dragStartLocalUp,
+                this.raycaster.ray.origin,
+                this.raycaster.ray.direction
+            );
+            this.startClosestPoint.copy(closest);
+        }
+        
+        event.preventDefault();
+    }
+    
+    setupHorizontalDragPlane() {
+        const localUp = this.dragStartLocalUp;
+        this.dragPlane.setFromNormalAndCoplanarPoint(localUp, this.dragStartWorld);
+    }
+    
+    getClosestPointOnLineToRay(linePoint, lineDir, rayOrigin, rayDir) {
+        const w = new Vector3().subVectors(rayOrigin, linePoint);
+        
+        const a = lineDir.dot(rayDir);
+        const b = lineDir.dot(lineDir);
+        const c = rayDir.dot(rayDir);
+        const dw = w.dot(lineDir);
+        const ew = w.dot(rayDir);
+        
+        const denom = b * c - a * a;
+        const s = (dw * c - ew * a) / denom;
+        
+        return new Vector3().copy(linePoint).addScaledVector(lineDir, s);
+    }
+    
+    onPointerMove(event) {
+        if (!this.object) {
+            return;
+        }
+        
+        if (!this.isPointerDown) {
+            return;
+        }
+        
+        if (this.pointerDownButton !== 0) {
+            return;
+        }
+        
+        if (!this.setupRaycasterForEvent(event)) {
+            return;
+        }
+        
+        if (!this.isDragging) {
+            this.isDragging = true;
+            this.dispatchEvent({ type: 'dragging-changed', value: true });
+        }
+        
+        if (this.activeDragMode === 'horizontal') {
+            this.handleHorizontalDrag();
+        } else if (this.activeDragMode === 'vertical') {
+            console.log('onPointerMove: handling vertical drag');
+            this.handleVerticalDrag();
+        } else {
+            console.log('onPointerMove: unknown activeDragMode:', this.activeDragMode);
+        }
+    }
+    
+    handleHorizontalDrag() {
+        const currentIntersect = this.raycaster.ray.intersectPlane(this.dragPlane, new Vector3());
+        
+        if (currentIntersect === null) {
+            return;
+        }
+        
+        const offset = currentIntersect.clone().sub(this.dragStartIntersect);
+        const newPosition = this.dragStartWorld.clone().add(offset);
+        
+        this.object.position.copy(newPosition);
+        this.group.position.copy(this.object.position);
+        this.updateOrientation();
+        
+        this.dispatchEvent({ type: 'change' });
+        this.dispatchEvent({ type: 'objectChange' });
+    }
+    
+    handleVerticalDrag() {
+        const newClosestPoint = this.getClosestPointOnLineToRay(
+            this.dragStartWorld,
+            this.dragStartLocalUp,
+            this.raycaster.ray.origin,
+            this.raycaster.ray.direction
+        );
+        
+        const offset = new Vector3().subVectors(newClosestPoint, this.startClosestPoint);
+        
+        const newPosition = new Vector3().copy(this.dragStartWorld).add(offset);
+        
+        console.log('handleVerticalDrag: offset length:', offset.length());
+        
+        this.object.position.copy(newPosition);
+        this.group.position.copy(this.object.position);
+        this.updateOrientation();
+        
+        this.dispatchEvent({ type: 'change' });
+        this.dispatchEvent({ type: 'objectChange' });
+    }
+    
+    onPointerUp(event) {
+        const wasDragging = this.isDragging;
+        
+        this.isPointerDown = false;
+        this.pointerDownButton = -1;
+        this.isDragging = false;
+        this.activeDragMode = null;
+        this.draggedHandle = null;
+        this.dragStartIntersect.set(0, 0, 0);
+        
+        if (wasDragging) {
+            this.dispatchEvent({ type: 'dragging-changed', value: false });
+        }
+    }
+    
+    getHelper() {
+        return this.group;
+    }
+    
+    getRaycaster() {
+        return this.raycaster;
+    }
+    
+    dispose() {
+        document.removeEventListener('pointermove', this.boundPointerMove);
+        document.removeEventListener('pointerdown', this.boundPointerDown);
+        document.removeEventListener('pointerup', this.boundPointerUp);
+        
+        if (this.handles.disc) {
+            this.handles.disc.geometry.dispose();
+            this.handles.disc.material.dispose();
+        }
+        if (this.handles.arrowUp) {
+            this.handles.arrowUp.geometry.dispose();
+            this.handles.arrowUp.material.dispose();
+        }
+        if (this.handles.arrowDown) {
+            this.handles.arrowDown.geometry.dispose();
+            this.handles.arrowDown.material.dispose();
+        }
+        
+        this.group.clear();
+    }
+}
