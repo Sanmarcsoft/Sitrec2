@@ -565,25 +565,29 @@ export class CCustomManager {
         // Set up the fovEditor and add it to fovSwitch
         if (!NodeMan.exists("fovEditor")) {
 
-            const fovEditor = new CNodeCurveEditor2(
-                {
-                    id: "fovEditor",
-                    menuName: "FOV Editor",
-                    visible: false,
-                    left: 0, top: 0.5, width: -1, height: 0.5,
-                    draggable: true, resizable: true, freeAspect: true, shiftDrag: false,
-                    editorConfig: {
-                        useRegression: true,
-                        minX: 0, maxX: "Sit.frames", minY: 0.1, maxY: 100,
-                        xLabel: "Frame", xStep: 1, yLabel: "FOV", yStep: 5,
-                        points: [0, 30, 100, 30, 400, 30, 900, 30]
-                    },
-                    frames: -1, // -1 will inherit from Sit.frames
-                },
-            )
-
-            const fovSwitch = NodeMan.get("fovSwitch");
+            // only currently makes sense if we have a fovSwitch
+            // although we could hook it up to bespoke sitches, we probably won't
+            const fovSwitch = NodeMan.get("fovSwitch", false);
             if (fovSwitch) {
+
+                const fovEditor = new CNodeCurveEditor2(
+                    {
+                        id: "fovEditor",
+                        menuName: "FOV Editor",
+                        visible: false,
+                        left: 0, top: 0.5, width: -1, height: 0.5,
+                        draggable: true, resizable: true, freeAspect: true, shiftDrag: false,
+                        editorConfig: {
+                            useRegression: true,
+                            minX: 0, maxX: "Sit.frames", minY: 0.1, maxY: 100,
+                            xLabel: "Frame", xStep: 1, yLabel: "FOV", yStep: 5,
+                            points: [0, 30, 100, 30, 400, 30, 900, 30]
+                        },
+                        frames: -1, // -1 will inherit from Sit.frames
+                    },
+                )
+
+
                 fovSwitch.addOption("FOV Editor", fovEditor);
             }
         }
