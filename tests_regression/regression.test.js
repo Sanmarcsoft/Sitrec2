@@ -8,7 +8,7 @@ expect.extend({ toMatchImageSnapshot });
 // Array of test cases: each object contains a name and its corresponding URL.
 const testData = [
     { name: 'default', url: 'https://local.metabunk.org/sitrec/?frame=10' },
- //   { name: 'WMTS', url: 'https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Regression%20test%20_%20NRL%20WMTS%20%284326%20tiles%29/20251113_181925.js&frame=10' },
+    { name: 'WMTS', url: 'https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Regression%20test%20_%20NRL%20WMTS%20%284326%20tiles%29/20251113_181925.js&frame=10' },
     { name: 'agua', url: 'https://local.metabunk.org/sitrec/?sitch=agua&frame=10' },
     { name: 'gimbal', url: 'https://local.metabunk.org/sitrec/?sitch=gimbal&frame=10' },
     { name: 'starlink', url: 'https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Stalink%20Names/20250218_060544.js' },
@@ -63,6 +63,24 @@ describe('Visual Regression Testing', () => {
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
         page = await browser.newPage();
+
+        page.on('console', msg => {
+            console.log(`PAGE CONSOLE [${msg.type()}]: ${msg.text()}`);
+        });
+
+        page.on('pageerror', err => {
+            console.log('PAGE ERROR:', err);
+        });
+
+        page.on('response', res => {
+            if (res.status() >= 400) {
+                console.log(`Failed response: ${res.url()} - Status: ${res.status()}`);
+            }
+        });
+
+        page.on('requestfailed', req => {
+            console.log(`Request failed: ${req.url()} - Error: ${req.failure().errorText}`);
+        });
 
     });
 

@@ -394,12 +394,15 @@ export class CNodeTerrainUI extends CNode {
             this.terrainNode.updateBlackSphereVisibility();
         });
 
+        console.log("CNodeTerrainUI: calling setMapType for initial map type " + this.mapType);
         // setMapType is async because it loads the capabilities
         this.setMapType(this.mapType).then(() => {
-            this.terrainNode = new CNodeTerrain({
-                id: initialID,
-                UINode: this});
+            // not async any more
         })
+
+        this.terrainNode = new CNodeTerrain({
+            id: initialID,
+            UINode: this});
 
         // Set initial UI visibility
         this.updateUIVisibility();
@@ -483,57 +486,56 @@ export class CNodeTerrainUI extends CNode {
     }
 
 
-    async setMapType(v) {
+    setMapType(v) {
         const mapType = v;
         assert(this.mapSources, "CNodeTerrainUI: mapSources not defined");
         const mapDef = this.mapSources[mapType];
 
         assert(mapDef !== undefined, "CNodeTerrainUI: mapDef for " + mapType + " not found in mapSources");
 
-        // does it have pre-listed layers in the mapDef?
+
+        if (mapDef.capabilities !== undefined) {
+            if (mapDef.layer === undefined) {
+                alert("Map type " + mapType + " requires a default 'layer' property when using 'capabilities' to define layers.");
+                return;
+            }
+            this.loadCapabilitiesInBackground(mapType, mapDef);
+        }
+
+        this.mapDef = mapDef;
+        this.layer = this.mapDef.layer;
+
+
         if (mapDef.layers !== undefined) {
-            // nothing needed here
+            // use the pre-defined layers. of the fake layer we generated last time
+            this.updateLayersMenu(mapDef.layers);
         } else {
-            // no layers, so we check for WMS capabilities
-            // if there's one, then we load it
-            // and extract the layers from it
+            // a temp layer menu with just a single layer of the mapType
+            const fakeLayer = {};
+            fakeLayer[mapDef.layer ?? "default"] = {
+            }
+            mapDef.layers = fakeLayer;
+            this.updateLayersMenu(fakeLayer);
+        }
+        return Promise.resolve();
+    }
 
-            // also, if we have a capabilities URL, then start loading it
-            if (mapDef.capabilities !== undefined) {
-
-                let response;
-                try {
-                     response = await fetch(mapDef.capabilities);
-                } catch (e) {
-                    // if it returns an error, then we should fall back on the "Debug" maptype
-                    console.log("Error fetching capabilities for " + mapType + " from " + mapDef.capabilities + ": " + e.message);
-                    console.log("Falling back to Debug map type");
-                    this.mapType = "Debug";
-                    return this.setMapType(this.mapType);
-                }
-
-
-                const data = await response.text();
-                console.log("Capabilities for " + mapType)
-                //console.log(data)
-                // convert XML to object
+    loadCapabilitiesInBackground(mapType, mapDef) {
+        return fetch(mapDef.capabilities)
+            .then(response => response.text())
+            .then(data => {
                 const parser = new DOMParser();
                 const xmlDoc = parser.parseFromString(data, "text/xml");
 
-                // two different types of WMS capabilities
-                // WMS uses "Layer" and WMTS uses "Contents"
-                // so we need to check for both
                 const contents = xmlDoc.getElementsByTagName("Contents");
                 mapDef.layers = {}
 
                 if (contents.length > 0) {
-                    console.log("Contents:")
+                    console.log("Capabilities for " + mapType)
                     const layers = xmlDoc.getElementsByTagName("Layer");
                     for (let layer of layers) {
                         const layerName = layer.getElementsByTagName("ows:Identifier")[0].textContent;
-                        mapDef.layers[layerName] = {
-                            // nothing yet, extract more later
-                        }
+                        mapDef.layers[layerName] = {}
                     }
                 } else {
                     const layers = xmlDoc.getElementsByTagName("Layer");
@@ -542,19 +544,30 @@ export class CNodeTerrainUI extends CNode {
                         mapDef.layers[layerName] = {}
                     }
                 }
-            }
-        }
 
-        // use either the passed in mapDef, or the one we just extracted from the capabilities
-        this.mapDef = mapDef;
-        this.layer = this.mapDef.layer;
-        // Remove any layer menu now, as this might not have on
-        this.layersMenu?.destroy()
-        this.layersMenu = null;
-        this.updateLayersMenu(mapDef.layers);
+                if (this.mapType === mapType) {
+                    this.updateLayersMenu(mapDef.layers);
+                }
+            })
+            .catch(error => {
+                console.error("Error fetching capabilities for " + mapType + " from " + mapDef.capabilities + ": " + error.message);
+                
+                if (mapType !== "Debug") {
+                    console.log("Falling back to Debug map type");
+                    this.mapType = "Debug";
+                    return this.setMapType("Debug");
+                } else {
+                    mapDef.layers = {};
+                    this.updateLayersMenu({});
+                }
+            });
     }
 
     updateLayersMenu(layers) {
+
+        this.layersMenu?.destroy()
+        this.layersMenu = null;
+
         // layers is an array of layer names
         // we want a KV pair for the GUI
         // where both K and V are the layer name
@@ -692,6 +705,8 @@ export class CNodeTerrainUI extends CNode {
                 NodeMan.get("lookView"),
                 NodeMan.get("mainView")
             ];
+
+            assert(this.terrainNode, "CNodeTerrainUI: terrainNode not defined in update dynamic subdivision")
 
             // Call view-independent operations once per frame for elevation map
             if (this.terrainNode.elevationMap !== undefined) {
