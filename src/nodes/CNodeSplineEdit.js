@@ -1,5 +1,5 @@
 import {SplineEditor} from "../SplineEditor";
-import {guiMenus, NodeMan, Sit} from "../Globals";
+import {guiMenus, NodeMan, Sit, TrackManager} from "../Globals";
 import {Vector3} from "three";
 import {PointEditor} from "../PointEditor";
 import {getCameraNode} from "./CNodeCamera";
@@ -74,6 +74,19 @@ export class CNodeSplineEditor extends CNodeTrack {
 
         this.recalculate()
         this.splineEditor.updatePointEditorGraphics()
+    }
+
+    dispose() {
+        const trackOb = TrackManager.get(this.id, false);
+        
+        if (trackOb && trackOb.objectID) {
+            const objectNode = NodeMan.get(trackOb.objectID, false);
+            if (objectNode) {
+                // dispose the node and it's input (controller) nodes
+                NodeMan.disposeRemove(objectNode, true);
+            }
+        }
+        super.dispose();
     }
 
     modSerialize() {

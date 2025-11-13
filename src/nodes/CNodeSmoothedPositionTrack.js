@@ -46,6 +46,7 @@ export class CNodeSmoothedPositionTrack extends CNodeTrack {
 
     recalculate() {
 
+        assert(this.in.source !== undefined, "CNodeSmoothedPositionTrack: source input is undefined, id=" + this.id)
         this.sourceArray = this.in.source.array;
 
         if (this.sourceArray === undefined) {

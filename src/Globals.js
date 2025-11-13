@@ -52,6 +52,9 @@ export function setNodeMan(n) {NodeMan = n;}
 export var NodeFactory;
 export function setNodeFactory(n) {NodeFactory = n;}
 
+export var TrackManager;
+export function setTrackManager(tm) {TrackManager = tm;}
+
 
 export var NullNode;
 export function setNullNode(n) {NullNode = n;}

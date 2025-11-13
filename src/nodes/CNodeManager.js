@@ -24,7 +24,13 @@ export class CNodeManager extends CManager{
 
 
     // dispose and remove, optionally doing to same to all inputs, recursively
-    // not a common use case, but useful for cleaning up a node that has auto-generated inputs
+    // input removal is not a common use case,
+    // but useful for cleaning up a node that has auto-generated inputs, or controller
+    // (for example, the object associated with the synthetic track is auto generator, and
+    // had auto-generated inputs, so it makes sense to remove them all when the object is removed)
+    //
+    // id: node id to remove (or a node)
+    // inputs: if true, recursively remove all input nodes that have no other outputs
     disposeRemove(id, inputs=false) {
         if (id === undefined || id === null)
             return;
@@ -48,7 +54,7 @@ export class CNodeManager extends CManager{
         super.disposeRemove(id);
     }
 
-    // unlink a node from all outputs, and dispose of it
+    // unlink a node from all inputs and outputs, and dispose of it
     unlinkDisposeRemove(id) {
         if (id === undefined)
             return;

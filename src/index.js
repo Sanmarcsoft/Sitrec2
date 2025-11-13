@@ -27,6 +27,7 @@ import {
     setSitchEstablished,
     setSitchMan,
     setSynth3DManager,
+    setTrackManager,
     setUndoManager,
     setUnits,
     setupGUIGlobals,
@@ -1054,6 +1055,7 @@ async function initializeOnce() {
 
     console.log('About to initialize NodeMan and DragDropHandler');
     setNodeMan(new CNodeManager())
+    setTrackManager(TrackManager)
     setNodeFactory(new CNodeFactory(NodeMan))
     setSitchMan(new CSitchFactory())
     setSynth3DManager(new C3DSynthManager())
