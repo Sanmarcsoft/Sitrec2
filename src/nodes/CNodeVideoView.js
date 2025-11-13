@@ -19,10 +19,11 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
         // these no longer work with the new rendering pipeline
         // TODO: reimplement them as effects?
-        // this.optionalInputs(["brightness", "contrast", "blur", "greyscale"])
+         this.optionalInputs(["brightness", "contrast", "blur", "greyscale"])
         //
-        // if (this.overlayView !== undefined)
-        //     addFiltersToVideoNode(this)
+
+        //  if (this.overlayView === undefined)
+             addFiltersToVideoNode(this)
 
         this.positioned = false;
         this.autoFill = v.autoFill ?? true; // default to autofill
@@ -518,13 +519,15 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
 }
 
+let guiVideoEffectsFolder = null;
 
 export function addFiltersToVideoNode(videoNode) {
-    videoNode.addMoreInputs({
-        brightness: new CNodeGUIValue({id: videoNode.id+"videoBrightness", value: 1, start: 0, end: 5, step: 0.01, desc: "Brightness"}, guiTweaks),
-        contrast: new CNodeGUIValue({id: videoNode.id+"videoContrast", value: 1, start: 0, end: 5, step: 0.01, desc: "Contrast"}, guiTweaks),
-        blur: new CNodeGUIValue({id: videoNode.id+"videoBlur", value: 0, start: 0, end: 20, step: 1, desc: "Blur Px"}, guiTweaks),
-    });
+
+    if (guiVideoEffectsFolder === null) {
+        guiVideoEffectsFolder = guiTweaks.addFolder("Video Adjustments").close().perm();
+    }
+
+    let brightness, contrast, blur;
 
     const reset = {
         resetFilters: () => {
@@ -535,5 +538,24 @@ export function addFiltersToVideoNode(videoNode) {
         }
     }
 
-    guiTweaks.add(reset, "resetFilters").name("Reset Filters")
+    if (!NodeMan.exists("videoBrightness")) {
+        brightness = new CNodeGUIValue({id: "videoBrightness", value: 1, start: 0, end: 5, step: 0.01, desc: "Brightness"}, guiVideoEffectsFolder),
+        contrast =  new CNodeGUIValue({id: "videoContrast", value: 1, start: 0, end: 5, step: 0.01, desc: "Contrast"}, guiVideoEffectsFolder),
+        blur = new CNodeGUIValue({id: "videoBlur", value: 0, start: 0, end: 20, step: 1, desc: "Blur Px"}, guiVideoEffectsFolder),
+        guiVideoEffectsFolder.add(reset, "resetFilters").name("Reset Video Adjustments")
+    } else {
+        brightness = NodeMan.get("videoBrightness");
+        contrast = NodeMan.get("videoContrast");
+        blur = NodeMan.get("videoBlur");
+    }
+
+
+    videoNode.addMoreInputs({
+        brightness: brightness,
+        contrast: contrast,
+        blur: blur
+    });
+
+
+
 }
