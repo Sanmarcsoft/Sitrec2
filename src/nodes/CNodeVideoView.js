@@ -3,6 +3,7 @@ import {CNodeViewCanvas2D} from "./CNodeViewCanvas";
 import {par} from "../par";
 import {quickToggle} from "../KeyBoardHandler";
 import {CNodeGUIFlag, CNodeGUIValue} from "./CNodeGUIValue";
+import {CNodeConstant} from "./CNode";
 import {guiTweaks, NodeMan, setRenderOne, Sit} from "../Globals";
 import {CMouseHandler} from "../CMouseHandler";
 import {CNodeViewUI} from "./CNodeViewUI";
@@ -19,7 +20,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
         // these no longer work with the new rendering pipeline
         // TODO: reimplement them as effects?
-         this.optionalInputs(["brightness", "contrast", "blur", "greyscale", "hue", "invert", "saturate", "enableVideoEffects"])
+         this.optionalInputs(["brightness", "contrast", "blur", "greyscale", "hue", "invert", "saturate", "enableVideoEffects", "convolutionFilter"])
         //
 
         //  if (this.overlayView === undefined)
@@ -359,6 +360,16 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
             }
 
+            if (effectsEnabled && this.in.convolutionFilter && this.in.convolutionFilter.value !== 'none') {
+                const filterType = this.in.convolutionFilter.value;
+                const params = {
+                    amount: this.in.sharpenAmount?.v0 ?? 1,
+                    threshold: this.in.edgeDetectThreshold?.v0 ?? 0,
+                    strength: (filterType === 'emboss' ? this.in.embossDepth?.v0 : 1) ?? 1
+                };
+                applyConvolution(ctx, this.widthPx, this.heightPx, filterType, params);
+            }
+
             ctx.filter = 'none';
 
 
@@ -541,7 +552,20 @@ export function addFiltersToVideoNode(videoNode) {
         guiVideoEffectsFolder = guiTweaks.addFolder("Video Adjustments").close().perm();
     }
 
-    let brightness, contrast, blur, greyscale, hue, invert, saturate, enableVideoEffects;
+    let brightness, contrast, blur, greyscale, hue, invert, saturate, enableVideoEffects, convolutionFilter;
+    let sharpenAmount, edgeDetectThreshold, embossDepth;
+    let convolutionFilterDropdown, sharpenAmountControl, edgeDetectThresholdControl, embossDepthControl;
+
+    const filterOptions = {
+        convolutionFilterValue: 'none'
+    };
+
+    const updateConvolutionControlVisibility = () => {
+        const filterType = filterOptions.convolutionFilterValue;
+        sharpenAmount?.show(filterType === 'sharpen');
+        edgeDetectThreshold?.show(filterType === 'edgeDetect');
+        embossDepth?.show(filterType === 'emboss');
+    };
 
     const reset = {
         resetFilters: () => {
@@ -555,6 +579,11 @@ export function addFiltersToVideoNode(videoNode) {
             if (videoNode.inputs.enableVideoEffects) {
                 videoNode.inputs.enableVideoEffects.value = true;
             }
+            filterOptions.convolutionFilterValue = 'none';
+            if (videoNode.inputs.sharpenAmount) videoNode.inputs.sharpenAmount.value = 1;
+            if (videoNode.inputs.edgeDetectThreshold) videoNode.inputs.edgeDetectThreshold.value = 0;
+            if (videoNode.inputs.embossDepth) videoNode.inputs.embossDepth.value = 1;
+            updateConvolutionControlVisibility();
             setRenderOne(true);
         }
     }
@@ -568,6 +597,19 @@ export function addFiltersToVideoNode(videoNode) {
         invert = new CNodeGUIValue({id: "videoInvert", value: 0, start: 0, end: 1, step: 0.01, desc: "Invert"}, guiVideoEffectsFolder),
         saturate = new CNodeGUIValue({id: "videoSaturate", value: 1, start: 0, end: 5, step: 0.01, desc: "Saturate"}, guiVideoEffectsFolder),
         enableVideoEffects = new CNodeGUIFlag({id: "videoEnableEffects", value: true, desc: "Enable Video Effects"}, guiVideoEffectsFolder),
+        sharpenAmount = new CNodeGUIValue({id: "videoSharpenAmount", value: 1, start: 0, end: 5, step: 0.1, desc: "Sharpen Amount"}, guiVideoEffectsFolder),
+        edgeDetectThreshold = new CNodeGUIValue({id: "videoEdgeDetectThreshold", value: 0, start: 0, end: 255, step: 1, desc: "Edge Threshold"}, guiVideoEffectsFolder),
+        embossDepth = new CNodeGUIValue({id: "videoEmbossDepth", value: 1, start: 0, end: 3, step: 0.1, desc: "Emboss Depth"}, guiVideoEffectsFolder),
+        convolutionFilter = new CNodeConstant({id: "videoConvolutionFilter", value: 'none'}),
+        convolutionFilterDropdown = guiVideoEffectsFolder.add(filterOptions, "convolutionFilterValue", ['none', 'sharpen', 'edgeDetect', 'emboss']).name("Convolution Filter").onChange(value => {
+            convolutionFilter.value = value;
+            updateConvolutionControlVisibility();
+            setRenderOne(true);
+        }),
+        sharpenAmountControl = sharpenAmount.guiEntry,
+        edgeDetectThresholdControl = edgeDetectThreshold.guiEntry,
+        embossDepthControl = embossDepth.guiEntry,
+        updateConvolutionControlVisibility(),
         guiVideoEffectsFolder.add(reset, "resetFilters").name("Reset Video Adjustments")
     } else {
         brightness = NodeMan.get("videoBrightness");
@@ -578,6 +620,17 @@ export function addFiltersToVideoNode(videoNode) {
         invert = NodeMan.get("videoInvert");
         saturate = NodeMan.get("videoSaturate");
         enableVideoEffects = NodeMan.get("videoEnableEffects");
+        sharpenAmount = NodeMan.get("videoSharpenAmount");
+        edgeDetectThreshold = NodeMan.get("videoEdgeDetectThreshold");
+        embossDepth = NodeMan.get("videoEmbossDepth");
+        convolutionFilter = NodeMan.get("videoConvolutionFilter");
+        if (convolutionFilter) {
+            filterOptions.convolutionFilterValue = convolutionFilter.value;
+        }
+        sharpenAmountControl = sharpenAmount?.guiEntry;
+        edgeDetectThresholdControl = edgeDetectThreshold?.guiEntry;
+        embossDepthControl = embossDepth?.guiEntry;
+        updateConvolutionControlVisibility();
     }
 
 
@@ -589,9 +642,114 @@ export function addFiltersToVideoNode(videoNode) {
         hue: hue,
         invert: invert,
         saturate: saturate,
-        enableVideoEffects: enableVideoEffects
+        enableVideoEffects: enableVideoEffects,
+        convolutionFilter: convolutionFilter,
+        sharpenAmount: sharpenAmount,
+        edgeDetectThreshold: edgeDetectThreshold,
+        embossDepth: embossDepth
     });
 
 
 
+}
+
+const CONVOLUTION_KERNELS = {
+    none: { kernel: null, divisor: 1, offset: 0 },
+    sharpen: { 
+        kernel: [
+            0, -1,  0,
+            -1, 5, -1,
+            0, -1,  0
+        ], 
+        divisor: 1, 
+        offset: 0 
+    },
+    edgeDetect: { 
+        kernel: [
+            -1, -1, -1,
+            -1,  8, -1,
+            -1, -1, -1
+        ], 
+        divisor: 1, 
+        offset: 0 
+    },
+    emboss: { 
+        kernel: [
+            -2, -1,  0,
+            -1,  1,  1,
+            0,  1,  2
+        ], 
+        divisor: 1, 
+        offset: 128 
+    }
+};
+
+export function applyConvolution(ctx, width, height, kernelName, params = {}) {
+    if (kernelName === 'none' || !CONVOLUTION_KERNELS[kernelName]) return;
+    
+    let { kernel, divisor, offset } = CONVOLUTION_KERNELS[kernelName];
+    if (!kernel) return;
+    
+    const amount = params.amount ?? 1;
+    const threshold = params.threshold ?? 0;
+    const strength = params.strength ?? 1;
+    
+    if (kernelName === 'sharpen') {
+        kernel = [
+            0, -1 * amount, 0,
+            -1 * amount, 5 * amount, -1 * amount,
+            0, -1 * amount, 0
+        ];
+        divisor = 1;
+    } else if (kernelName === 'emboss') {
+        const d = strength;
+        kernel = [
+            -2 * d, -1 * d, 0,
+            -1 * d, 1 * d, 1 * d,
+            0, 1 * d, 2 * d
+        ];
+        divisor = 1;
+        offset = 128;
+    }
+    
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const data = imageData.data;
+    const output = new Uint8ClampedArray(data.length);
+    
+    const w = width;
+    const h = height;
+    
+    for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+            for (let c = 0; c < 4; c++) {
+                let sum = 0;
+                for (let ky = -1; ky <= 1; ky++) {
+                    for (let kx = -1; kx <= 1; kx++) {
+                        const px = x + kx;
+                        const py = y + ky;
+                        const idx = (py * w + px) * 4 + c;
+                        const kidx = (ky + 1) * 3 + (kx + 1);
+                        sum += data[idx] * kernel[kidx];
+                    }
+                }
+                const val = sum / divisor + offset;
+                if (kernelName === 'edgeDetect') {
+                    output[(y * w + x) * 4 + c] = val > threshold ? 255 : 0;
+                } else {
+                    output[(y * w + x) * 4 + c] = Math.min(255, Math.max(0, val));
+                }
+            }
+            output[((y * w + x) * 4 + 3)] = data[((y * w + x) * 4 + 3)];
+        }
+    }
+    
+    for (let i = 0; i < data.length; i += 4) {
+        if (output[i] !== 0 || output[i + 1] !== 0 || output[i + 2] !== 0 || output[i + 3] !== 0) {
+            data[i] = output[i];
+            data[i + 1] = output[i + 1];
+            data[i + 2] = output[i + 2];
+        }
+    }
+    
+    ctx.putImageData(imageData, 0, 0);
 }
