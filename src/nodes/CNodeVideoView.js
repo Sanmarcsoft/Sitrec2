@@ -2,7 +2,7 @@
 import {CNodeViewCanvas2D} from "./CNodeViewCanvas";
 import {par} from "../par";
 import {quickToggle} from "../KeyBoardHandler";
-import {CNodeGUIValue} from "./CNodeGUIValue";
+import {CNodeGUIFlag, CNodeGUIValue} from "./CNodeGUIValue";
 import {guiTweaks, NodeMan, setRenderOne, Sit} from "../Globals";
 import {CMouseHandler} from "../CMouseHandler";
 import {CNodeViewUI} from "./CNodeViewUI";
@@ -19,7 +19,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
         // these no longer work with the new rendering pipeline
         // TODO: reimplement them as effects?
-         this.optionalInputs(["brightness", "contrast", "blur", "greyscale"])
+         this.optionalInputs(["brightness", "contrast", "blur", "greyscale", "hue", "invert", "saturate", "enableVideoEffects"])
         //
 
         //  if (this.overlayView === undefined)
@@ -307,17 +307,32 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
                 ctx.imageSmoothingEnabled = false;
 
             var filter = ''
-            if (this.in.contrast){
-                filter += "contrast("+this.in.contrast.v0+") "
-            }
-            if (this.in.brightness){
-                filter += "brightness("+this.in.brightness.v0+") "
-            }
-            if (this.in.blur && this.in.blur.v0 !== 0){
-             filter += "blur("+this.in.blur.v0+"px) "
+            const effectsEnabled = this.in.enableVideoEffects ? this.in.enableVideoEffects.v0 : true;
+            if (effectsEnabled) {
+                if (this.in.contrast && this.in.contrast.v0 !== 1){
+                    filter += "contrast("+this.in.contrast.v0+") "
+                }
+                if (this.in.brightness && this.in.brightness.v0 !== 1){
+                    filter += "brightness("+this.in.brightness.v0+") "
+                }
+                if (this.in.blur && this.in.blur.v0 !== 0){
+                 filter += "blur("+this.in.blur.v0+"px) "
+                }
+                if (this.in.greyscale && this.in.greyscale.v0 !== 0){
+                    filter += "grayscale("+this.in.greyscale.v0+") "
+                }
+                if (this.in.hue && this.in.hue.v0 !== 0){
+                    filter += "hue-rotate("+this.in.hue.v0+"deg) "
+                }
+                if (this.in.invert && this.in.invert.v0 !== 0){
+                    filter += "invert("+this.in.invert.v0+") "
+                }
+                if (this.in.saturate && this.in.saturate.v0 !== 1){
+                    filter += "saturate("+this.in.saturate.v0+") "
+                }
             }
 
-            if (filter != "") ctx.filter = filter;
+            ctx.filter = filter || 'none';
 
             const sourceW = this.videoWidth;
             const sourceH = this.videoHeight
@@ -344,8 +359,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
             }
 
-
-            ctx.filter = '';
+            ctx.filter = 'none';
 
 
         }
@@ -527,13 +541,20 @@ export function addFiltersToVideoNode(videoNode) {
         guiVideoEffectsFolder = guiTweaks.addFolder("Video Adjustments").close().perm();
     }
 
-    let brightness, contrast, blur;
+    let brightness, contrast, blur, greyscale, hue, invert, saturate, enableVideoEffects;
 
     const reset = {
         resetFilters: () => {
             videoNode.inputs.brightness.value = 1;
             videoNode.inputs.contrast.value = 1;
             videoNode.inputs.blur.value = 0;
+            videoNode.inputs.greyscale.value = 0;
+            videoNode.inputs.hue.value = 0;
+            videoNode.inputs.invert.value = 0;
+            videoNode.inputs.saturate.value = 1;
+            if (videoNode.inputs.enableVideoEffects) {
+                videoNode.inputs.enableVideoEffects.value = true;
+            }
             setRenderOne(true);
         }
     }
@@ -542,18 +563,33 @@ export function addFiltersToVideoNode(videoNode) {
         brightness = new CNodeGUIValue({id: "videoBrightness", value: 1, start: 0, end: 5, step: 0.01, desc: "Brightness"}, guiVideoEffectsFolder),
         contrast =  new CNodeGUIValue({id: "videoContrast", value: 1, start: 0, end: 5, step: 0.01, desc: "Contrast"}, guiVideoEffectsFolder),
         blur = new CNodeGUIValue({id: "videoBlur", value: 0, start: 0, end: 20, step: 1, desc: "Blur Px"}, guiVideoEffectsFolder),
+        greyscale = new CNodeGUIValue({id: "videoGreyscale", value: 0, start: 0, end: 1, step: 0.01, desc: "Greyscale"}, guiVideoEffectsFolder),
+        hue = new CNodeGUIValue({id: "videoHue", value: 0, start: 0, end: 360, step: 1, desc: "Hue Rotate"}, guiVideoEffectsFolder),
+        invert = new CNodeGUIValue({id: "videoInvert", value: 0, start: 0, end: 1, step: 0.01, desc: "Invert"}, guiVideoEffectsFolder),
+        saturate = new CNodeGUIValue({id: "videoSaturate", value: 1, start: 0, end: 5, step: 0.01, desc: "Saturate"}, guiVideoEffectsFolder),
+        enableVideoEffects = new CNodeGUIFlag({id: "videoEnableEffects", value: true, desc: "Enable Video Effects"}, guiVideoEffectsFolder),
         guiVideoEffectsFolder.add(reset, "resetFilters").name("Reset Video Adjustments")
     } else {
         brightness = NodeMan.get("videoBrightness");
         contrast = NodeMan.get("videoContrast");
         blur = NodeMan.get("videoBlur");
+        greyscale = NodeMan.get("videoGreyscale");
+        hue = NodeMan.get("videoHue");
+        invert = NodeMan.get("videoInvert");
+        saturate = NodeMan.get("videoSaturate");
+        enableVideoEffects = NodeMan.get("videoEnableEffects");
     }
 
 
     videoNode.addMoreInputs({
         brightness: brightness,
         contrast: contrast,
-        blur: blur
+        blur: blur,
+        greyscale: greyscale,
+        hue: hue,
+        invert: invert,
+        saturate: saturate,
+        enableVideoEffects: enableVideoEffects
     });
 
 
