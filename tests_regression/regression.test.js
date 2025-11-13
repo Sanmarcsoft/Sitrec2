@@ -8,6 +8,7 @@ expect.extend({ toMatchImageSnapshot });
 // Array of test cases: each object contains a name and its corresponding URL.
 const testData = [
     { name: 'default', url: 'https://local.metabunk.org/sitrec/?frame=10' },
+ //   { name: 'WMTS', url: 'https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Regression%20test%20_%20NRL%20WMTS%20%284326%20tiles%29/20251113_181925.js&frame=10' },
     { name: 'agua', url: 'https://local.metabunk.org/sitrec/?sitch=agua&frame=10' },
     { name: 'gimbal', url: 'https://local.metabunk.org/sitrec/?sitch=gimbal&frame=10' },
     { name: 'starlink', url: 'https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Stalink%20Names/20250218_060544.js' },

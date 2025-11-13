@@ -19,7 +19,6 @@ import {NearestFilter} from "three/src/constants";
 import {globalMipmapGenerator} from "./MipmapGenerator";
 import {fastComputeVertexNormals} from "./FastComputeVertexNormals";
 import {fastComputeVertexNormalsAsync} from "./FastComputeVertexNormalsAsync";
-import {applyElevationInterpolationAsync} from "./ApplyElevationInterpolationAsync";
 import {showError} from "./showError";
 import {processTextureColors} from "./TextureColorProcessor";
 import {createTerrainDayNightMaterial} from "./js/map33/material/TerrainDayNightMaterial";
@@ -914,9 +913,12 @@ export class QuadTreeTile {
         }
     }
 
-    // NEW OPTIMIZED VERSION - works with elevation tiles at same or lower zoom levels
-    // Tries exact coordinate match first, then searches parent tiles (lower zoom) and uses tile fractions
-    // Applies elevation data directly from elevation tiles with bilinear interpolation
+
+    // recalculat the X,Y, Z values for all the verticles of a tile
+    // based on the X/Y/Z of the tile
+    // handles cases where the map are both projection is Web Mercator as a special optimazed case
+    // if projections are different, falls back to old method
+    // if they are the same but not Web Mercator, uses optimized method with direct tile elevation lookup
     async recalculateCurve(radius = wgs84.RADIUS) {
 
         this.highestAltitude = 0;
@@ -934,8 +936,16 @@ export class QuadTreeTile {
         if (this.map.options.mapProjection.name !== this.map.elevationMap.options.mapProjection.name)
             return this.recalculateCurveOld(radius);
 
-        // intermediate version wehre both at the same projection but not Web Mercator
-        // NOT WORKING YET
+        // Use optimized version with direct tile elevation lookup
+        // This works when both projections are the same and tiles are aligned
+        return this.recalculateCurveOptimized(radius);
+    }
+
+    // NEW OPTIMIZED VERSION - works with elevation tiles at same or lower zoom levels
+    // Tries exact coordinate match first, then searches parent tiles (lower zoom) and uses tile fractions
+    // Applies elevation data directly from elevation tiles with bilinear interpolation
+    async recalculateCurveOptimized(radius = wgs84.RADIUS) {
+        this.highestAltitude = 0;
 
         var geometry = this.geometry;
         if (this.mesh !== undefined) {
@@ -944,10 +954,8 @@ export class QuadTreeTile {
 
         assert(geometry !== undefined, 'Geometry not defined in QuadTreeTile.js')
 
-        // Get the tile center for relative positioning
         const tileCenter = this.mesh.position;
 
-        // Find elevation tile - try exact match first, then higher zoom levels
         let elevationTile = null;
         let elevationZoom = this.z;
         let tileOffsetX = 0;
@@ -955,13 +963,9 @@ export class QuadTreeTile {
         let tileFractionX = 1.0;
         let tileFractionY = 1.0;
 
-        // First try exact match
         elevationTile = this.map.elevationMap?.getTile(this.x, this.y, this.z);
 
         if (!elevationTile || !elevationTile.elevation) {
-            // Try lower zoom levels (parent tiles with less detailed but available elevation data)
-            // Note: We must calculate parent coordinates mathematically because we're looking up
-            // tiles in a different QuadTree (elevationMap) than this tile belongs to (textureMap)
             let searchX = this.x;
             let searchY = this.y;
             let searchZoom = this.z - 1;
@@ -974,14 +978,12 @@ export class QuadTreeTile {
                 if (candidateTile && candidateTile.elevation) {
                     elevationTile = candidateTile;
                     elevationZoom = searchZoom;
-                    // Calculate which portion of the parent tile this texture tile represents
                     const zoomDiff = this.z - searchZoom;
                     const tilesPerParent = Math.pow(2, zoomDiff);
                     tileOffsetX = this.x % tilesPerParent;
                     tileOffsetY = this.y % tilesPerParent;
                     tileFractionX = 1.0 / tilesPerParent;
                     tileFractionY = 1.0 / tilesPerParent;
-//                    console.log(`Using parent elevation tile ${elevationKey} (zoom ${searchZoom}) for texture tile ${this.key()}`);
                     break;
                 }
 
@@ -990,65 +992,96 @@ export class QuadTreeTile {
         }
 
         if (!elevationTile || !elevationTile.elevation) {
-            // No elevation tile found at any zoom level, fall back to old method
-//            console.warn(`No elevation tile found for ${this.key()} at any zoom level, falling back to interpolated method`);
             return this.recalculateCurveOld(radius);
         }
 
-        // Get dimensions
-        const nPosition = Math.sqrt(geometry.attributes.position.count); // size of side of mesh in points
-        const elevationSize = Math.sqrt(elevationTile.elevation.length); // size of elevation data
+        const nPosition = Math.sqrt(geometry.attributes.position.count);
+        const elevationSize = Math.sqrt(elevationTile.elevation.length);
 
-        // Log the tile information for debugging
-        if (elevationZoom !== this.z) {
-//            console.log(`Tile ${this.key()}: using elevation zoom ${elevationZoom} (${elevationSize}x${elevationSize}) for texture zoom ${this.z} (${nPosition}x${nPosition}), fraction: ${tileFractionX.toFixed(3)}x${tileFractionY.toFixed(3)}`);
-        } else if (nPosition !== elevationSize && nPosition !== elevationSize + 1) {
-//            console.log(`Tile ${this.key()}: geometry ${nPosition}x${nPosition} vertices, elevation ${elevationSize}x${elevationSize} data points`);
+        const xTile = this.x;
+        const yTile = this.y;
+        const zoomTile = this.z;
+
+        for (let i = 0; i < geometry.attributes.position.count; i++) {
+            const xIndex = i % nPosition;
+            const yIndex = Math.floor(i / nPosition);
+
+            let yTileFraction = yIndex / (nPosition - 1);
+            let xTileFraction = xIndex / (nPosition - 1);
+
+            if (xTileFraction >= 1) xTileFraction = 1 - 1e-6;
+            if (yTileFraction >= 1) yTileFraction = 1 - 1e-6;
+
+            const xWorld = xTile + xTileFraction;
+            const yWorld = yTile + yTileFraction;
+
+            const lat = this.map.options.mapProjection.getNorthLatitude(yWorld, zoomTile);
+            const lon = this.map.options.mapProjection.getLeftLongitude(xWorld, zoomTile);
+
+            let elevationLocalX, elevationLocalY;
+
+            if (elevationZoom === zoomTile) {
+                elevationLocalX = xTileFraction * (elevationSize - 1);
+                elevationLocalY = yTileFraction * (elevationSize - 1);
+            } else {
+                const parentOffsetX = (tileOffsetX + xTileFraction) * tileFractionX;
+                const parentOffsetY = (tileOffsetY + yTileFraction) * tileFractionY;
+                elevationLocalX = parentOffsetX * (elevationSize - 1);
+                elevationLocalY = parentOffsetY * (elevationSize - 1);
+            }
+
+            const x0 = Math.floor(elevationLocalX);
+            const x1 = Math.min(elevationSize - 1, x0 + 1);
+            const y0 = Math.floor(elevationLocalY);
+            const y1 = Math.min(elevationSize - 1, y0 + 1);
+
+            const fx = elevationLocalX - x0;
+            const fy = elevationLocalY - y0;
+
+            const e00 = elevationTile.elevation[y0 * elevationSize + x0];
+            const e01 = elevationTile.elevation[y0 * elevationSize + x1];
+            const e10 = elevationTile.elevation[y1 * elevationSize + x0];
+            const e11 = elevationTile.elevation[y1 * elevationSize + x1];
+
+            const e0 = e00 + (e01 - e00) * fx;
+            const e1 = e10 + (e11 - e10) * fx;
+            let elevation = e0 + (e1 - e0) * fy;
+
+            if (this.map.elevationMap.options.zScale) {
+                elevation *= this.map.elevationMap.options.zScale;
+            }
+
+            if (elevation < 0) elevation = 0;
+
+            if (elevation > this.highestAltitude) {
+                this.highestAltitude = elevation;
+            }
+
+            const vertexESU = LLAToEUS(lat, lon, elevation);
+            const vertex = vertexESU.sub(tileCenter);
+
+            assert(!isNaN(vertex.x), 'vertex.x is NaN in QuadTreeTile.js i=' + i);
+            assert(!isNaN(vertex.y), 'vertex.y is NaN in QuadTreeTile.js');
+            assert(!isNaN(vertex.z), 'vertex.z is NaN in QuadTreeTile.js');
+
+            geometry.attributes.position.setXYZ(i, vertex.x, vertex.y, vertex.z);
         }
 
-        // Apply elevation data asynchronously using web worker
-        // This offloads the expensive vertex interpolation calculations (10K+ vertices)
-        // to a background thread, keeping the main thread responsive
-        const elevationResult = await applyElevationInterpolationAsync(
-            geometry,
-            elevationTile,
-            elevationSize,
-            elevationZoom,
-            this.x,
-            this.y,
-            this.z,
-            tileOffsetX,
-            tileOffsetY,
-            tileFractionX,
-            tileFractionY,
-            this.map.elevationMap.options.zScale,
-            tileCenter,
-            this.map.options.mapProjection
-        );
-
-        // Update highest altitude from worker results
-        if (elevationResult && elevationResult.highestAltitude > this.highestAltitude) {
-            this.highestAltitude = elevationResult.highestAltitude;
-        }
-
-        // Generate elevation color texture if needed
         this.generateElevationColorTexture(geometry, elevationTile, elevationSize, tileOffsetX, tileOffsetY, tileFractionX, tileFractionY, elevationZoom).catch(error => {
             console.warn(`Failed to generate elevation color texture for tile ${this.key()}:`, error);
         });
 
-        // Update geometry using async worker for normal computation
         await fastComputeVertexNormalsAsync(geometry).catch(error => {
             console.warn(`Failed to compute vertex normals for tile ${this.key()}:`, error);
         });
+
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
         geometry.attributes.position.needsUpdate = true;
 
-        // Update skirt geometry to match the new main tile geometry
         if (this.skirtMesh && this.skirtGeometry) {
             this.updateSkirtGeometry();
         }
-
     }
 
     // Flat version of recalculateCurve that assumes elevation is always 0
