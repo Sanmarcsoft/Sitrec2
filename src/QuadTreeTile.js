@@ -2890,7 +2890,7 @@ export class QuadTreeTile {
         // Use the same optimized static mipmap material building
         // This ensures we share the same cache and avoid duplicate loads
         const material = await this.buildStaticMipmapMaterial(oceanUrl, oceanSourceDef);
-        return material.map;
+        return material.uniforms.map.value;
     }
 
 
