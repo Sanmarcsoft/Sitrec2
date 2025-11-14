@@ -69,6 +69,14 @@ export class MipmapGenerator {
      * @returns {CanvasTexture} The appropriate mipmap for this zoom level
      */
     generateTiledMipmap(baseTexture, currentZoom, maxZoom, isSeamless = false) {
+        if (!baseTexture) {
+            throw new Error('MipmapGenerator.generateTiledMipmap: baseTexture is undefined or null');
+        }
+
+        if (!baseTexture.uuid) {
+            throw new Error('MipmapGenerator.generateTiledMipmap: baseTexture.uuid is undefined');
+        }
+
         if (currentZoom > maxZoom) {
             console.log(`MipmapGenerator: Using original texture for zoom ${currentZoom} (> maxZoom ${maxZoom})`);
             return baseTexture;

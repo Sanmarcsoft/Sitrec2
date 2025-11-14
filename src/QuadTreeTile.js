@@ -1410,12 +1410,13 @@ export class QuadTreeTile {
                 // First, ensure we have the base texture loaded and cached
                 let baseTexture;
                 if (materialCache.has(baseCacheKey)) {
-                    baseTexture = materialCache.get(baseCacheKey).map;
+                    const cachedMaterial = materialCache.get(baseCacheKey);
+                    baseTexture = cachedMaterial.uniforms?.map?.value;
                 } else {
                     // Check if we're already loading the base texture
                     if (textureLoadPromises.has(baseCacheKey)) {
                         const cachedMaterial = await textureLoadPromises.get(baseCacheKey);
-                        baseTexture = cachedMaterial.map;
+                        baseTexture = cachedMaterial.uniforms?.map?.value;
                     } else {
 
                         // Create and cache the base texture loading promise
@@ -1438,8 +1439,12 @@ export class QuadTreeTile {
 
                         textureLoadPromises.set(baseCacheKey, baseLoadPromise);
                         const cachedMaterial = await baseLoadPromise;
-                        baseTexture = cachedMaterial.map;
+                        baseTexture = cachedMaterial.uniforms?.map?.value;
                     }
+                }
+
+                if (!baseTexture) {
+                    throw new Error(`Failed to load base texture for static mipmap material: baseTexture is ${baseTexture}`);
                 }
 
                 // Generate the appropriate mipmap level for this zoom
