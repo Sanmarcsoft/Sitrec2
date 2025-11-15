@@ -1838,6 +1838,31 @@ export class CCustomManager {
         // Store proxy on building so we can update it when building changes
         building.ridgelineProxy = ridgelineHeightProxy;
         
+        // Create proxy object for ridgeline inset
+        const ridgelineInsetProxy = {
+            _displayValue: building.ridgelineInset,
+            get inset() {
+                return this._displayValue;
+            },
+            set inset(displayValue) {
+                this._displayValue = displayValue;
+            }
+        };
+        
+        // Store controller reference on building so it can be updated
+        building.ridgelineInsetController = heightFolder.add(ridgelineInsetProxy, 'inset', 0, 20, 0.01)
+            .name('Ridgeline Inset')
+            .setUnitType('small')
+            .onChange(() => {
+                // When user changes the controller, get SI value and update building
+                const siValue = building.ridgelineInsetController.getSIValue();
+                building.updateRidgelineInset(siValue);
+            })
+            .listen();
+        
+        // Store proxy on building so we can update it when building changes
+        building.ridgelineInsetProxy = ridgelineInsetProxy;
+        
         // Create menu actions
         const menuData = {
             exitEditMode: () => {

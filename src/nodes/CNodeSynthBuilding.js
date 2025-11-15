@@ -77,6 +77,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         this.cornerLatLons = v.cornerLatLons || [];  // Array of {lat, lon} for 4 corners
         this.roofAGL = v.roofAGL !== undefined ? v.roofAGL : 4;  // Roof height above highest ground point
         this.rooflineHeightAGL = v.rooflineHeightAGL !== undefined ? v.rooflineHeightAGL : 0;  // Additional height of roofline above roof corners
+        this.ridgelineInset = v.ridgelineInset !== undefined ? v.ridgelineInset : 0;  // Distance to move ridgeline ends inward
         this.highPoint = null;  // Cached highest ground point (recalculated as needed)
         
         // THREE.js rendering objects
@@ -329,6 +330,53 @@ export class CNodeSynthBuilding extends CNode3DGroup {
     }
     
     /**
+     * Update ridgeline inset from GUI slider
+     * This moves the ridgeline endpoints inward along the ridgeline
+     */
+    updateRidgelineInset(newInset) {
+        this.ridgelineInset = newInset;
+        
+        // Update roofline vertices (which now applies the inset)
+        this.updateRooflineVertices();
+        
+        // Rebuild mesh and controls
+        this.buildMesh();
+        if (this.editMode) {
+            this.createControlPoints();
+        }
+        
+        // Update GUI controllers
+        this.updateGUIControllers();
+        
+        setRenderOne(true);
+        saveSettings();
+    }
+    
+    /**
+     * Calculate the inset ridgeline position by moving endpoints inward
+     * @param {Vector3} basePos - The midpoint of the roof edge (without inset)
+     * @param {Vector3} otherBasePos - The other ridgeline endpoint (for calculating inset direction)
+     * @returns {Vector3} The inset position
+     */
+    calculateInsetRidgelinePosition(basePos, otherBasePos) {
+        if (this.ridgelineInset === 0) {
+            return basePos.clone();
+        }
+        
+        // Direction from basePos towards otherBasePos (along the ridgeline)
+        const direction = otherBasePos.clone().sub(basePos);
+        const ridgelineLength = direction.length();
+        
+        if (ridgelineLength === 0) {
+            return basePos.clone();
+        }
+        
+        // Normalize and move inward
+        const normalizedDir = direction.normalize();
+        return basePos.clone().add(normalizedDir.multiplyScalar(this.ridgelineInset));
+    }
+    
+    /**
      * Update roofline vertex positions based on current rooflineHeightAGL
      */
     updateRooflineVertices() {
@@ -361,6 +409,10 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             // Update proxy display value from building's SI values
             const totalHeight = this.roofAGL + this.rooflineHeightAGL;
             this.ridgelineHeightController.setSIValue(totalHeight);
+        }
+        if (this.ridgelineInsetController) {
+            // Update proxy display value from building's SI value
+            this.ridgelineInsetController.setSIValue(this.ridgelineInset);
         }
     }
     
@@ -528,6 +580,9 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         
         // roof1: midpoint between top corners 4 and 5
         const roof1Base = roofCorners[0].clone().add(roofCorners[1]).multiplyScalar(0.5);
+        // roof2: midpoint between top corners 6 and 7
+        const roof2Base = roofCorners[2].clone().add(roofCorners[3]).multiplyScalar(0.5);
+        
         const roof1Up = getLocalUpVector(roof1Base);
         const roof1Pos = pointAbove(roof1Base, this.rooflineHeightAGL);
         
@@ -539,8 +594,6 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             linkedVertex: 9
         });
         
-        // roof2: midpoint between top corners 6 and 7
-        const roof2Base = roofCorners[2].clone().add(roofCorners[3]).multiplyScalar(0.5);
         const roof2Up = getLocalUpVector(roof2Base);
         const roof2Pos = pointAbove(roof2Base, this.rooflineHeightAGL);
         
@@ -639,10 +692,13 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             // Flat roof: single quad
             this.faces.push({indices: [7, 6, 5, 4], type: 'roof'});  // Top face (reversed - normal points up/out)
         } else {
+            // Determine if gable triangles should be roof color (when ridgelineInset is applied)
+            const gableType = this.ridgelineInset !== 0 ? 'roof' : 'wall';
+            
             // From gable: vertices 4, 5, roof1 (8)
-            this.faces.push({indices: [8, 5, 4], type: 'wall'});
+            this.faces.push({indices: [8, 5, 4], type: gableType});
             // Back gable: vertices 6, 7, roof2 (9)
-            this.faces.push({indices: [9, 7, 6], type: 'wall'});
+            this.faces.push({indices: [9, 7, 6], type: gableType});
             // Roof 1: vertices 5, 6, roof2 (9), roof1 (8)
             this.faces.push({indices: [8, 9, 6, 5], type: 'roof'});
             // Roof 2: vertices 7, 4, roof1 (8), roof2 (9)
@@ -698,14 +754,37 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         // Recompute edges to include roof faces
         this.computeEdges();
         
+        // Helper function to get position with inset applied
+        const getPositionWithInset = (idx) => {
+            const vertex = this.vertices[idx];
+            let pos = vertex.position;
+            
+            if ((idx === 8 || idx === 9) && vertex.type === 'roofline' && this.ridgelineInset !== 0) {
+                const roof1EdgePos = this.vertices[4].position.clone().add(this.vertices[5].position).multiplyScalar(0.5);
+                const roof2EdgePos = this.vertices[6].position.clone().add(this.vertices[7].position).multiplyScalar(0.5);
+                
+                if (idx === 8) {
+                    pos = this.calculateInsetRidgelinePosition(roof1EdgePos, roof2EdgePos)
+                        .add(getLocalUpVector(this.calculateInsetRidgelinePosition(roof1EdgePos, roof2EdgePos))
+                            .multiplyScalar(this.rooflineHeightAGL));
+                } else {
+                    pos = this.calculateInsetRidgelinePosition(roof2EdgePos, roof1EdgePos)
+                        .add(getLocalUpVector(this.calculateInsetRidgelinePosition(roof2EdgePos, roof1EdgePos))
+                            .multiplyScalar(this.rooflineHeightAGL));
+                }
+            }
+            
+            return pos;
+        };
+        
         // Create BufferGeometry from vertices and faces
         const geometry = new BufferGeometry();
         
-        // Build position buffer first
+        // Build position buffer, applying ridgeline inset to roof vertices
         const positions = [];
-        this.vertices.forEach(vertex => {
-            const v = vertex.position;
-            positions.push(v.x, v.y, v.z);
+        this.vertices.forEach((vertex, idx) => {
+            const pos = getPositionWithInset(idx);
+            positions.push(pos.x, pos.y, pos.z);
         });
         geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
         
@@ -759,8 +838,8 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         const edgeGeometry = new BufferGeometry();
         const edgePositions = [];
         this.edges.forEach(edge => {
-            const v0 = this.vertices[edge.v0].position;
-            const v1 = this.vertices[edge.v1].position;
+            const v0 = getPositionWithInset(edge.v0);
+            const v1 = getPositionWithInset(edge.v1);
             edgePositions.push(v0.x, v0.y, v0.z);
             edgePositions.push(v1.x, v1.y, v1.z);
         });
@@ -1102,6 +1181,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             // Clear controller references
             this.roofEdgeHeightController = null;
             this.ridgelineHeightController = null;
+            this.ridgelineInsetController = null;
             
             // Hide GUI folder
             if (this.guiFolder) {
@@ -1120,7 +1200,8 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         return {
             cornerLatLons: this.cornerLatLons.map(c => ({lat: c.lat, lon: c.lon})),
             roofAGL: this.roofAGL,
-            rooflineHeightAGL: this.rooflineHeightAGL
+            rooflineHeightAGL: this.rooflineHeightAGL,
+            ridgelineInset: this.ridgelineInset
         };
     }
     
@@ -1133,6 +1214,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         this.cornerLatLons = state.cornerLatLons.map(c => ({lat: c.lat, lon: c.lon}));
         this.roofAGL = state.roofAGL;
         this.rooflineHeightAGL = state.rooflineHeightAGL;
+        this.ridgelineInset = state.ridgelineInset !== undefined ? state.ridgelineInset : 0;
         
         // Recalculate all vertices from terrain
         this.recalculateVerticesFromTerrain();
@@ -1646,6 +1728,9 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             // Snap ground vertices to terrain after rotation
             this.snapGroundVerticesToTerrain();
             
+            // Reapply ridgeline inset to roofline vertices after rotation
+            this.updateRooflineVertices();
+            
             // Rebuild mesh
             this.buildMesh();
             
@@ -1758,14 +1843,19 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                 
                 if (isRoofline) {
                     // For roofline handle, calculate height ABOVE the roof edge (top vertices)
-                    // Get the roof edge position (midpoint between top vertices 4 and 5)
+                    // Get the roof edge positions (midpoints between top vertices)
                     const top4 = this.vertices[4];
                     const top5 = this.vertices[5];
-                    const roofEdgePos = top4.position.clone().add(top5.position).multiplyScalar(0.5);
-                    const localUp = getLocalUpVector(roofEdgePos);
+                    const top6 = this.vertices[6];
+                    const top7 = this.vertices[7];
+                    
+                    const roof1EdgePos = top4.position.clone().add(top5.position).multiplyScalar(0.5);
+                    const roof2EdgePos = top6.position.clone().add(top7.position).multiplyScalar(0.5);
+                    
+                    const localUp = getLocalUpVector(roof1EdgePos);
                     
                     // Calculate what the new height ABOVE THE ROOF EDGE would be
-                    const toRoofline = newPosition.clone().sub(roofEdgePos);
+                    const toRoofline = newPosition.clone().sub(roof1EdgePos);
                     let newHeightAboveRoof = toRoofline.dot(localUp);
                     
                     // Don't let roofline go below the roof edge (minimum 0)
@@ -1778,15 +1868,11 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                     const roof2 = this.vertices[9];
                     
                     if (roof1 && roof1.type === 'roofline') {
-                        // roof1 is at midpoint between top vertices 4 and 5
-                        const roof1EdgePos = this.vertices[4].position.clone().add(this.vertices[5].position).multiplyScalar(0.5);
                         const upVector1 = getLocalUpVector(roof1EdgePos);
                         roof1.position.copy(roof1EdgePos.clone().add(upVector1.multiplyScalar(newHeightAboveRoof)));
                     }
                     
                     if (roof2 && roof2.type === 'roofline') {
-                        // roof2 is at midpoint between top vertices 6 and 7
-                        const roof2EdgePos = this.vertices[6].position.clone().add(this.vertices[7].position).multiplyScalar(0.5);
                         const upVector2 = getLocalUpVector(roof2EdgePos);
                         roof2.position.copy(roof2EdgePos.clone().add(upVector2.multiplyScalar(newHeightAboveRoof)));
                     }
@@ -2005,11 +2091,11 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                     
                     // Update roof1 position (at midpoint between top vertices 4 and 5)
                     const newRoof1EdgePos = this.vertices[4].position.clone().add(this.vertices[5].position).multiplyScalar(0.5);
+                    const newRoof2EdgePos = this.vertices[6].position.clone().add(this.vertices[7].position).multiplyScalar(0.5);
                     const upVector1 = getLocalUpVector(newRoof1EdgePos);
                     roof1.position.copy(newRoof1EdgePos.clone().add(upVector1.multiplyScalar(currentRoof1HeightAboveRoof)));
                     
                     // Update roof2 position (at midpoint between top vertices 6 and 7)
-                    const newRoof2EdgePos = this.vertices[6].position.clone().add(this.vertices[7].position).multiplyScalar(0.5);
                     const upVector2 = getLocalUpVector(newRoof2EdgePos);
                     roof2.position.copy(newRoof2EdgePos.clone().add(upVector2.multiplyScalar(currentRoof1HeightAboveRoof)));
                 }
@@ -2273,6 +2359,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             cornerLatLons: serialized.cornerLatLons,
             roofAGL: serialized.roofAGL,
             rooflineHeightAGL: serialized.rooflineHeightAGL,
+            ridgelineInset: serialized.ridgelineInset,
             material: serialized.material,
             wallColor: serialized.wallColor,
             roofColor: serialized.roofColor,
@@ -2315,6 +2402,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             cornerLatLons: this.cornerLatLons.map(c => ({lat: c.lat, lon: c.lon})),
             roofAGL: this.roofAGL,
             rooflineHeightAGL: this.rooflineHeightAGL,
+            ridgelineInset: this.ridgelineInset,
             material: this.materialType,
             wallColor: this.wallColor,
             roofColor: this.roofColor,
@@ -2338,6 +2426,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                 cornerLatLons: data.cornerLatLons.map(c => ({lat: c.lat, lon: c.lon})),
                 roofAGL: data.roofAGL !== undefined ? data.roofAGL : 4,
                 rooflineHeightAGL: data.rooflineHeightAGL !== undefined ? data.rooflineHeightAGL : 0,
+                ridgelineInset: data.ridgelineInset !== undefined ? data.ridgelineInset : 0,
                 material: data.material,
                 wallColor: data.wallColor,
                 roofColor: data.roofColor,
