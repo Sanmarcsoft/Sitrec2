@@ -64,6 +64,7 @@ export class CVideoWebCodecBase extends CVideoData {
         this.decodeFrameIndex = 0; // Simple counter for decode order
         this.c_tmp = null; // Temporary canvas (if used)
         this.ctx_tmp = null; // Temporary canvas context (if used)
+        this.audioHandler = null; // Reference to audio handler (set by subclasses)
     }
 
     /**
@@ -426,6 +427,16 @@ export class CVideoWebCodecBase extends CVideoData {
 
         if (group.loaded || group.pending > 0)
             return;
+
+        // Check if audio is playing and not muted - if so, defer video decoding
+        if (this.audioHandler && this.audioHandler.isPlaying && !this.audioHandler.isMuted) {
+            // Check if audio buffer is ready
+            if (!this.audioHandler._bufferCreatedSuccessfully || !this.audioHandler.audioBuffer) {
+                // Audio is still being prepared, defer video decoding
+                this.handleBusyDecoder(group);
+                return;
+            }
+        }
 
         // Check if decoder is busy
         if (this.decoder.decodeQueueSize > 0) {

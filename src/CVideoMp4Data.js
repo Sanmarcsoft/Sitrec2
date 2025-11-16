@@ -5,6 +5,7 @@ import {CVideoWebCodecBase} from "./CVideoWebCodecBase";
 import {updateSitFrames} from "./UpdateSitFrames";
 import {EventManager} from "./CEventManager";
 import {showError} from "./showError";
+import {CAudioMp4Data} from "./CAudioMp4Data";
 
 // MP4 video data handler using WebCodec API
 // Handles MP4/MOV files with demuxing and frame caching
@@ -17,6 +18,8 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
         if (this.incompatible) {
             return;
         }
+
+        this.audioHandler = null;
 
         let source = new MP4Source()
 
@@ -136,61 +139,131 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
             this.decoder.configure(config);
 
             // NOT HANDLED YET - get the rotation angle from the video matrix
-            this.angle = getRotationAngleFromVideoMatrix(demuxer.track.matrix);
+            this.angle = getRotationAngleFromVideoMatrix(demuxer.videoTrack.matrix);
 
+            // Initialize audio handler
+            console.log("Creating audio handler");
+            this.audioHandler = new CAudioMp4Data(this);
+            
+            const completeExtraction = () => {
+                const waitForAudioDecoding = () => {
+                    // Check if audio decoding is complete
+                    if (this.audioHandler && this.audioHandler.checkDecodingComplete()) {
+                        console.log("Audio decoding confirmed complete, proceeding with video load");
+                        finishLoading();
+                    } else if (this.audioHandler && this.audioHandler.expectedAudioSamples > 0) {
+                        // Still waiting for audio decoding, check again in 50ms
+                        console.log("Waiting for audio decoding... received", this.audioHandler.receivedEncodedSamples, "/", this.audioHandler.expectedAudioSamples, "encoded, decoded", this.audioHandler.decodedAudioData.length);
+                        setTimeout(waitForAudioDecoding, 50);
+                    } else {
+                        // No audio, proceed immediately
+                        console.log("No audio or audio not initialized, proceeding with video load");
+                        finishLoading();
+                    }
+                };
+                
+                const finishLoading = () => {
+                    // at this point demuxing should be done, so we should have an accurate frame count
+                    // note, that's only true if we are not loading the video async
+                    // (i.e. the entire video is loaded before we start decoding)
+                    console.log("Demuxing done (assuming not async loading), frames = " + this.frames + ", Sit.videoFrames = " + Sit.videoFrames)
+                    console.log("Demuxer calculated frames as " + demuxer.source.totalFrames)
+                    //assert(this.frames === demuxer.source.totalFrames, "Frames mismatch between demuxer and decoder"+this.frames+"!="+demuxer.source.totalFrames)
 
-            demuxer.start((chunk) => {
-                // The demuxer will call this for each chunk it demuxes
-                // essentiall it's iterating through the frames
-                // each chunk is either a key frame or a delta frame
-                chunk.frameNumber = this.demuxFrame++
-                this.chunks.push(chunk)
+                    // use the demuxer frame count, as it's more accurate
+                    Sit.videoFrames = demuxer.source.totalFrames * this.videoSpeed;
 
-                if (chunk.type === "key") {
-                    this.groups.push({
-                            frame: this.chunks.length - 1,  // first frame of this group
-                            length: 1,                      // for now, increase with each delta demuxed
-                            pending: 0,                     // how many frames requested and pending
-                            loaded: false,                  // set when all the frames in the group are loaded
-                            timestamp: chunk.timestamp,
-                        }
-                    )
-                } else {
-                    const lastGroup = this.groups[this.groups.length - 1]
-                    assert(chunk.timestamp >= lastGroup.timestamp, "out of group chunk timestamp")
-                    lastGroup.length++;
+                    // also update the fps
+                    Sit.fps = demuxer.source.fps;
+
+                    updateSitFrames()
+
+                    this.loadedCallback();
+
+                    // console.log("🍿🍿🍿Dispatching videoLoaded event")
+                    EventManager.dispatchEvent("videoLoaded", {videoData: this, width: config.codedWidth, height: config.codedHeight});
+                };
+                
+                waitForAudioDecoding();
+            };
+            
+            this.audioHandler.initializeAudio(demuxer).then(() => {
+                console.log("Audio handler initialized, starting extraction with both video and audio");
+                
+                // Set expected audio sample count for the audio handler
+                if (demuxer.audioTrack) {
+                    this.audioHandler.setExpectedAudioSamples(demuxer.audioTrack.nb_samples);
                 }
+                
+                // Now start extraction with both video and audio callbacks
+                demuxer.start(
+                    (chunk) => {
+                        // The demuxer will call this for each chunk it demuxes
+                        // essentiall it's iterating through the frames
+                        // each chunk is either a key frame or a delta frame
+                        chunk.frameNumber = this.demuxFrame++
+                        this.chunks.push(chunk)
 
-                // console.log(this.chunks.length - 1 + ": Demuxer got a " + chunk.type + " chunk, timestamp=" + chunk.timestamp +
-                //      ", duration = " + chunk.duration + ", byteLength = " + chunk.byteLength)
+                        if (chunk.type === "key") {
+                            this.groups.push({
+                                    frame: this.chunks.length - 1,  // first frame of this group
+                                    length: 1,                      // for now, increase with each delta demuxed
+                                    pending: 0,                     // how many frames requested and pending
+                                    loaded: false,                  // set when all the frames in the group are loaded
+                                    timestamp: chunk.timestamp,
+                                }
+                            )
+                        } else {
+                            const lastGroup = this.groups[this.groups.length - 1]
+                            assert(chunk.timestamp >= lastGroup.timestamp, "out of group chunk timestamp")
+                            lastGroup.length++;
+                        }
 
-                this.frames++;
-                Sit.videoFrames = this.frames * this.videoSpeed;
-                // Sit.aFrame = 0;
-                // Sit.bFrame = Sit.videoFrames-1;
+                        // console.log(this.chunks.length - 1 + ": Demuxer got a " + chunk.type + " chunk, timestamp=" + chunk.timestamp +
+                        //      ", duration = " + chunk.duration + ", byteLength = " + chunk.byteLength)
 
-                // decoding is now deferred
-                //            decoder.decode(chunk);
-            })
-            // at this point demuxing should be done, so we should have an accurate frame count
-            // note, that's only true if we are not loading the video async
-            // (i.e. the entire video is loaded before we start decoding)
-            console.log("Demuxing done (assuming not async loading), frames = " + this.frames + ", Sit.videoFrames = " + Sit.videoFrames)
-            console.log("Demuxer calculated frames as " + demuxer.source.totalFrames)
-            //assert(this.frames === demuxer.source.totalFrames, "Frames mismatch between demuxer and decoder"+this.frames+"!="+demuxer.source.totalFrames)
+                        this.frames++;
+                        Sit.videoFrames = this.frames * this.videoSpeed;
+                        // Sit.aFrame = 0;
+                        // Sit.bFrame = Sit.videoFrames-1;
 
-            // use the demuxer frame count, as it's more accurate
-            Sit.videoFrames = demuxer.source.totalFrames * this.videoSpeed;
+                        // decoding is now deferred
+                        //            decoder.decode(chunk);
+                    },
+                    (track_id, samples) => {
+                        // Audio samples callback
+                        console.log("Audio samples callback received with", samples.length, "samples");
+                        if (this.audioHandler) {
+                            this.audioHandler.decodeAudioSamples(samples, demuxer);
+                        }
+                    },
+                    completeExtraction
+                );
+            }).catch(e => {
+                console.warn("Audio initialization failed:", e);
+                // Still start video extraction if audio fails
+                demuxer.start((chunk) => {
+                    chunk.frameNumber = this.demuxFrame++
+                    this.chunks.push(chunk)
 
-            // also update the fps
-            Sit.fps = demuxer.source.fps;
-
-            updateSitFrames()
-
-            this.loadedCallback();
-
-            // console.log("🍿🍿🍿Dispatching videoLoaded event")
-            EventManager.dispatchEvent("videoLoaded", {videoData: this, width: config.codedWidth, height: config.codedHeight});
+                    if (chunk.type === "key") {
+                        this.groups.push({
+                                frame: this.chunks.length - 1,
+                                length: 1,
+                                pending: 0,
+                                loaded: false,
+                                timestamp: chunk.timestamp,
+                            }
+                        )
+                    } else {
+                        const lastGroup = this.groups[this.groups.length - 1]
+                        assert(chunk.timestamp >= lastGroup.timestamp, "out of group chunk timestamp")
+                        lastGroup.length++;
+                    }
+                    this.frames++;
+                    Sit.videoFrames = this.frames * this.videoSpeed;
+                }, null, completeExtraction);
+            });
 
         });
 
@@ -218,7 +291,13 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
             + (group.pending ? "pending = " + group.pending : "");
     }
 
-
+    dispose() {
+        if (this.audioHandler) {
+            this.audioHandler.dispose();
+            this.audioHandler = null;
+        }
+        super.dispose();
+    }
 
 }
 

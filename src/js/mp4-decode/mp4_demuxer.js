@@ -12,7 +12,12 @@ export class MP4Source {
 
     this.info = null;
     this._info_resolver = null;
-
+    this._extractedTracks = new Set();
+    this._extractionCompleteCallback = null;
+    this._expectedVideoSamples = 0;
+    this._expectedAudioSamples = 0;
+    this._receivedVideoSamples = 0;
+    this._receivedAudioSamples = 0;
   }
 
   loadURI(uri, callback, error) {
@@ -81,6 +86,8 @@ export class MP4Source {
 
       this.totalFrames = videoTrack.nb_samples;
       console.log('Estimated Number of Frames: ', this.totalFrames);
+      
+      this._expectedVideoSamples = videoTrack.nb_samples;
 
       var framesPerSecond = this.totalFrames / this.durationInSeconds;
       // we want whole numbers like 30,60,50,25,24, or NTSC 29.97
@@ -96,9 +103,14 @@ export class MP4Source {
             console.warn('Invalid frame rate: ', framesPerSecond, " setting to 30");
             this.fps = 30;
         }
+    }
 
-
-
+    var audioTrack = info.tracks.find(track => track.type === 'audio');
+    if (audioTrack) {
+      console.log('Audio track found:', audioTrack);
+      this.audioTrack = audioTrack;
+      this._expectedAudioSamples = audioTrack.nb_samples;
+      console.log('Expected audio samples:', this._expectedAudioSamples);
     }
 
     if (this._info_resolver) {
@@ -126,23 +138,96 @@ export class MP4Source {
 
   start(track, onChunk) {
     this._onChunk = onChunk;
+    this.videoTrackId = track.id;
     this.file.setExtractionOptions(track.id);
-    this.file.start();
+    if (!this._extractionStarted) {
+      this.file.start();
+      this._extractionStarted = true;
+    }
+  }
+
+  startWithAudio(videoTrack, audioTrack, onChunk, onAudioSamples) {
+    this._onChunk = onChunk;
+    this._onAudioSamples = onAudioSamples;
+    this.videoTrackId = videoTrack.id;
+    
+    console.log("MP4Source.startWithAudio: videoTrack.id=", videoTrack.id);
+    
+    this.file.setExtractionOptions(videoTrack.id);
+    
+    if (audioTrack) {
+      this.audioTrackId = audioTrack.id;
+      console.log("MP4Source.startWithAudio: audioTrack.id=", audioTrack.id, "setting extraction options");
+      this.file.setExtractionOptions(audioTrack.id);
+    } else {
+      console.warn("MP4Source.startWithAudio: no audioTrack provided");
+    }
+    
+    if (!this._extractionStarted) {
+      console.log("MP4Source.startWithAudio: calling file.start()");
+      this.file.start();
+      this._extractionStarted = true;
+    }
+  }
+
+  startAudio(track, onAudioChunk, onAudioSamples) {
+    this._onAudioChunk = onAudioChunk;
+    this._onAudioSamples = onAudioSamples;
+    this.audioTrackId = track.id;
+    this.file.setExtractionOptions(track.id);
+    if (!this._extractionStarted) {
+      this.file.start();
+      this._extractionStarted = true;
+    }
   }
 
   onSamples(track_id, ref, samples) {
-    for (const sample of samples) {
-      const type = sample.is_sync ? "key" : "delta";
+    if (track_id === this.videoTrackId) {
+      this._receivedVideoSamples += samples.length;
+      for (const sample of samples) {
+        const type = sample.is_sync ? "key" : "delta";
 
-      const chunk = new EncodedVideoChunk({
-        type: type,
-        timestamp: sample.cts,
-        duration: sample.duration,
-        data: sample.data
-      });
+        const chunk = new EncodedVideoChunk({
+          type: type,
+          timestamp: sample.cts,
+          duration: sample.duration,
+          data: sample.data
+        });
 
-      this._onChunk(chunk);
+        this._onChunk(chunk);
+      }
+    } else if (track_id === this.audioTrackId) {
+      this._receivedAudioSamples += samples.length;
+      if (this._onAudioSamples) {
+        console.log("MP4Source.onSamples: routing", samples.length, "audio samples to callback (total:", this._receivedAudioSamples, "/", this._expectedAudioSamples, ")");
+        this._onAudioSamples(track_id, samples);
+      } else {
+        console.warn("MP4Source.onSamples: audio track_id=", track_id, "but no _onAudioSamples callback");
+      }
+    } else {
+      console.log("MP4Source.onSamples: received track_id=", track_id, "videoTrackId=", this.videoTrackId, "audioTrackId=", this.audioTrackId);
     }
+    
+    this._checkExtractionComplete();
+  }
+  
+  _checkExtractionComplete() {
+    if (!this._extractionCompleteCallback) return;
+    
+    const videoComplete = this._expectedVideoSamples > 0 && this._receivedVideoSamples >= this._expectedVideoSamples;
+    const audioComplete = this._expectedAudioSamples === 0 || this._receivedAudioSamples >= this._expectedAudioSamples;
+    
+    if (videoComplete && audioComplete) {
+      console.log("Extraction complete: video=", this._receivedVideoSamples, "/", this._expectedVideoSamples, "audio=", this._receivedAudioSamples, "/", this._expectedAudioSamples);
+      const callback = this._extractionCompleteCallback;
+      this._extractionCompleteCallback = null;
+      callback();
+    }
+  }
+  
+  onExtractionComplete(callback) {
+    this._extractionCompleteCallback = callback;
+    this._checkExtractionComplete();
   }
 }
 
@@ -184,6 +269,30 @@ export class MP4Demuxer {
 
   constructor(source) {
     this.source = source;
+    this.audioTrack = null;
+    this._extractionStarted = false;
+    this.videoTrackId = null;
+    this.audioTrackId = null;
+    this.videoTrack = null;
+    this._audioCallbackReady = false;
+    this._pendingAudioCallback = null;
+    this._extractionComplete = false;
+    this._completionResolvers = [];
+  }
+
+  onExtractionComplete() {
+    this._extractionComplete = true;
+    this._completionResolvers.forEach(resolve => resolve());
+    this._completionResolvers = [];
+  }
+
+  waitForExtractionComplete() {
+    if (this._extractionComplete) {
+      return Promise.resolve();
+    }
+    return new Promise(resolve => {
+      this._completionResolvers.push(resolve);
+    });
   }
 
   getExtradata(avccBox) {
@@ -223,21 +332,58 @@ export class MP4Demuxer {
 
   async getConfig() {
     let info = await this.source.getInfo();
-    this.track = info.videoTracks[0];
+    this.videoTrack = info.videoTracks[0];
 
     var extradata = this.getExtradata(this.source.getAvccBox());
 
     let config = {
-      codec: this.track.codec,
-      codedHeight: this.track.video.height,
-      codedWidth: this.track.video.width,
+      codec: this.videoTrack.codec,
+      codedHeight: this.videoTrack.video.height,
+      codedWidth: this.videoTrack.video.width,
       description: extradata,
     }
 
     return Promise.resolve(config);
   }
 
-  start(onChunk) {
-    this.source.start(this.track, onChunk);
+  start(onChunk, onAudioSamples, onComplete) {
+    this._pendingAudioCallback = onAudioSamples;
+    this.source.startWithAudio(this.videoTrack, this.audioTrack, onChunk, onAudioSamples);
+    
+    if (onComplete) {
+      this.source.onExtractionComplete(onComplete);
+    }
+  }
+
+  async getAudioConfig() {
+    let info = await this.source.getInfo();
+    
+    // Get audio track from the source (which was set in onReady)
+    this.audioTrack = this.source.audioTrack;
+    
+    if (!this.audioTrack) {
+      console.log("No audio track found in MP4Source");
+      return null;
+    }
+
+    if (!this.audioTrack.audio) {
+      console.warn("Audio track missing audio property");
+      return null;
+    }
+    
+    let config = {
+      codec: this.audioTrack.codec,
+      numberOfChannels: this.audioTrack.audio.channel_count,
+      sampleRate: this.audioTrack.audio.sample_rate,
+    };
+
+    return config;
+  }
+
+  startAudio(onAudioSamples) {
+    if (!this.audioTrack) {
+      return;
+    }
+    this.source.startAudio(this.audioTrack, null, onAudioSamples);
   }
 }

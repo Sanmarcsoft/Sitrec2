@@ -38,6 +38,9 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
         this.videoSpeed = v.videoSpeed ?? 1; // default to 1x speed
 
+        this.lastAudioSyncFrame = -1;
+        this.wasPlayingLastFrame = false;
+
         this.setupMouseHandler();
 
         // if it's an overlay view then we don't need to add the overlay UI view
@@ -253,6 +256,26 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         this.staticURL = undefined; // clear the static URL, so we will rehost any dropped file
     }
 
+    syncAudioWithVideo(frame) {
+        if (!this.videoData || !this.videoData.audioHandler) {
+            return;
+        }
+
+        const isPlaying = !par.paused;
+        const frameChanged = Math.abs(frame - this.lastAudioSyncFrame) > 0.5;
+
+        if (frameChanged || isPlaying !== this.wasPlayingLastFrame) {
+            this.lastAudioSyncFrame = frame;
+            this.wasPlayingLastFrame = isPlaying;
+
+            if (isPlaying) {
+                this.videoData.audioHandler.play(Math.floor(frame), Sit.fps);
+            } else {
+                this.videoData.audioHandler.pause();
+            }
+        }
+    }
+
 
     makeImageVideo(filename, img, deleteAfterUsing = false) {
 
@@ -283,6 +306,9 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
         // if no video file, this is just a drop target for now
         if (!this.videoData) return;
+
+        this.syncAudioWithVideo(frame);
+
         this.videoData.update()
         const image = this.videoData.getImage(frame);
         if (image) {
