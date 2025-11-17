@@ -5,13 +5,15 @@ import {EventManager} from "./CEventManager.js";
 import {updateSitFrames} from "./UpdateSitFrames";
 
 /**
- * Audio-only video class that plays audio files (mp4, m4a) with a black video frame
+ * Audio-only video class that plays audio files (mp4, m4a, mp3) with a black video frame
  * Extends CVideoAndAudio to provide audio playback with minimal video overhead
  * 
  * Key features:
- * - Supports MP4 and M4A audio files
- * - Returns black frames for video display
- * - Full audio playback functionality
+ * - Supports MP4, M4A, and MP3 audio files
+ * - MP3 files decoded using WebAudio API decodeAudioData for smooth playback
+ * - M4A/MP4 files decoded using WebCodec AudioDecoder
+ * - Returns black frames with waveform visualization
+ * - Full audio playback functionality with precise synchronization
  * - Minimal memory usage (no video decoding)
  * - Compatible with existing video player controls
  */
@@ -132,134 +134,207 @@ export class CVideoAudioOnly extends CVideoAndAudio {
     }
     
     /**
-     * Load MP3 file using HTML5 Audio element
+     * Load MP3 file using WebAudio API
      * @param {File} file - The MP3 file to load
      */
     loadMP3File(file) {
-        const url = URL.createObjectURL(file);
-        this.loadMP3URL(url, true);
+        console.log(`[CVideoAudioOnly.loadMP3File] Starting: ${file.name}, size=${file.size}`);
+        const reader = new FileReader();
+        reader.readAsArrayBuffer(file);
+        reader.onloadend = () => {
+            const arrayBuffer = reader.result;
+            console.log(`[CVideoAudioOnly.loadMP3File] File read complete, buffer size=${arrayBuffer.byteLength}`);
+            this.decodeMP3Audio(arrayBuffer);
+        };
+        reader.onerror = (error) => {
+            console.error(`[CVideoAudioOnly.loadMP3File] FileReader error:`, error);
+            if (this.errorCallback) {
+                this.errorCallback(error);
+            }
+        };
     }
     
     /**
-     * Load MP3 from URL using HTML5 Audio element
+     * Load MP3 from URL using WebAudio API
      * @param {string} url - The URL of the MP3 file
-     * @param {boolean} isObjectURL - Whether the URL is an object URL that needs cleanup
      */
-    loadMP3URL(url, isObjectURL = false) {
-        console.log(`[CVideoAudioOnly.loadMP3URL] Starting: url=${url}, isObjectURL=${isObjectURL}`);
-        // Create an audio element to get duration and metadata
-        const audio = new Audio();
-        audio.src = url;
+    loadMP3URL(url) {
+        console.log(`[CVideoAudioOnly.loadMP3URL] Starting: url=${url}`);
+        fetch(url)
+            .then(response => response.arrayBuffer())
+            .then(arrayBuffer => {
+                console.log(`[CVideoAudioOnly.loadMP3URL] Fetch complete, buffer size=${arrayBuffer.byteLength}`);
+                this.decodeMP3Audio(arrayBuffer);
+            })
+            .catch(error => {
+                console.error(`[CVideoAudioOnly.loadMP3URL] Fetch error:`, error);
+                if (this.errorCallback) {
+                    this.errorCallback(error);
+                }
+            });
+    }
+    
+    /**
+     * Decode MP3 audio data using WebAudio API
+     * @param {ArrayBuffer} arrayBuffer - The MP3 audio data
+     */
+    async decodeMP3Audio(arrayBuffer) {
+        console.log(`[CVideoAudioOnly.decodeMP3Audio] Starting decode...`);
         
-        audio.addEventListener('loadedmetadata', () => {
-            console.log(`[CVideoAudioOnly.loadMP3URL] loadedmetadata event fired, duration=${audio.duration}s`);
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
             
-            // Calculate frame count based on audio duration
-            this.frames = Math.ceil(audio.duration * this.originalFps);
-            this.frames = Math.max(1, this.frames); // At least 1 frame
+            console.log(`[CVideoAudioOnly.decodeMP3Audio] Decode complete: duration=${audioBuffer.duration}s, sampleRate=${audioBuffer.sampleRate}, channels=${audioBuffer.numberOfChannels}`);
             
-            console.log(`[CVideoAudioOnly.loadMP3URL] Frames calculated: ${this.frames} (fps=${this.originalFps})`);
+            this.frames = Math.ceil(audioBuffer.duration * this.originalFps);
+            this.frames = Math.max(1, this.frames);
             
-            // Apply video speed multiplier
+            console.log(`[CVideoAudioOnly.decodeMP3Audio] Frames calculated: ${this.frames} (fps=${this.originalFps})`);
+            
             this.frames *= this.videoSpeed;
-            console.log(`[CVideoAudioOnly.loadMP3URL] After speed multiplier (${this.videoSpeed}x): ${this.frames} frames`);
+            console.log(`[CVideoAudioOnly.decodeMP3Audio] After speed multiplier (${this.videoSpeed}x): ${this.frames} frames`);
             
-            // Update global frame count
             Sit.videoFrames = this.frames;
             Sit.fps = this.originalFps;
             updateSitFrames();
             
-            // Initialize a simple audio handler for MP3
-            console.log(`[CVideoAudioOnly.loadMP3URL] Initializing MP3 audio handler...`);
-            this.initializeMP3Audio(audio, url, isObjectURL);
+            this.initializeMP3AudioHandler(audioContext, audioBuffer);
             
-            // Dispatch videoLoaded event for view setup
-            console.log(`[CVideoAudioOnly.loadMP3URL] Dispatching videoLoaded event...`);
             EventManager.dispatchEvent("videoLoaded", {
                 videoData: this, 
                 width: this.videoWidth, 
                 height: this.videoHeight
             });
             
-            // Mark as loaded
-            console.log(`[CVideoAudioOnly.loadMP3URL] Marking as loaded and calling loadedCallback...`);
             this.loaded = true;
             if (this.loadedCallback) {
                 this.loadedCallback(this);
             }
-            console.log(`[CVideoAudioOnly.loadMP3URL] Complete!`);
-        });
-        
-        audio.addEventListener('error', (e) => {
-            console.error(`[CVideoAudioOnly.loadMP3URL] Audio element error:`, e);
-            if (isObjectURL) {
-                console.log(`[CVideoAudioOnly.loadMP3URL] Revoking object URL`);
-                URL.revokeObjectURL(url);
-            }
+            console.log(`[CVideoAudioOnly.decodeMP3Audio] Complete!`);
+        } catch (error) {
+            console.error(`[CVideoAudioOnly.decodeMP3Audio] Decode error:`, error);
             if (this.errorCallback) {
-                this.errorCallback("Error loading MP3 file");
+                this.errorCallback(error);
             }
-        });
-        
-        // Start loading the audio
-        console.log(`[CVideoAudioOnly.loadMP3URL] Calling audio.load()...`);
-        audio.load();
+        }
     }
     
     /**
-     * Initialize simple audio playback for MP3 files
-     * @param {HTMLAudioElement} audio - The audio element
-     * @param {string} url - The audio URL
-     * @param {boolean} isObjectURL - Whether to clean up object URL
+     * Initialize WebAudio-based audio handler for MP3 files
+     * @param {AudioContext} audioContext - The audio context
+     * @param {AudioBuffer} audioBuffer - The decoded audio buffer
      */
-    initializeMP3Audio(audio, url, isObjectURL) {
-        // Store the audio element for playback control
-        this.mp3Audio = audio;
-        this.mp3URL = url;
-        this.isObjectURL = isObjectURL;
+    initializeMP3AudioHandler(audioContext, audioBuffer) {
+        console.log(`[CVideoAudioOnly.initializeMP3AudioHandler] Setting up audio handler...`);
         
-        // Override audio handler methods for MP3
+        const gainNode = audioContext.createGain();
+        gainNode.connect(audioContext.destination);
+        
+        let bufferSource = null;
+        let isPlaying = false;
+        let lastStartFrame = -1;
+        
         this.audioHandler = {
             isPlaying: false,
             isMuted: false,
             volume: 1.0,
+            audioContext: audioContext,
+            audioBuffer: audioBuffer,
+            gainNode: gainNode,
+            _bufferCreatedSuccessfully: true,
             
             play: (startFrame, fps) => {
-                const startTime = startFrame / fps;
-                this.mp3Audio.currentTime = startTime;
-                this.mp3Audio.play();
-                this.audioHandler.isPlaying = true;
+                if (!audioContext || !audioBuffer) return;
+                
+                try {
+                    if (audioContext.state === 'suspended') {
+                        audioContext.resume();
+                    }
+                    
+                    const frameJumped = Math.abs(startFrame - lastStartFrame) > 1;
+                    const needsRestart = !isPlaying || frameJumped;
+                    
+                    if (needsRestart) {
+                        if (bufferSource) {
+                            try {
+                                bufferSource.stop(0);
+                                bufferSource.disconnect();
+                            } catch (e) {}
+                            bufferSource = null;
+                        }
+                        
+                        bufferSource = audioContext.createBufferSource();
+                        bufferSource.buffer = audioBuffer;
+                        bufferSource.connect(gainNode);
+                        
+                        const startTime = startFrame / fps;
+                        const offset = Math.min(startTime, audioBuffer.duration);
+                        bufferSource.start(0, offset);
+                        
+                        isPlaying = true;
+                        this.audioHandler.isPlaying = true;
+                    }
+                    
+                    lastStartFrame = startFrame;
+                } catch (e) {
+                    console.warn("Error playing MP3 audio:", e);
+                }
             },
             
             pause: () => {
-                this.mp3Audio.pause();
+                if (bufferSource) {
+                    try {
+                        bufferSource.stop(0);
+                        bufferSource.disconnect();
+                    } catch (e) {}
+                    bufferSource = null;
+                }
+                isPlaying = false;
                 this.audioHandler.isPlaying = false;
             },
             
             stop: () => {
-                this.mp3Audio.pause();
-                this.mp3Audio.currentTime = 0;
+                if (bufferSource) {
+                    try {
+                        bufferSource.stop(0);
+                        bufferSource.disconnect();
+                    } catch (e) {}
+                    bufferSource = null;
+                }
+                isPlaying = false;
                 this.audioHandler.isPlaying = false;
+                lastStartFrame = -1;
             },
             
             setVolume: (volume) => {
-                this.mp3Audio.volume = volume;
+                gainNode.gain.value = volume;
                 this.audioHandler.volume = volume;
             },
             
             setMuted: (muted) => {
-                this.mp3Audio.muted = muted;
+                gainNode.gain.value = muted ? 0 : this.audioHandler.volume;
                 this.audioHandler.isMuted = muted;
             },
             
             dispose: () => {
-                this.mp3Audio.pause();
-                this.mp3Audio.src = '';
-                if (isObjectURL) {
-                    URL.revokeObjectURL(url);
+                if (bufferSource) {
+                    try {
+                        bufferSource.stop(0);
+                        bufferSource.disconnect();
+                    } catch (e) {}
+                    bufferSource = null;
+                }
+                if (gainNode) {
+                    gainNode.disconnect();
+                }
+                if (audioContext) {
+                    audioContext.close();
                 }
             }
         };
+        
+        console.log(`[CVideoAudioOnly.initializeMP3AudioHandler] Audio handler ready`);
     }
     
     /**
@@ -413,46 +488,59 @@ export class CVideoAudioOnly extends CVideoAndAudio {
     drawWaveform(ctx, frame) {
         if (!this.audioHandler) return;
         
-        const decodedAudioData = this.audioHandler.decodedAudioData;
-        if (!decodedAudioData || decodedAudioData.length === 0) return;
-        
-        if (decodedAudioData.length === 0) return;
-        const firstAudioData = decodedAudioData[0].data;
-        const sampleRate = firstAudioData.sampleRate;
-        
         const canvas = ctx.canvas;
         const waveformWidth = canvas.width * 0.25;
         const waveformHeight = canvas.height * 0.5;
         
         const fps = Sit.fps || this.originalFps || 30;
         const frameTimeSeconds = frame / fps;
-        const centerSampleIndex = Math.floor(frameTimeSeconds * sampleRate);
         
+        let windowAudio;
         const windowSamples = Math.floor(waveformWidth * 2);
-        const startSampleIndex = Math.max(0, centerSampleIndex - windowSamples / 2);
-        const endSampleIndex = startSampleIndex + windowSamples;
         
-        const windowAudio = new Float32Array(windowSamples);
-        let windowOffset = 0;
-        
-        for (const item of decodedAudioData) {
-            const audioData = item.data;
-            const chunkStart = Math.floor((item.timestamp / 1000000) * sampleRate);
-            const chunkEnd = chunkStart + audioData.numberOfFrames;
+        if (this.audioHandler.audioBuffer) {
+            const audioBuffer = this.audioHandler.audioBuffer;
+            const sampleRate = audioBuffer.sampleRate;
+            const centerSampleIndex = Math.floor(frameTimeSeconds * sampleRate);
+            const startSampleIndex = Math.max(0, centerSampleIndex - windowSamples / 2);
+            const endSampleIndex = Math.min(startSampleIndex + windowSamples, audioBuffer.length);
+            const actualSamples = endSampleIndex - startSampleIndex;
             
-            const overlapStart = Math.max(startSampleIndex, chunkStart);
-            const overlapEnd = Math.min(endSampleIndex, chunkEnd);
+            windowAudio = new Float32Array(windowSamples);
+            const channelData = audioBuffer.getChannelData(0);
+            windowAudio.set(channelData.slice(startSampleIndex, endSampleIndex));
+        } else {
+            const decodedAudioData = this.audioHandler.decodedAudioData;
+            if (!decodedAudioData || decodedAudioData.length === 0) return;
             
-            if (overlapStart >= overlapEnd) continue;
+            const firstAudioData = decodedAudioData[0].data;
+            const sampleRate = firstAudioData.sampleRate;
+            const centerSampleIndex = Math.floor(frameTimeSeconds * sampleRate);
             
-            const chunkOffset = overlapStart - chunkStart;
-            const windowStart = Math.max(0, overlapStart - startSampleIndex);
-            const sampleCount = overlapEnd - overlapStart;
+            const startSampleIndex = Math.max(0, centerSampleIndex - windowSamples / 2);
+            const endSampleIndex = startSampleIndex + windowSamples;
             
-            const chunkSamples = new Float32Array(audioData.numberOfFrames);
-            audioData.copyTo(chunkSamples, { planeIndex: 0 });
+            windowAudio = new Float32Array(windowSamples);
             
-            windowAudio.set(chunkSamples.slice(chunkOffset, chunkOffset + sampleCount), windowStart);
+            for (const item of decodedAudioData) {
+                const audioData = item.data;
+                const chunkStart = Math.floor((item.timestamp / 1000000) * sampleRate);
+                const chunkEnd = chunkStart + audioData.numberOfFrames;
+                
+                const overlapStart = Math.max(startSampleIndex, chunkStart);
+                const overlapEnd = Math.min(endSampleIndex, chunkEnd);
+                
+                if (overlapStart >= overlapEnd) continue;
+                
+                const chunkOffset = overlapStart - chunkStart;
+                const windowStart = Math.max(0, overlapStart - startSampleIndex);
+                const sampleCount = overlapEnd - overlapStart;
+                
+                const chunkSamples = new Float32Array(audioData.numberOfFrames);
+                audioData.copyTo(chunkSamples, { planeIndex: 0 });
+                
+                windowAudio.set(chunkSamples.slice(chunkOffset, chunkOffset + sampleCount), windowStart);
+            }
         }
         
         const centerX = (canvas.width - waveformWidth) / 2;
@@ -510,39 +598,23 @@ export class CVideoAudioOnly extends CVideoAndAudio {
      * Clean up resources
      */
     dispose() {
-        // Clear the black frame
         if (this.blackFrame) {
             this.blackFrame = null;
         }
         
-        // Clean up MP3 audio if it exists
-        if (this.mp3Audio) {
-            this.mp3Audio.pause();
-            this.mp3Audio.src = '';
-            if (this.isObjectURL && this.mp3URL) {
-                URL.revokeObjectURL(this.mp3URL);
-            }
-            this.mp3Audio = null;
-            this.mp3URL = null;
-        }
-        
-        // Stop the demuxer if it exists
         if (this.demuxer) {
             if (this.demuxer.source && this.demuxer.source.file) {
                 try {
                     this.demuxer.source.file.stop();
                 } catch (e) {
-                    // Ignore errors during cleanup
                 }
             }
             this.demuxer = null;
         }
         
-        // Clear callbacks
         this.loadedCallback = null;
         this.errorCallback = null;
         
-        // Call parent dispose (handles audio cleanup)
         super.dispose();
     }
 }
