@@ -127,9 +127,10 @@ export class CNodeVideoWebCodecView extends CNodeVideoView {
         
         const fileName = file.name.toLowerCase();
         
-        // Check if it's an audio-only file (m4a, mp3, or audio-only mp4)
+        // Check if it's an audio-only file (m4a, mp3, wav, or audio-only mp4)
         if (fileName.endsWith('.m4a') || 
             fileName.endsWith('.mp3') ||
+            fileName.endsWith('.wav') ||
             (fileName.endsWith('.mp4') && file.type && file.type.startsWith('audio/'))) {
             console.log("Using audio-only handler for: " + file.name);
             this.videoData = new CVideoAudioOnly({id: this.id + "_data", dropFile: file},

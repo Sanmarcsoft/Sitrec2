@@ -149,7 +149,7 @@ class CDragDropHandler {
         // NOTE: .ts files (MPEG Transport Stream) are NOT treated as video here
         // because they need special parsing in FileManager to extract multiple streams
         const isTSFile = /\.(ts|m2ts|mts)$/i.test(file.name);
-        const isAudioFile = /\.(mp3|m4a)$/i.test(file.name) || file.type.startsWith("audio");
+        const isAudioFile = /\.(mp3|m4a|wav)$/i.test(file.name) || file.type.startsWith("audio");
 
         if (!isTSFile && (file.type.startsWith("video") || isAudioFile)) {
             console.log("Loading dropped " + (isAudioFile ? "audio" : "video") + " file: " + file.name);

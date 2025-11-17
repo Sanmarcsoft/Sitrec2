@@ -5,12 +5,12 @@ import {EventManager} from "./CEventManager.js";
 import {updateSitFrames} from "./UpdateSitFrames";
 
 /**
- * Audio-only video class that plays audio files (mp4, m4a, mp3) with a black video frame
+ * Audio-only video class that plays audio files (mp4, m4a, mp3, wav) with a black video frame
  * Extends CVideoAndAudio to provide audio playback with minimal video overhead
  * 
  * Key features:
- * - Supports MP4, M4A, and MP3 audio files
- * - MP3 files decoded using WebAudio API decodeAudioData for smooth playback
+ * - Supports MP4, M4A, MP3, and WAV audio files
+ * - MP3/WAV files decoded using WebAudio API decodeAudioData for smooth playback
  * - M4A/MP4 files decoded using WebCodec AudioDecoder
  * - Returns black frames with waveform visualization
  * - Full audio playback functionality with precise synchronization
@@ -57,12 +57,12 @@ export class CVideoAudioOnly extends CVideoAndAudio {
         const fileName = file.name.toLowerCase();
         console.log(`[CVideoAudioOnly.loadFromFile] Starting: ${file.name}, size=${file.size}`);
         
-        // Check if it's an MP3 file
-        if (fileName.endsWith('.mp3')) {
-            console.log(`[CVideoAudioOnly.loadFromFile] MP3 file detected, using direct audio element playback`);
+        // Check if it's an MP3 or WAV file
+        if (fileName.endsWith('.mp3') || fileName.endsWith('.wav')) {
+            console.log(`[CVideoAudioOnly.loadFromFile] MP3/WAV file detected, using WebAudio API decodeAudioData`);
             this.loadMP3File(file);
         } else {
-            console.log(`[CVideoAudioOnly.loadFromFile] Non-MP3 file detected, using MP4 demuxer (M4A, MP4, etc)`);
+            console.log(`[CVideoAudioOnly.loadFromFile] MP4/M4A file detected, using MP4 demuxer`);
             // Use MP4 demuxer for M4A and MP4 audio files
             const source = new MP4Source();
             
@@ -112,9 +112,9 @@ export class CVideoAudioOnly extends CVideoAndAudio {
     loadFromURL(url) {
         const urlLower = url.toLowerCase();
         
-        // Check if it's an MP3 file
-        if (urlLower.endsWith('.mp3')) {
-            console.log("MP3 URL detected, using direct audio element playback");
+        // Check if it's an MP3 or WAV file
+        if (urlLower.endsWith('.mp3') || urlLower.endsWith('.wav')) {
+            console.log("MP3/WAV URL detected, using WebAudio API decodeAudioData");
             this.loadMP3URL(url);
         } else {
             // Use MP4 demuxer for M4A and MP4 audio files
@@ -134,8 +134,8 @@ export class CVideoAudioOnly extends CVideoAndAudio {
     }
     
     /**
-     * Load MP3 file using WebAudio API
-     * @param {File} file - The MP3 file to load
+     * Load MP3/WAV file using WebAudio API
+     * @param {File} file - The MP3/WAV file to load
      */
     loadMP3File(file) {
         console.log(`[CVideoAudioOnly.loadMP3File] Starting: ${file.name}, size=${file.size}`);
@@ -155,8 +155,8 @@ export class CVideoAudioOnly extends CVideoAndAudio {
     }
     
     /**
-     * Load MP3 from URL using WebAudio API
-     * @param {string} url - The URL of the MP3 file
+     * Load MP3/WAV from URL using WebAudio API
+     * @param {string} url - The URL of the MP3/WAV file
      */
     loadMP3URL(url) {
         console.log(`[CVideoAudioOnly.loadMP3URL] Starting: url=${url}`);
@@ -175,8 +175,8 @@ export class CVideoAudioOnly extends CVideoAndAudio {
     }
     
     /**
-     * Decode MP3 audio data using WebAudio API
-     * @param {ArrayBuffer} arrayBuffer - The MP3 audio data
+     * Decode MP3/WAV audio data using WebAudio API
+     * @param {ArrayBuffer} arrayBuffer - The MP3/WAV audio data
      */
     async decodeMP3Audio(arrayBuffer) {
         console.log(`[CVideoAudioOnly.decodeMP3Audio] Starting decode...`);
@@ -221,7 +221,7 @@ export class CVideoAudioOnly extends CVideoAndAudio {
     }
     
     /**
-     * Initialize WebAudio-based audio handler for MP3 files
+     * Initialize WebAudio-based audio handler for MP3/WAV files
      * @param {AudioContext} audioContext - The audio context
      * @param {AudioBuffer} audioBuffer - The decoded audio buffer
      */
