@@ -73,6 +73,8 @@ export class CVideoAudioOnly extends CVideoAndAudio {
             reader.onloadend = () => {
                 const buffer = reader.result;
                 console.log(`[CVideoAudioOnly.loadFromFile] FileReader onloadend: buffer size=${buffer.byteLength}`);
+                this.videoDroppedData = buffer;
+                this.videoDroppedURL = null;
                 buffer.fileStart = 0;
         console.log(`[CVideoAudioOnly.loadFromFile] Appending buffer to MP4Source...`);
                 source.file.appendBuffer(buffer);
@@ -115,17 +117,15 @@ export class CVideoAudioOnly extends CVideoAndAudio {
             this.loadMP3URL(url);
         } else {
             const source = new MP4Source();
-            source.onReady = (info) => {
-                console.log("Audio file ready from URL:", info);
+            source.loadURI(url, () => {
+                console.log("Audio file ready from URL:", url);
                 this.startAudioExtraction(source);
-            };
-            source.onError = (error) => {
+            }, (error) => {
                 console.error("Error loading audio from URL:", error);
                 if (this.errorCallback) {
                     this.errorCallback(error);
                 }
-            };
-            source.loadURL(url);
+            });
         }
     }
     
@@ -140,6 +140,8 @@ export class CVideoAudioOnly extends CVideoAndAudio {
         reader.onloadend = () => {
             const arrayBuffer = reader.result;
             console.log(`[CVideoAudioOnly.loadMP3File] File read complete, buffer size=${arrayBuffer.byteLength}`);
+            this.videoDroppedData = arrayBuffer;
+            this.videoDroppedURL = null;
             this.decodeMP3Audio(arrayBuffer);
         };
         reader.onerror = (error) => {

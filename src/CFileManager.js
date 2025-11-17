@@ -33,6 +33,7 @@ import {showError} from "./showError";
 import {asyncOperationRegistry} from "./AsyncOperationRegistry";
 import {ECEFToLLAVD_Sphere, EUSToECEF} from "./LLA-ECEF-ENU";
 import {V3} from "./threeUtils";
+import {isAudioOnlyFormat} from "./AudioFormats";
 
 
 // The file manager is a singleton that manages all the files
@@ -1349,20 +1350,6 @@ export class CFileManager extends CManager {
                     }
                     break;
 
-                case "mp3":
-                    // MP3 audio file - treat as video so it can be handled by CVideoAudioOnly
-                    dataType = "video";
-                    parsed = buffer;
-                    console.log("Parsed MP3 audio: " + filename + " (" + buffer.byteLength + " bytes)");
-                    break;
-
-                case "m4a":
-                    // M4A audio file - treat as video so it can be handled by CVideoAudioOnly
-                    dataType = "video";
-                    parsed = buffer;
-                    console.log("Parsed M4A audio: " + filename + " (" + buffer.byteLength + " bytes)");
-                    break;
-
                 case "mp4":
                 case "mov":
                 case "webm":
@@ -1374,6 +1361,14 @@ export class CFileManager extends CManager {
                     break;
 
                 default:
+                    // Check if it's an audio format (mp3, wav, ogg, flac, webm, aac, m4a, etc.)
+                    if (isAudioOnlyFormat(filename)) {
+                        dataType = "video";  // Treat as video so it can be handled by CVideoAudioOnly
+                        parsed = buffer;
+                        console.log("Parsed audio file: " + filename + " (" + buffer.byteLength + " bytes)");
+                        break;
+                    }
+                    
                     // theoretically we could inspect the file contents and then reload it...
                     // but let's trust the extensions
                     //assert(0, "Unhandled extension " + fileExt + " for " + filename)
