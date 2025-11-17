@@ -47,6 +47,8 @@ export class CAudioMp4Data {
         this._lastBufferDecodedCount = 0;
         this._bufferCreationInProgress = false;
         this._bufferCreatedSuccessfully = false;
+        this.playbackStartTime = 0;
+        this.playbackStartFrame = 0;
 
         this.checkAudioSupport();
     }
@@ -234,6 +236,8 @@ export class CAudioMp4Data {
 
             if (needsRestart) {
                 this.stopAudioSource();
+                this.playbackStartTime = this.audioContext.currentTime;
+                this.playbackStartFrame = startFrame;
                 this.playAudioBuffer(startFrame, fps);
             }
 
@@ -340,6 +344,11 @@ export class CAudioMp4Data {
             return;
         }
         
+        // Ensure audio context is running during wait
+        if (this.audioContext.state === 'suspended') {
+            this.audioContext.resume();
+        }
+        
         // Wait for decoding to complete before playing
         if (!this.checkDecodingComplete()) {
             // Audio not yet fully decoded, retry in 50ms
@@ -374,13 +383,19 @@ export class CAudioMp4Data {
             this.audioBufferSource.connect(this.gainNode);
 
             // Calculate offset time using original fps, then set playback rate based on fps ratio
-            const originalFps = this.originalFps || fps; // fallback to fps if originalFps not set
-            const offsetTime = Math.max(0, startFrame / originalFps);
+            const originalFps = this.originalFps || fps;
+            
+            // Account for time elapsed while waiting for audio decoding
+            const timeElapsed = this.audioContext.currentTime - (this.playbackStartTime || this.audioContext.currentTime);
+            const currentFrame = this.playbackStartFrame + (timeElapsed * fps);
+            
+            // Use current frame to calculate offset, ensuring sync
+            const offsetTime = Math.max(0, currentFrame / originalFps);
             const playbackRate = fps / originalFps;
             
             this.audioBufferSource.playbackRate.value = playbackRate;
             
-            console.log("Starting audio playback at offsetTime=", offsetTime, "seconds, originalFps=", originalFps, "playbackFps=", fps, "playbackRate=", playbackRate);
+            console.log("Starting audio playback: currentFrame=", currentFrame, "offsetTime=", offsetTime.toFixed(3), "seconds, timeElapsed=", timeElapsed.toFixed(3), "originalFps=", originalFps, "playbackRate=", playbackRate);
             this.audioBufferSource.start(this.audioContext.currentTime, offsetTime);
             this.isBufferSourceStarted = true;
         } catch (e) {
