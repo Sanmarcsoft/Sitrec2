@@ -51,6 +51,7 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
 
         const camera = this.camera.clone();
         camera.position.set(0, 0, 0)
+        camera.aspect = this.widthPx / this.heightPx;
         camera.updateMatrix()
         camera.updateWorldMatrix()
         camera.updateProjectionMatrix()
