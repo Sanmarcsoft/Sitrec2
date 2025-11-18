@@ -216,7 +216,7 @@ export class CAudioMp4Data {
      */
     play(startFrame, fps) {
         if (!this.isInitialized || !this.audioContext) {
-            console.warn("Audio not initialized or no context");
+//            console.warn("Audio not initialized or no context");
             return;
         }
 
