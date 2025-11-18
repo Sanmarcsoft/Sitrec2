@@ -135,6 +135,9 @@ class CameraMapControls {
 		// Track mouse position for context menu drag detection
 		this.contextMenuDownPos = null;
 		this.contextMenuDragThreshold = 2; // pixels
+		
+		this.lastStartHitSphere = true;
+		this.lastEndHitSphere = true;
 
 		const id = this.view.id;
 		this.measureStartPoint = V3()
@@ -685,6 +688,8 @@ class CameraMapControls {
 		}
 		
 		this.updateStateFromEvent(event)
+		this.lastStartHitSphere = true;
+		this.lastEndHitSphere = true;
 		const [x, y] = mouseToView(this.view, event.clientX, event.clientY)
 		this.mouseStart.set( x, y );
 		this.canvas.setPointerCapture(event.pointerId)
@@ -1017,19 +1022,40 @@ class CameraMapControls {
 				var end3D = new Vector3();
 
 				raycaster.setFromCamera(startPointer, this.camera)
+				let startHitSphere = false;
 				if (this.targetIsTerrain && !this.useGlobe) {
 					if (!raycaster.ray.intersectPlane(dragPlane, start3D)) break;
 				} else {
-					if (!intersectSphere2(raycaster.ray, dragSphere, start3D)) break;
+					startHitSphere = intersectSphere2(raycaster.ray, dragSphere, start3D);
+					if (!startHitSphere) {
+						const origin = V3(0, -wgs84.RADIUS, 0);
+						const toCamera = this.camera.position.clone().sub(origin).normalize();
+						const tangentPlane = new Plane().setFromNormalAndCoplanarPoint(toCamera, dragSphere.center.clone().add(toCamera.multiplyScalar(dragSphere.radius)));
+						if (!raycaster.ray.intersectPlane(tangentPlane, start3D)) break;
+					}
 				}
 				raycaster.setFromCamera(endPointer, this.camera)
+				let endHitSphere = false;
 				if (this.targetIsTerrain && !this.useGlobe) {
 					if (!raycaster.ray.intersectPlane(dragPlane, end3D)) break;
 				} else {
-					if (!intersectSphere2(raycaster.ray, dragSphere, end3D)) break;
+					endHitSphere = intersectSphere2(raycaster.ray, dragSphere, end3D);
+					if (!endHitSphere) {
+						const origin = V3(0, -wgs84.RADIUS, 0);
+						const toCamera = this.camera.position.clone().sub(origin).normalize();
+						const tangentPlane = new Plane().setFromNormalAndCoplanarPoint(toCamera, dragSphere.center.clone().add(toCamera.multiplyScalar(dragSphere.radius)));
+						if (!raycaster.ray.intersectPlane(tangentPlane, end3D)) break;
+					}
 				}
 
 			//	DebugArrowAB("mouseMovePan",start3D,end3D,0x00ffff,true,GlobalScene)
+
+				if (startHitSphere !== this.lastStartHitSphere || endHitSphere !== this.lastEndHitSphere) {
+					this.lastStartHitSphere = startHitSphere;
+					this.lastEndHitSphere = endHitSphere;
+					this.mouseStart.copy(this.mouseEnd);
+					break;
+				}
 
 				// Panning is like dragging the ground in one direction, which means we move the camera in the other direction
 				// hence the .sub here
