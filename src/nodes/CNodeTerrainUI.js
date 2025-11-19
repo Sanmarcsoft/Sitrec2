@@ -155,6 +155,16 @@ export class CNodeTerrainUI extends CNode {
 
                 },
 
+                Debuggy: {
+                    name: "Debug Info with Failures",
+                    isDebug: true,
+                    maxZoom: 20,
+                    failurePct: 5,
+                    mapURL: (z,x,y) => {
+                        return "https://invalid.url/doesnotexist.png";
+                    },
+                }
+
 
 
             }

@@ -2485,19 +2485,25 @@ export class QuadTreeTile {
         const sourceDef = this.map.terrainNode.UI.getSourceDef();
         if (sourceDef.isDebug) {
 
-            // possible debugging delay
-            // we make it random so that multiple tiles load in staggered fashion
-            // which might better replicate real world conditions
-            if (Globals.tileDelay > 0) {
-                const delayPromise = new Promise(resolve => setTimeout(resolve, Math.random() * Globals.tileDelay * 1000))
-                await delayPromise;
+            // Simulate failure percentage for debug tiles (see "Debuggy" source)
+            // if failurePct is defined, use it to randomly fail loading by using the
+            // supplied invalid url, such as https://invalid.url/doesnotexist.png
+            if (!sourceDef.failurePct || Math.random() * 100 >= sourceDef.failurePct) {
+
+                // possible debugging delay
+                // we make it random so that multiple tiles load in staggered fashion
+                // which might better replicate real world conditions
+                if (Globals.tileDelay > 0) {
+                    const delayPromise = new Promise(resolve => setTimeout(resolve, Math.random() * Globals.tileDelay * 1000))
+                    await delayPromise;
+                }
+
+                this.updateDebugMaterial();
+                this.addAfterLoaded();
+
+                // Return early for debug materials
+                return Promise.resolve(this.mesh.material);
             }
-
-            this.updateDebugMaterial();
-            this.addAfterLoaded();
-
-            // Return early for debug materials
-            return Promise.resolve(this.mesh.material);
         }
 
         // Handle wireframe material
