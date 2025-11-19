@@ -78,6 +78,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         this.roofAGL = v.roofAGL !== undefined ? v.roofAGL : 4;  // Roof height above highest ground point
         this.rooflineHeightAGL = v.rooflineHeightAGL !== undefined ? v.rooflineHeightAGL : 0;  // Additional height of roofline above roof corners
         this.ridgelineInset = v.ridgelineInset !== undefined ? v.ridgelineInset : 0;  // Distance to move ridgeline ends inward
+        this.roofEaves = v.roofEaves !== undefined ? v.roofEaves : 0;  // Distance to extend roof beyond walls laterally
         this.highPoint = null;  // Cached highest ground point (recalculated as needed)
         
         // THREE.js rendering objects
@@ -353,6 +354,26 @@ export class CNodeSynthBuilding extends CNode3DGroup {
     }
     
     /**
+     * Update roof eaves from GUI slider
+     * This extends the roof beyond the walls laterally
+     */
+    updateRoofEaves(newEaves) {
+        this.roofEaves = newEaves;
+        
+        // Rebuild mesh and controls
+        this.buildMesh();
+        if (this.editMode) {
+            this.createControlPoints();
+        }
+        
+        // Update GUI controllers
+        this.updateGUIControllers();
+        
+        setRenderOne(true);
+        saveSettings();
+    }
+    
+    /**
      * Calculate the inset ridgeline position by moving endpoints inward
      * @param {Vector3} basePos - The midpoint of the roof edge (without inset)
      * @param {Vector3} otherBasePos - The other ridgeline endpoint (for calculating inset direction)
@@ -413,6 +434,10 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         if (this.ridgelineInsetController) {
             // Update proxy display value from building's SI value
             this.ridgelineInsetController.setSIValue(this.ridgelineInset);
+        }
+        if (this.roofEavesController) {
+            // Update proxy display value from building's SI value
+            this.roofEavesController.setSIValue(this.roofEaves);
         }
     }
     
@@ -754,11 +779,12 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         // Recompute edges to include roof faces
         this.computeEdges();
         
-        // Helper function to get position with inset applied
-        const getPositionWithInset = (idx) => {
+        // Helper function to get position with inset and eaves applied
+        const getPositionWithModifiers = (idx) => {
             const vertex = this.vertices[idx];
-            let pos = vertex.position;
+            let pos = vertex.position.clone();
             
+            // Apply ridgeline inset for roofline vertices
             if ((idx === 8 || idx === 9) && vertex.type === 'roofline' && this.ridgelineInset !== 0) {
                 const roof1EdgePos = this.vertices[4].position.clone().add(this.vertices[5].position).multiplyScalar(0.5);
                 const roof2EdgePos = this.vertices[6].position.clone().add(this.vertices[7].position).multiplyScalar(0.5);
@@ -774,31 +800,96 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                 }
             }
             
+            // Apply roof eaves for top vertices (4-7) and roofline vertices (8-9)
+            if (this.roofEaves !== 0 && (vertex.type === 'top' || vertex.type === 'roofline')) {
+                // Calculate building centroid from bottom vertices for lateral direction
+                const centroid = new Vector3();
+                for (let i = 0; i < 4; i++) {
+                    centroid.add(this.vertices[i].position);
+                }
+                centroid.multiplyScalar(0.25);
+                
+                const localUp = getLocalUpVector(pos);
+                
+                // Get the lateral direction (from centroid to this vertex, projected to horizontal plane)
+                const toVertex = pos.clone().sub(centroid);
+                const verticalComponent = toVertex.dot(localUp);
+                const lateralDir = toVertex.clone().sub(localUp.clone().multiplyScalar(verticalComponent));
+                
+                if (lateralDir.length() > 0.001) {
+                    lateralDir.normalize();
+                    // Extend position laterally by eaves amount
+                    pos.add(lateralDir.multiplyScalar(this.roofEaves));
+                }
+            }
+            
             return pos;
         };
         
         // Create BufferGeometry from vertices and faces
         const geometry = new BufferGeometry();
         
-        // Build position buffer, applying ridgeline inset to roof vertices
+        // Build position buffer
         const positions = [];
+        let vertexOffset = this.vertices.length; // Offset for extended roof vertices when eaves != 0
+        
+        // Add original vertices (without eaves for walls)
         this.vertices.forEach((vertex, idx) => {
-            const pos = getPositionWithInset(idx);
+            let pos = vertex.position.clone();
+            
+            // Apply ridgeline inset for roofline vertices
+            if ((idx === 8 || idx === 9) && vertex.type === 'roofline' && this.ridgelineInset !== 0) {
+                const roof1EdgePos = this.vertices[4].position.clone().add(this.vertices[5].position).multiplyScalar(0.5);
+                const roof2EdgePos = this.vertices[6].position.clone().add(this.vertices[7].position).multiplyScalar(0.5);
+                
+                if (idx === 8) {
+                    pos = this.calculateInsetRidgelinePosition(roof1EdgePos, roof2EdgePos)
+                        .add(getLocalUpVector(this.calculateInsetRidgelinePosition(roof1EdgePos, roof2EdgePos))
+                            .multiplyScalar(this.rooflineHeightAGL));
+                } else {
+                    pos = this.calculateInsetRidgelinePosition(roof2EdgePos, roof1EdgePos)
+                        .add(getLocalUpVector(this.calculateInsetRidgelinePosition(roof2EdgePos, roof1EdgePos))
+                            .multiplyScalar(this.rooflineHeightAGL));
+                }
+            }
+            
             positions.push(pos.x, pos.y, pos.z);
         });
+        
+        // If eaves are enabled, add extended roof vertices
+        if (this.roofEaves !== 0) {
+            // Add extended versions of vertices 4-7 and 8-9
+            for (let idx = 4; idx <= 9; idx++) {
+                const pos = getPositionWithModifiers(idx);
+                positions.push(pos.x, pos.y, pos.z);
+            }
+        }
+        
         geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
         
         // Triangulate faces and assign to material groups
         // Group 0: walls (bottom, sides, and gable ends)
         // Group 1: roof (only the sloped/flat top surfaces)
+        // Group 2: soffit (underside of eaves, roof color at 50%)
         const wallIndices = [];
         const roofIndices = [];
+        const soffitIndices = [];
         
         this.faces.forEach(face => {
-            const indices = face.indices;
+            let indices = face.indices;
             
             // Determine if this is a roof face based on face type
             const isRoofFace = face.type === 'roof';
+            
+            // If eaves are enabled and this is a roof face, remap indices to use extended vertices
+            if (this.roofEaves !== 0 && isRoofFace) {
+                indices = indices.map(idx => {
+                    if (idx >= 4 && idx <= 9) {
+                        return vertexOffset + (idx - 4);
+                    }
+                    return idx;
+                });
+            }
             
             // Simple fan triangulation for convex polygons
             const triangles = [];
@@ -813,24 +904,44 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             }
         });
         
-        // Combine indices: walls first, then roof
-        const combinedIndices = [...wallIndices, ...roofIndices];
+        // Add soffit (underside) when eaves are enabled
+        if (this.roofEaves !== 0) {
+            // Add one horizontal quad covering the four extended roof base corners
+            // Winding for visibility from below (upside down poly)
+            // Triangulate the quad into two triangles
+            soffitIndices.push(vertexOffset + 0, vertexOffset + 1, vertexOffset + 2);
+            soffitIndices.push(vertexOffset + 0, vertexOffset + 2, vertexOffset + 3);
+        }
+        
+        // Combine indices: walls first, then roof, then soffit
+        const combinedIndices = [...wallIndices, ...roofIndices, ...soffitIndices];
         geometry.setIndex(combinedIndices);
         geometry.computeVertexNormals();
         
         // Add material groups
+        let indexOffset = 0;
         if (wallIndices.length > 0) {
-            geometry.addGroup(0, wallIndices.length, 0); // Group 0 for walls
+            geometry.addGroup(indexOffset, wallIndices.length, 0); // Group 0 for walls
+            indexOffset += wallIndices.length;
         }
         if (roofIndices.length > 0) {
-            geometry.addGroup(wallIndices.length, roofIndices.length, 1); // Group 1 for roof
+            geometry.addGroup(indexOffset, roofIndices.length, 1); // Group 1 for roof
+            indexOffset += roofIndices.length;
+        }
+        if (soffitIndices.length > 0) {
+            geometry.addGroup(indexOffset, soffitIndices.length, 2); // Group 2 for soffit
         }
         
-        // Create materials: [0] walls, [1] roof
+        // Create materials: [0] walls, [1] roof, [2] soffit (roof color at 50%)
         const wallMaterial = this.createMaterial(this.wallColor);
         const roofMaterial = this.createMaterial(this.roofColor);
         
-        this.solidMesh = new Mesh(geometry, [wallMaterial, roofMaterial]);
+        // Create soffit material with roof color darkened by 50%
+        const roofColorObj = new Color(this.roofColor);
+        const soffitColor = roofColorObj.clone().multiplyScalar(0.5);
+        const soffitMaterial = this.createMaterial('#' + soffitColor.getHexString());
+        
+        this.solidMesh = new Mesh(geometry, [wallMaterial, roofMaterial, soffitMaterial]);
         this.solidMesh.layers.mask = LAYER.MASK_MAIN | LAYER.MASK_LOOK;
         this.group.add(this.solidMesh);
         
@@ -838,11 +949,38 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         const edgeGeometry = new BufferGeometry();
         const edgePositions = [];
         this.edges.forEach(edge => {
-            const v0 = getPositionWithInset(edge.v0);
-            const v1 = getPositionWithInset(edge.v1);
+            let v0Idx = edge.v0;
+            let v1Idx = edge.v1;
+            
+            // If eaves are enabled and edge involves roof vertices, use extended positions
+            if (this.roofEaves !== 0) {
+                // Check if both vertices are roof vertices (4-9)
+                const v0IsRoof = v0Idx >= 4 && v0Idx <= 9;
+                const v1IsRoof = v1Idx >= 4 && v1Idx <= 9;
+                
+                if (v0IsRoof && v1IsRoof) {
+                    // Both are roof vertices, use extended positions
+                    v0Idx = vertexOffset + (v0Idx - 4);
+                    v1Idx = vertexOffset + (v1Idx - 4);
+                }
+            }
+            
+            // Get positions from the geometry's position attribute
+            const v0 = new Vector3(
+                positions[v0Idx * 3],
+                positions[v0Idx * 3 + 1],
+                positions[v0Idx * 3 + 2]
+            );
+            const v1 = new Vector3(
+                positions[v1Idx * 3],
+                positions[v1Idx * 3 + 1],
+                positions[v1Idx * 3 + 2]
+            );
+            
             edgePositions.push(v0.x, v0.y, v0.z);
             edgePositions.push(v1.x, v1.y, v1.z);
         });
+        
         edgeGeometry.setAttribute('position', new Float32BufferAttribute(edgePositions, 3));
         
         const edgeMaterial = new LineBasicMaterial({
@@ -1182,6 +1320,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             this.roofEdgeHeightController = null;
             this.ridgelineHeightController = null;
             this.ridgelineInsetController = null;
+            this.roofEavesController = null;
             
             // Hide GUI folder
             if (this.guiFolder) {
@@ -1201,7 +1340,8 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             cornerLatLons: this.cornerLatLons.map(c => ({lat: c.lat, lon: c.lon})),
             roofAGL: this.roofAGL,
             rooflineHeightAGL: this.rooflineHeightAGL,
-            ridgelineInset: this.ridgelineInset
+            ridgelineInset: this.ridgelineInset,
+            roofEaves: this.roofEaves
         };
     }
     
@@ -1215,6 +1355,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         this.roofAGL = state.roofAGL;
         this.rooflineHeightAGL = state.rooflineHeightAGL;
         this.ridgelineInset = state.ridgelineInset !== undefined ? state.ridgelineInset : 0;
+        this.roofEaves = state.roofEaves !== undefined ? state.roofEaves : 0;
         
         // Recalculate all vertices from terrain
         this.recalculateVerticesFromTerrain();
@@ -2360,6 +2501,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             roofAGL: serialized.roofAGL,
             rooflineHeightAGL: serialized.rooflineHeightAGL,
             ridgelineInset: serialized.ridgelineInset,
+            roofEaves: serialized.roofEaves,
             material: serialized.material,
             wallColor: serialized.wallColor,
             roofColor: serialized.roofColor,
@@ -2403,6 +2545,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             roofAGL: this.roofAGL,
             rooflineHeightAGL: this.rooflineHeightAGL,
             ridgelineInset: this.ridgelineInset,
+            roofEaves: this.roofEaves,
             material: this.materialType,
             wallColor: this.wallColor,
             roofColor: this.roofColor,

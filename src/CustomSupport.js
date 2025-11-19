@@ -1871,6 +1871,31 @@ export class CCustomManager {
         // Store proxy on building so we can update it when building changes
         building.ridgelineInsetProxy = ridgelineInsetProxy;
         
+        // Create proxy object for roof eaves
+        const roofEavesProxy = {
+            _displayValue: building.roofEaves,
+            get eaves() {
+                return this._displayValue;
+            },
+            set eaves(displayValue) {
+                this._displayValue = displayValue;
+            }
+        };
+        
+        // Store controller reference on building so it can be updated
+        building.roofEavesController = heightFolder.add(roofEavesProxy, 'eaves', 0, 3, 0.01)
+            .name('Roof Eaves')
+            .setUnitType('small')
+            .onChange(() => {
+                // When user changes the controller, get SI value and update building
+                const siValue = building.roofEavesController.getSIValue();
+                building.updateRoofEaves(siValue);
+            })
+            .listen();
+        
+        // Store proxy on building so we can update it when building changes
+        building.roofEavesProxy = roofEavesProxy;
+        
         // Create menu actions
         const menuData = {
             exitEditMode: () => {
