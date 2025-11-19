@@ -56,7 +56,7 @@ Phase 1 creates a fully offline-capable version of Sitrec that:
   - Added `loadSettingsFromIndexedDB()` - Load from IndexedDB
   - Added `saveSettingsToIndexedDB()` - Save to IndexedDB
   - Updated `initializeSettings()` - Serverless mode detection
-  - Updated `saveSettings()` - Serverless mode support
+  - Updated `saveGlobalSettings()` - Serverless mode support
   - Maintains backward compatibility with existing code
 - **Logic**:
   - If `isServerless=true`: Use IndexedDB + cookie fallback

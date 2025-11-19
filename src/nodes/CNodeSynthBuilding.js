@@ -30,7 +30,6 @@ import {CustomManager, Globals, guiMenus, setRenderOne, Synth3DManager, UndoMana
 import {mouseInViewOnly} from "../ViewUtils";
 import {getPointBelow, pointAbove} from "../threeExt";
 import {EventManager} from "../CEventManager";
-import {saveSettings} from "../SettingsManager";
 
 export class CNodeSynthBuilding extends CNode3DGroup {
     constructor(v) {
@@ -304,7 +303,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         this.updateGUIControllers();
         
         setRenderOne(true);
-        saveSettings();
+        CustomManager.saveGlobalSettings();
     }
     
     /**
@@ -327,7 +326,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         this.updateGUIControllers();
         
         setRenderOne(true);
-        saveSettings();
+        CustomManager.saveGlobalSettings();
     }
     
     /**
@@ -350,7 +349,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         this.updateGUIControllers();
         
         setRenderOne(true);
-        saveSettings();
+        CustomManager.saveGlobalSettings();
     }
     
     /**
@@ -370,7 +369,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         this.updateGUIControllers();
         
         setRenderOne(true);
-        saveSettings();
+        CustomManager.saveGlobalSettings();
     }
     
     /**
@@ -2333,10 +2332,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             // Update settings with the absolute rotation angle (invisibly persisted)
             Globals.settings.lastBuildingRotation = normalizedRotation;
             
-            // Save settings asynchronously (don't await to avoid blocking UI)
-            saveSettings(Globals.settings).catch(err => {
-                console.warn("Failed to save building rotation to settings:", err);
-            });
+            CustomManager.saveGlobalSettings();
             
             console.log(`Saved absolute building rotation: ${(normalizedRotation * 180 / Math.PI).toFixed(1)}°`);
         }

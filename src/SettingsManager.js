@@ -6,6 +6,7 @@ import {Globals} from "./Globals";
 import {indexedDBManager} from "./IndexedDBManager";
 import {isServerless} from "./configUtils";
 import {parseBoolean} from "./utils";
+import {assert} from "./assert";
 
 // Environment variable flags for storage methods (default to false if not specified)
 // Set to 'true', 'false', '1', '0', 'yes', or 'no'
@@ -32,7 +33,9 @@ function getCookie(name) {
 //   2. sanitizeSettings() in settings.php (server-side) if using PHP backend
 export function sanitizeSettings(settings) {
     const sanitized = {};
-    
+
+    assert(typeof settings === 'object' && settings !== null, "Settings must be an object, it is " + typeof settings + "Value:" + settings);
+
     // Only allow specific known settings with type checking
     if (settings.maxDetails !== undefined) {
         const maxDetails = Number(settings.maxDetails);
@@ -305,7 +308,10 @@ export async function initializeSettings() {
  * @param {Object} settings - The settings object to save
  * @returns {Promise<boolean>} True if saved successfully
  */
-export async function saveSettings(settings) {
+export async function saveSettings() {
+
+    const settings = Globals.settings;
+
     // Serverless mode - use IndexedDB
     if (isServerless) {
         const indexedDBSuccess = await saveSettingsToIndexedDB(settings);

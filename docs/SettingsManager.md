@@ -98,11 +98,11 @@ await initializeSettings();
 // Globals.settings is now populated
 ```
 
-#### `saveSettings(settings)`
+#### `saveGlobalSettings(settings)`
 Saves settings to server (if logged in) and/or cookies.
 
 ```javascript
-await saveSettings(Globals.settings);
+await saveGlobalSettings(Globals.settings);
 ```
 
 ## Current Settings
@@ -171,7 +171,7 @@ setupSettingsMenu() {
         .tooltip("Description of new setting")
         .onChange((value) => {
             Globals.settings.newSetting = value;
-            this.saveSettings();
+            this.saveGlobalSettings();
         });
 }
 ```

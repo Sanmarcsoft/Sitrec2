@@ -77,7 +77,7 @@ export class CCustomManager {
      * Delegates to SettingsSaver for all debouncing logic
      * @param {boolean} immediate - Force immediate save, bypassing debounce
      */
-    async saveSettings(immediate = false) {
+    async saveGlobalSettings(immediate = false) {
         await this.settingsSaver.save(immediate);
     }
 
@@ -127,11 +127,11 @@ export class CCustomManager {
                 const newValue = Math.max(5, Math.min(30, Math.round(value)));
                 Globals.settings.maxDetails = newValue;
                 // Save settings (will debounce automatically if needed)
-                this.saveSettings();
+                this.saveGlobalSettings();
             })
             .onFinishChange(()=>{
                 // When we release the slider, force immediate save and recalculate everything
-                this.saveSettings(true);
+                this.saveGlobalSettings(true);
                 
                 // Recalculate terrain to avoid holes when going from high to low detail
                 const terrainNode = NodeMan.get("terrainUI", false);
@@ -148,7 +148,7 @@ export class CCustomManager {
             .tooltip("Set maximum frame rate (60, 30, 20, or 15 fps)")
             .onChange(() => {
                 // Save settings when changed
-                this.saveSettings();
+                this.saveGlobalSettings();
             })
             .listen();
         
@@ -158,11 +158,11 @@ export class CCustomManager {
             .tooltip("Mesh resolution for terrain tiles. Higher values = more detail but slower")
             .onChange(() => {
                 // Save settings when changed
-                this.saveSettings();
+                this.saveGlobalSettings();
             })
             .onFinishChange(() => {
                 // When selection is finalized, force immediate save and refresh terrain
-                this.saveSettings(true);
+                this.saveGlobalSettings(true);
                 
                 // Refresh terrain with new mesh resolution
                 const terrainUI = NodeMan.get("terrainUI", false);
@@ -178,11 +178,11 @@ export class CCustomManager {
             .tooltip("Maximum video frame resolution (longer side). Reduces GPU memory usage. Applies to newly loaded frames.")
             .onChange(() => {
                 // Save settings when changed
-                this.saveSettings();
+                this.saveGlobalSettings();
             })
             .onFinishChange(() => {
                 // When selection is finalized, force immediate save
-                this.saveSettings(true);
+                this.saveGlobalSettings(true);
             })
             .listen();
     }

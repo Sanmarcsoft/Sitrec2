@@ -108,7 +108,7 @@ setupSettingsMenu() {
         .tooltip("Description of what this setting does")
         .onChange((value) => {
             Globals.settings.yourNewSetting = Boolean(value);
-            this.saveSettings(true); // Immediate save for toggles
+            this.saveGlobalSettings(true); // Immediate save for toggles
         })
         .listen();
     
@@ -118,10 +118,10 @@ setupSettingsMenu() {
     //     .tooltip("Description")
     //     .onChange((value) => {
     //         Globals.settings.yourNewSetting = value;
-    //         this.saveSettings(); // Debounced save for sliders
+    //         this.saveGlobalSettings(); // Debounced save for sliders
     //     })
     //     .onFinishChange(() => {
-    //         this.saveSettings(true); // Force save when done
+    //         this.saveGlobalSettings(true); // Force save when done
     //     })
     //     .listen();
 }
@@ -189,7 +189,7 @@ When adding a new setting, use this checklist:
 
 3. **Not using `.listen()`** - GUI controls need `.listen()` to update when the value changes programmatically.
 
-4. **Wrong save timing** - Use `saveSettings(true)` for immediate saves (checkboxes), `saveSettings()` for debounced saves (sliders).
+4. **Wrong save timing** - Use `saveGlobalSettings(true)` for immediate saves (checkboxes), `saveGlobalSettings()` for debounced saves (sliders).
 
 ## Example: Adding a "Dark Mode" Setting
 
@@ -219,7 +219,7 @@ settingsFolder.add(Globals.settings, "darkMode")
     .tooltip("Enable dark color scheme")
     .onChange((value) => {
         Globals.settings.darkMode = Boolean(value);
-        this.saveSettings(true);
+        this.saveGlobalSettings(true);
         // Apply dark mode styling here
         document.body.classList.toggle('dark-mode', value);
     })
