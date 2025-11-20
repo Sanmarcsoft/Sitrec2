@@ -54,7 +54,6 @@ export function updateFrame(elapsed) {
         par.paused = true;
         GlobalDateTimeNode.liveMode = false;
     } else if (keyHeldTime('arrowright')>100) {
-        console.log("keyHeldTime arrowright is " + keyHeldTime('arrowright'));
         par.frame += frameStep
         par.paused = true;
         GlobalDateTimeNode.liveMode = false;
