@@ -2488,7 +2488,7 @@ export class QuadTreeTile {
             // Simulate failure percentage for debug tiles (see "Debuggy" source)
             // if failurePct is defined, use it to randomly fail loading by using the
             // supplied invalid url, such as https://invalid.url/doesnotexist.png
-            if (!sourceDef.failurePct || Math.random() * 100 >= sourceDef.failurePct) {
+            if (!sourceDef.failurePct || this.z<5 || Math.random() * 100 >= sourceDef.failurePct) {
 
                 // possible debugging delay
                 // we make it random so that multiple tiles load in staggered fashion

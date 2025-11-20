@@ -195,7 +195,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
                 }
             }
 
-            // tile flags look goog, check the center is good
+            // tile flags look good, check the center is good
 
             // calculate the LLA position of the center of the tile
             const lat1 = this.options.mapProjection.getNorthLatitude(child.y, child.z);
@@ -640,6 +640,15 @@ class QuadTreeMapTexture extends QuadTreeMap {
             if (error.message !== 'Aborted' && error.message !== 'Tile is being cancelled') {
 
                 showErrorOnce("TILE_LOADING_ERROR", `Failed to load texture for tile ${key}:`, error);
+
+                tile.tileLayers = 0;
+                tile.isLoading = false;
+                if (tile.parent) {
+                    tile.parent.isDeadBranch = true; // mark parent as dead branch to prevent further subdivision attempts
+                }
+                tile.loaded = false;
+                // Ensure tile is deactivated in scene
+                // this.deactivateTile(tile, 0, true); // instant deactivate all layers
 
             } else if (error.message === 'Aborted') {
                 // Check if the tile is active again - this should now be rare since we prevent reactivation during cancellation

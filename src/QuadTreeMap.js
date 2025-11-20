@@ -266,30 +266,32 @@ export class QuadTreeMap {
                 tile.cancelPendingLoads();
             }
 
-            // OPERATION 2: Remove inactive tiles from scene
-            if (tile.added && !tile.tileLayers && tile.mesh) {
-                const children = this.getChildren(tile);
-                if (children) {
-                    const allChildrenLoaded = children.every(child => child && child.loaded);
-                    if (allChildrenLoaded) {
-                        this.scene.remove(tile.mesh);
-                        if (tile.skirtMesh) {
-                            this.scene.remove(tile.skirtMesh);
-                        }
-                        tile.added = false;
-
-                        // Reset lazy loading flags when tile is removed from scene
-                        if (tile.usingParentData) {
-                            tile.needsHighResLoad = false;
-                        }
-
-                        this.refreshDebugGeometry(tile);
-                    }
-                }
-
-                assert(this.areaIsCovered(tile), "Tile removed but area is not covered!");
-
-            }
+            // // OPERATION 2: Remove inactive tiles from scene
+            // if (tile.added && !tile.tileLayers && tile.mesh) {
+            //     const children = this.getChildren(tile);
+            //     if (children) {
+            //         const allChildrenLoaded = children.every(child => child && child.loaded);
+            //         if (allChildrenLoaded) {
+            //             this.scene.remove(tile.mesh);
+            //             if (tile.skirtMesh) {
+            //                 this.scene.remove(tile.skirtMesh);
+            //             }
+            //             tile.added = false;
+            //
+            //             // Reset lazy loading flags when tile is removed from scene
+            //             if (tile.usingParentData) {
+            //                 tile.needsHighResLoad = false;
+            //             }
+            //
+            //             this.refreshDebugGeometry(tile);
+            //         }
+            //     }
+            //
+            //
+            //     // note not passing a layer mask here, WHY?
+            //     assert(this.areaIsCovered(tile), "Tile removed as all chilren loaded, but area is not covered by children");
+            //
+            // }
 
             // OPERATION 3: Identify tiles to prune (collect for deletion after iteration)
             const children = this.getChildren(tile);
@@ -302,10 +304,42 @@ export class QuadTreeMap {
                     if (now - child.inactiveSince < this.inactiveTileTimeout) return false; // Not old enough
                     return true;
                 });
-                
+
+
+
                 if (allChildrenPrunable) {
                     // Collect children for pruning (delete after iteration completes)
                     tilesToPrune.push(...children);
+                    tile.children = null; // Clear children reference from parent
+                }
+            }
+
+
+            // if a dead branch, prune ALL its descendants
+            if (tile.isDeadBranch) {
+                const children = tile.children;
+                if (children) {
+                    let allChildrenPrunable = true;
+                    children.forEach(child => {
+                        if (child.children || child.isLoading) {
+                            child.isDeadBranch = true; // mark as dead branch, so its descendants get pruned too
+                            allChildrenPrunable = false; // can't prune this one yet
+                        } else {
+                        }
+                    });
+
+                    if (allChildrenPrunable) {
+                        // Collect children for pruning (delete after iteration completes)
+                        tilesToPrune.push(...children);
+
+                        // dead branch pruning can prune active tiles too, so mark them as inactive
+                        // (otherwise we get possible errors from aborting loads on active tiles)
+                        children.forEach(child => {
+                            child.tileLayers = 0; // mark as inactive so we can cleanly abort loads
+                        })
+
+                        tile.children = null; // Clear children reference from parent
+                    }
                 }
             }
         });
@@ -326,7 +360,7 @@ export class QuadTreeMap {
                 if (child.skirtMesh.geometry) child.skirtMesh.geometry.dispose();
                 if (child.skirtMesh.material) child.skirtMesh.material.dispose();
             }
-            
+
             // Cancel any pending loads
             child.cancelPendingLoads();
             
@@ -543,6 +577,7 @@ export class QuadTreeMap {
         this.parentTiles.forEach((tile) => {
             if (tile.z >= this.maxZoom) return;
             if (tile.isLoading) return;
+            if (tile.isDeadBranch) return;
 
             const allChildrenReady = this.areaCoveredByDescendants(tile, tileLayers)
             
@@ -650,6 +685,12 @@ export class QuadTreeMap {
      * Determine if a tile should be subdivided
      */
     shouldSubdivideTile(tile, visibility, subdivideSize) {
+
+        // don't subdivide if this is a dead branch (i.e. child tile gave a loading error)
+        if (tile.isDeadBranch) {
+            return false;
+        }
+
         // Don't subdivide if we're at or beyond the effective max zoom
         const effectiveMaxZoom = this.getEffectiveMaxZoom();
         if (tile.z >= effectiveMaxZoom) {

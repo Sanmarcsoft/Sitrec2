@@ -241,9 +241,9 @@ export class CNodeTerrain extends CNode {
         const sourceDef = this.UI.mapSources[this.UI.mapType];
         assert(sourceDef !== undefined, "CNodeTerrain: sourceDef for " + this.UI.mapType + " not found in mapSources")
 
-        if (sourceDef.isDebug) {
-            return null; // no URL for debug maps
-        }
+        // if (sourceDef.isDebug) {
+        //     return null; // no URL for debug maps
+        // }
 
         // if no layers, then don't pass any layers into the mapURL function
         if (sourceDef.layers === undefined) {
