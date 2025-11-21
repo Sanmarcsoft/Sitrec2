@@ -8,6 +8,7 @@ import {NearestFilter} from "three/src/constants";
 import {createTerrainDayNightMaterial} from "./js/map33/material/TerrainDayNightMaterial";
 import {asyncOperationRegistry} from "./AsyncOperationRegistry";
 import {assert} from "./assert";
+import {isLocal} from "./configUtils";
 
 class QuadTreeMapTexture extends QuadTreeMap {
     constructor(scene, terrainNode, geoLocation, options = {}) {
@@ -639,20 +640,28 @@ class QuadTreeMapTexture extends QuadTreeMap {
             // Don't log abort errors or cancellation errors - they're expected when tiles are cancelled
             if (error.message !== 'Aborted' && error.message !== 'Tile is being cancelled') {
 
-                showErrorOnce("TILE_LOADING_ERROR", `Failed to load texture for tile ${key}:`, error);
+                // check the ignoreErrors flag
+
+                const sourceDef = this.terrainNode.UI.getSourceDef();
+                if (!sourceDef.ignoreTileLoadingErrors && isLocal) {
+                   showErrorOnce("TILE_LOADING_ERROR", `Failed to load texture for tile ${key}:`, error);
+                }
 
                 tile.tileLayers = 0;
                 tile.isLoading = false;
-                if (tile.parent) {
-                    tile.parent.isDeadBranch = true; // mark parent as dead branch to prevent further subdivision attempts
-                }
-                tile.loaded = false;
-                // Ensure tile is deactivated in scene
-                // this.deactivateTile(tile, 0, true); // instant deactivate all layers
+                // if (tile.parent) {
+                //     tile.parent.isDeadBranch = true; // mark parent as dead branch to prevent further subdivision attempts
+                // }
+                // tile.loaded = false;
+
+                tile.isDeadBranch = true; // mark tile as dead branch to prevent further subdivision attempts
+
+
 
             } else if (error.message === 'Aborted') {
                 // Check if the tile is active again - this should now be rare since we prevent reactivation during cancellation
-                if (tile.tileLayers > 0) {
+                const sourceDef = this.terrainNode.UI.getSourceDef();
+                if (tile.tileLayers > 0 && !sourceDef.ignoreTileLoadingErrors && isLocal) {
                     showError(`Tile ${key} ABORTED load texture but is still active - this should not happen with the new prevention logic.`);
                 }
             }

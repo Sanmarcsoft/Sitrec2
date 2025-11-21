@@ -160,6 +160,7 @@ export class CNodeTerrainUI extends CNode {
                     isDebug: true,
                     maxZoom: 20,
                     failurePct: 5,
+                    ignoreTileLoadingErrors: true,
                     mapURL: (z,x,y) => {
                         return "https://invalid.url/doesnotexist.png";
                     },

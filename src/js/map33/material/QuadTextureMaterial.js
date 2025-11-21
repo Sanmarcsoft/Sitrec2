@@ -19,7 +19,7 @@ function processQueue() {
 }
 
 // Function to load a texture with retries and delay on error
-export function loadTextureWithRetries(url, maxRetries = 3, delay = 100, currentAttempt = 0, urlIndex = 0, abortSignal = null) {
+export function loadTextureWithRetries(url, maxRetries = 0, delay = 100, currentAttempt = 0, urlIndex = 0, abortSignal = null) {
   // we expect url to be an array of 1 or more urls which we try in sequence until one works
   // if we are passed in a single string, convert it to an array
   if (typeof url === 'string') {

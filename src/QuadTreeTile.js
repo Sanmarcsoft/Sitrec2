@@ -1329,7 +1329,7 @@ export class QuadTreeTile {
 
         // Create and cache the loading promise to prevent concurrent loads
         const loadPromise = delayPromise.then(() => 
-            loadTextureWithRetries(url, 3, 100, 0, 0, abortSignal)
+            loadTextureWithRetries(url, 0, 100, 0, 0, abortSignal)
         ).then((texture) => {
             let finalTexture = texture;
 
@@ -1420,7 +1420,7 @@ export class QuadTreeTile {
                     } else {
 
                         // Create and cache the base texture loading promise
-                        const baseLoadPromise = loadTextureWithRetries(url, 3, 100, 0, 0, abortSignal).then((texture) => {
+                        const baseLoadPromise = loadTextureWithRetries(url, 0, 100, 0, 0, abortSignal).then((texture) => {
                             let finalTexture = texture;
 
                             // Apply color processing if enabled for this source
