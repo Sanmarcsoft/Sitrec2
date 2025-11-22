@@ -1092,3 +1092,17 @@ export function parseBoolean(value) {
     return Boolean(value);
 }
 
+
+// return a float based on the md5 hash of the input string
+// between 0 and 1
+export function md5AsFloat(inputString) {
+    const hash = MD5(inputString);
+    // take the first 8 characters of the hash
+    const hashPart = hash.substring(0, 8);
+    // convert to an integer
+    const intValue = parseInt(hashPart, 16);
+    // divide by the maximum value for 8 hex characters
+    const maxIntValue = 0xFFFFFFFF;
+    return intValue / maxIntValue;
+}
+
