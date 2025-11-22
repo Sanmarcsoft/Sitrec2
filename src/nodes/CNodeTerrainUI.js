@@ -9,6 +9,7 @@ import {CNodeTerrain} from "./CNodeTerrain";
 import {par} from "../par";
 import {addAlignedGlobe} from "../Globe";
 import {showHider} from "../KeyBoardHandler";
+import {md5AsFloat} from "../utils";
 
 export class CNodeTerrainUI extends CNode {
     constructor(v) {
@@ -142,13 +143,19 @@ export class CNodeTerrainUI extends CNode {
                     name: "Open Streetmap BUGGY for testing",
                     mapURL: (z,x,y) => {
 
-                        if (z >= 4 && Math.random() < 0.05) {
-                            // simulate a failed tile load 5% of the time at zoom 4 and above
-                            return "https://invalid.url/doesnotexist.png";
+
+                        const url = `https://c.tile.openstreetmap.org/${z}/${x}/${y}.png`
+
+                        // simulate a failed tile load 5% of the time at zoom 4 and above
+                        // use a hash of the url to get a consistent failure pattern
+                        // Equivalent to using Math.random, but consistent for each tile
+                        if (z >= 4 && md5AsFloat(url) < 0.25) {
+                            return "https://invalid.url/${z}/${x}/${y}.png";
                         }
 
+                        return url;
+
 //                return SITREC_SERVER+"cachemaps.php?url=" + encodeURIComponent(`https://c.tile.openstreetmap.org/${z}/${x}/${y}.png`)
-                        return `https://c.tile.openstreetmap.org/${z}/${x}/${y}.png`
                     },
                     maxZoom: 17,
                     supportsOceanSurface: true, // OpenStreetMap can have ocean surface overlay
