@@ -248,7 +248,7 @@ export class CVideoAudioOnly extends CVideoAndAudio {
         
         this.audioHandler = {
             isPlaying: false,
-            isMuted: false,
+            isMuted: true,
             isInitialized: true,
             volume: 1.0,
             audioContext: audioContext,

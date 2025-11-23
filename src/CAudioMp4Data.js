@@ -32,7 +32,7 @@ export class CAudioMp4Data {
         this.audioDecoder = null;
         this.isPlaying = false;
         this.volume = 1.0;
-        this.isMuted = false;
+        this.isMuted = true;
         this.decodedAudioData = [];
         this.sourceNode = null;
         this.gainNode = null;
