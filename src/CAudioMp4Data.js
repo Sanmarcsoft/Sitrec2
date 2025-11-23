@@ -262,7 +262,7 @@ export class CAudioMp4Data {
 
             if (needsRestart) {
                 if (this.debug) console.log("Restart needed Play called: wasPlaying=", wasPlaying, "frameJumped=", frameJumped, "decoded samples=", this.decodedAudioData.length);
-                this.stopAudioSource();
+                this.stopAudioSource(true);
                 this.playbackStartTime = this.audioContext.currentTime;
                 this.playbackStartFrame = startFrame;
                 this.playAudioBuffer(startFrame, fps);
@@ -275,24 +275,44 @@ export class CAudioMp4Data {
     }
 
     /**
-     * Immediately stop audio playback and disconnect from audio graph
-     * Critical for instant audio stopping when switching videos
+     * Stop audio playback with optional fade-out to prevent clicks
+     * @param {boolean} immediate - If true, stop immediately (for restarts). If false, apply 5ms fade-out (for pause/stop)
      */
-    stopAudioSource() {
+    stopAudioSource(immediate = false) {
         if (this._playbackRetryTimeout) {
             clearTimeout(this._playbackRetryTimeout);
             this._playbackRetryTimeout = null;
         }
         if (this.audioBufferSource) {
+            const sourceToStop = this.audioBufferSource;
+            this.audioBufferSource = null;
+            
             try {
-                // Immediately stop the audio source
-                this.audioBufferSource.stop(0);
-                // Disconnect it from the audio graph to ensure no more audio is processed
-                this.audioBufferSource.disconnect();
+                if (immediate) {
+                    sourceToStop.stop(0);
+                    sourceToStop.disconnect();
+                } else {
+                    const currentTime = this.audioContext.currentTime;
+                    const fadeTime = 0.005;
+                    const currentGain = this.gainNode.gain.value;
+                    
+                    this.gainNode.gain.cancelScheduledValues(currentTime);
+                    this.gainNode.gain.setValueAtTime(currentGain, currentTime);
+                    this.gainNode.gain.linearRampToValueAtTime(0.0001, currentTime + fadeTime);
+                    
+                    sourceToStop.stop(currentTime + fadeTime);
+                    
+                    setTimeout(() => {
+                        try {
+                            sourceToStop.disconnect();
+                        } catch (e) {}
+                        this.gainNode.gain.cancelScheduledValues(this.audioContext.currentTime);
+                        this.gainNode.gain.setValueAtTime(this.isMuted ? 0 : this.volume, this.audioContext.currentTime);
+                    }, fadeTime * 1000 + 10);
+                }
             } catch (e) {
                 if (this.debug) console.warn("Error stopping audio source:", e);
             }
-            this.audioBufferSource = null;
         }
         this.isBufferSourceStarted = false;
     }

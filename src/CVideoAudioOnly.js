@@ -310,11 +310,28 @@ export class CVideoAudioOnly extends CVideoAndAudio {
             
             pause: function() {
                 if (bufferSource) {
-                    try {
-                        bufferSource.stop(0);
-                        bufferSource.disconnect();
-                    } catch (e) {}
+                    const sourceToStop = bufferSource;
                     bufferSource = null;
+                    
+                    try {
+                        const currentTime = audioContext.currentTime;
+                        const fadeTime = 0.005;
+                        const currentGain = gainNode.gain.value;
+                        
+                        gainNode.gain.cancelScheduledValues(currentTime);
+                        gainNode.gain.setValueAtTime(currentGain, currentTime);
+                        gainNode.gain.linearRampToValueAtTime(0.0001, currentTime + fadeTime);
+                        
+                        sourceToStop.stop(currentTime + fadeTime);
+                        
+                        setTimeout(() => {
+                            try {
+                                sourceToStop.disconnect();
+                            } catch (e) {}
+                            gainNode.gain.cancelScheduledValues(audioContext.currentTime);
+                            gainNode.gain.setValueAtTime(this.isMuted ? 0 : this.volume, audioContext.currentTime);
+                        }, fadeTime * 1000 + 10);
+                    } catch (e) {}
                 }
                 isPlaying = false;
                 this.isPlaying = false;
@@ -322,11 +339,28 @@ export class CVideoAudioOnly extends CVideoAndAudio {
             
             stop: function() {
                 if (bufferSource) {
-                    try {
-                        bufferSource.stop(0);
-                        bufferSource.disconnect();
-                    } catch (e) {}
+                    const sourceToStop = bufferSource;
                     bufferSource = null;
+                    
+                    try {
+                        const currentTime = audioContext.currentTime;
+                        const fadeTime = 0.005;
+                        const currentGain = gainNode.gain.value;
+                        
+                        gainNode.gain.cancelScheduledValues(currentTime);
+                        gainNode.gain.setValueAtTime(currentGain, currentTime);
+                        gainNode.gain.linearRampToValueAtTime(0.0001, currentTime + fadeTime);
+                        
+                        sourceToStop.stop(currentTime + fadeTime);
+                        
+                        setTimeout(() => {
+                            try {
+                                sourceToStop.disconnect();
+                            } catch (e) {}
+                            gainNode.gain.cancelScheduledValues(audioContext.currentTime);
+                            gainNode.gain.setValueAtTime(this.isMuted ? 0 : this.volume, audioContext.currentTime);
+                        }, fadeTime * 1000 + 10);
+                    } catch (e) {}
                 }
                 isPlaying = false;
                 this.isPlaying = false;
