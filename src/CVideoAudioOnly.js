@@ -184,12 +184,19 @@ export class CVideoAudioOnly extends CVideoAndAudio {
         console.log(`[CVideoAudioOnly.decodeMP3Audio] this.videoDroppedData BEFORE decode:`, this.videoDroppedData ? `size=${this.videoDroppedData.byteLength}` : 'UNDEFINED');
         
         try {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const tempContext = new (window.AudioContext || window.webkitAudioContext)();
             const bufferCopy = arrayBuffer.slice(0);
-            const audioBuffer = await audioContext.decodeAudioData(bufferCopy);
+            const audioBuffer = await tempContext.decodeAudioData(bufferCopy);
+            await tempContext.close();
             console.log(`[CVideoAudioOnly.decodeMP3Audio] this.videoDroppedData AFTER decode:`, this.videoDroppedData ? `size=${this.videoDroppedData.byteLength}` : 'UNDEFINED');
             
             console.log(`[CVideoAudioOnly.decodeMP3Audio] Decode complete: duration=${audioBuffer.duration}s, sampleRate=${audioBuffer.sampleRate}, channels=${audioBuffer.numberOfChannels}`);
+            
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            const audioContext = new AudioContextClass({
+                sampleRate: audioBuffer.sampleRate
+            });
+            console.log(`[CVideoAudioOnly.decodeMP3Audio] AudioContext created with sampleRate:`, audioBuffer.sampleRate);
             
             this.frames = Math.ceil(audioBuffer.duration * this.originalFps);
             this.frames = Math.max(1, this.frames);
