@@ -1038,7 +1038,7 @@ export class CNodeFrameSlider extends CNode {
         div.style.backgroundRepeat = 'no-repeat';
         div.style.cursor = 'pointer';
         div.style.userSelect = 'none'; // Prevent text selection on long press
-        div.style.WebkitUserSelect = 'none'; // iOS compatibility
+        div.style.WebkitUserSelect = 'none';  // iOS compatibility
         div.addEventListener('click', onClickHandler);
         return div;
     }

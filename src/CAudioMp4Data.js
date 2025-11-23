@@ -262,10 +262,46 @@ export class CAudioMp4Data {
 
             if (needsRestart) {
                 if (this.debug) console.log("Restart needed Play called: wasPlaying=", wasPlaying, "frameJumped=", frameJumped, "decoded samples=", this.decodedAudioData.length);
-                this.stopAudioSource(true);
-                this.playbackStartTime = this.audioContext.currentTime;
-                this.playbackStartFrame = startFrame;
-                this.playAudioBuffer(startFrame, fps);
+                
+                if (this._playbackRetryTimeout) {
+                    clearTimeout(this._playbackRetryTimeout);
+                    this._playbackRetryTimeout = null;
+                }
+                
+                const hasOldSource = this.audioBufferSource !== null;
+                if (hasOldSource) {
+                    const oldSource = this.audioBufferSource;
+                    this.audioBufferSource = null;
+                    this.isBufferSourceStarted = false;
+                    
+                    const currentTime = this.audioContext.currentTime;
+                    const quickFade = 0.003;
+                    const currentGain = this.gainNode.gain.value;
+                    
+                    this.gainNode.gain.cancelScheduledValues(currentTime);
+                    this.gainNode.gain.setValueAtTime(currentGain, currentTime);
+                    this.gainNode.gain.linearRampToValueAtTime(0, currentTime + quickFade);
+                    
+                    try {
+                        oldSource.stop(currentTime + quickFade);
+                    } catch (e) {}
+                    
+                    setTimeout(() => {
+                        try {
+                            oldSource.disconnect();
+                        } catch (e) {}
+                    }, quickFade * 1000 + 10);
+                    
+                    setTimeout(() => {
+                        this.playbackStartTime = this.audioContext.currentTime;
+                        this.playbackStartFrame = startFrame;
+                        this.playAudioBuffer(startFrame, fps);
+                    }, quickFade * 1000);
+                } else {
+                    this.playbackStartTime = this.audioContext.currentTime;
+                    this.playbackStartFrame = startFrame;
+                    this.playAudioBuffer(startFrame, fps);
+                }
             }
 
             this.startFrame = startFrame;
@@ -485,11 +521,11 @@ export class CAudioMp4Data {
             if (this.debug) console.log("Starting audio playback: currentFrame=", currentFrame, "offsetTime=", offsetTime.toFixed(3), "seconds, timeElapsed=", timeElapsed.toFixed(3), "originalFps=", originalFps, "playbackRate=", playbackRate);
             
             const currentTime = this.audioContext.currentTime;
-            const fadeTime = 0.005;
+            const fadeTime = offsetTime < 0.01 ? 0.01 : 0.005;
             const targetGain = this.isMuted ? 0 : this.volume;
             
             this.gainNode.gain.cancelScheduledValues(currentTime);
-            this.gainNode.gain.setValueAtTime(0.0001, currentTime);
+            this.gainNode.gain.setValueAtTime(0, currentTime);
             this.gainNode.gain.linearRampToValueAtTime(targetGain, currentTime + fadeTime);
             
             this.audioBufferSource.start(currentTime, offsetTime);

@@ -249,6 +249,7 @@ export class CVideoAudioOnly extends CVideoAndAudio {
         this.audioHandler = {
             isPlaying: false,
             isMuted: false,
+            isInitialized: true,
             volume: 1.0,
             audioContext: audioContext,
             audioBuffer: audioBuffer,
@@ -277,34 +278,57 @@ export class CVideoAudioOnly extends CVideoAndAudio {
                     }
                     
                     if (needsRestart) {
-                        if (bufferSource) {
+                        const oldSource = bufferSource;
+                        bufferSource = null;
+                        
+                        if (oldSource) {
                             try {
-                                bufferSource.stop(0);
-                                bufferSource.disconnect();
+                                const currentTime = audioContext.currentTime;
+                                const quickFade = 0.003;
+                                const currentGain = gainNode.gain.value;
+                                
+                                gainNode.gain.cancelScheduledValues(currentTime);
+                                gainNode.gain.setValueAtTime(currentGain, currentTime);
+                                gainNode.gain.linearRampToValueAtTime(0, currentTime + quickFade);
+                                
+                                oldSource.stop(currentTime + quickFade);
+                                
+                                setTimeout(() => {
+                                    try {
+                                        oldSource.disconnect();
+                                    } catch (e) {}
+                                }, quickFade * 1000 + 10);
                             } catch (e) {}
-                            bufferSource = null;
-                        }
-                        
-                        bufferSource = audioContext.createBufferSource();
-                        bufferSource.buffer = audioBuffer;
-                        bufferSource.connect(gainNode);
-                        
-                        const startTime = startFrame / fps;
-                        const offset = Math.min(startTime, audioBuffer.duration);
-                        
-                        if (this.debug) {
-                            console.log(`[Audio] Restarting playback at offset=${offset.toFixed(4)}s (frame ${startFrame})`);
                         }
                         
                         const currentTime = audioContext.currentTime;
-                        const fadeTime = 0.005;
-                        const targetGain = this.isMuted ? 0 : this.volume;
+                        const startDelay = oldSource ? 0.003 : 0;
                         
-                        gainNode.gain.cancelScheduledValues(currentTime);
-                        gainNode.gain.setValueAtTime(0.0001, currentTime);
-                        gainNode.gain.linearRampToValueAtTime(targetGain, currentTime + fadeTime);
-                        
-                        bufferSource.start(0, offset);
+                        setTimeout(() => {
+                            bufferSource = audioContext.createBufferSource();
+                            bufferSource.buffer = audioBuffer;
+                            bufferSource.connect(gainNode);
+                            
+                            const startTime = startFrame / fps;
+                            const offset = Math.min(startTime, audioBuffer.duration);
+                            
+                            if (this.debug) {
+                                console.log(`[Audio] Restarting playback at offset=${offset.toFixed(4)}s (frame ${startFrame})`);
+                            }
+                            
+                            const nowTime = audioContext.currentTime;
+                            const fadeTime = offset < 0.01 ? 0.01 : 0.005;
+                            const targetGain = this.isMuted ? 0 : this.volume;
+                            
+                            gainNode.gain.cancelScheduledValues(nowTime);
+                            gainNode.gain.setValueAtTime(0, nowTime);
+                            gainNode.gain.linearRampToValueAtTime(targetGain, nowTime + fadeTime);
+                            
+                            bufferSource.start(0, offset);
+                            
+                            isPlaying = true;
+                            this.isPlaying = true;
+                        }, startDelay * 1000);
                         
                         isPlaying = true;
                         this.isPlaying = true;
@@ -383,6 +407,10 @@ export class CVideoAudioOnly extends CVideoAndAudio {
             setMuted: function(muted) {
                 gainNode.gain.value = muted ? 0 : this.volume;
                 this.isMuted = muted;
+            },
+            
+            getMuted: function() {
+                return this.isMuted;
             },
             
             dispose: () => {
