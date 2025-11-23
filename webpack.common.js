@@ -70,7 +70,9 @@ module.exports = {
     },
     resolve: {
         extensions: ['.js'],
-        alias: {},
+        alias: {
+            'three/src': 'three',
+        },
     },
     plugins: [
 
@@ -183,6 +185,41 @@ module.exports = {
             'process.env.DOCKER_BUILD': JSON.stringify(process.env.DOCKER_BUILD === 'true'),
             'CAN_REQUIRE_CONTEXT': JSON.stringify(true),
         }),
+
+        {
+            apply: (compiler) => {
+                compiler.hooks.emit.tap('DetectDuplicateThreeModules', (compilation) => {
+                    const threeModules = new Map();
+                    
+                    for (const module of compilation.modules) {
+                        if (!module.resource) continue;
+                        
+                        if (module.resource.includes('node_modules/three/')) {
+                            const relativePath = module.resource.substring(
+                                module.resource.indexOf('node_modules/three/')
+                            );
+                            
+                            if (!threeModules.has(relativePath)) {
+                                threeModules.set(relativePath, []);
+                            }
+                            threeModules.get(relativePath).push(module.identifier());
+                        }
+                    }
+                    
+                    const duplicates = Array.from(threeModules.entries())
+                        .filter(([, identifiers]) => identifiers.length > 1);
+                    
+                    if (duplicates.length > 0) {
+                        console.error('\n⚠️  WARNING: Duplicate Three.js modules detected!\n');
+                        duplicates.forEach(([path, identifiers]) => {
+                            console.error(`  ${path}: ${identifiers.length} instances`);
+                        });
+                        console.error('\n  This may cause prototype extensions to fail.');
+                        console.error('  Ensure all Three.js imports use "three" not "three/src/*"\n');
+                    }
+                });
+            },
+        },
 
         // CircularDependencyPlugin moved to individual webpack configs to avoid duplication
 

@@ -1,4 +1,4 @@
-import {CanvasTexture} from "three/src/textures/CanvasTexture";
+import {CanvasTexture} from "three";
 
 /**
  * Generates mipmaps for a texture by creating progressively smaller filtered versions

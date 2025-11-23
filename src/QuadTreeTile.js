@@ -8,14 +8,16 @@ import {loadTextureWithRetries} from "./js/map33/material/QuadTextureMaterial";
 import {convertTIFFToElevationArray} from "./TIFFUtils";
 import {fromArrayBuffer} from 'geotiff';
 import {getPixels} from "./js/get-pixels-mick";
-import {PlaneGeometry} from "three/src/geometries/PlaneGeometry";
-import {BufferGeometry} from "three/src/core/BufferGeometry";
-import {Float32BufferAttribute} from "three/src/core/BufferAttribute";
-import {Mesh} from "three/src/objects/Mesh";
-import {MeshStandardMaterial} from "three/src/materials/MeshStandardMaterial";
-import {Sphere} from "three/src/math/Sphere";
-import {CanvasTexture} from "three/src/textures/CanvasTexture";
-import {NearestFilter} from "three/src/constants";
+import {
+    BufferGeometry,
+    CanvasTexture,
+    Float32BufferAttribute,
+    Mesh,
+    MeshStandardMaterial,
+    NearestFilter,
+    PlaneGeometry,
+    Sphere
+} from "three";
 import {globalMipmapGenerator} from "./MipmapGenerator";
 import {fastComputeVertexNormals} from "./FastComputeVertexNormals";
 import {fastComputeVertexNormalsAsync} from "./FastComputeVertexNormalsAsync";
@@ -23,6 +25,12 @@ import {showError} from "./showError";
 import {processTextureColors} from "./TextureColorProcessor";
 import {createTerrainDayNightMaterial} from "./js/map33/material/TerrainDayNightMaterial";
 import {fileSystemFetch} from "./fileSystemFetch";
+
+
+// we maintain a set of bad texture URLs to avoid retrying them
+// this is per session
+const badTextureUrls = new Set();
+
 
 //const tileMaterial = new MeshStandardMaterial({wireframe: true, color: "#408020", transparent: true, opacity: 0.5})
 
@@ -34,7 +42,7 @@ const tileMaterial = new MeshStandardMaterial({
     wireframe: true,
     color: '#ff00ff',
     transparent: true,
-    opacity: 0.0
+    opacity: 1.0
 });
 
 // Static cache for materials to avoid loading the same texture multiple times
@@ -924,7 +932,7 @@ export class QuadTreeTile {
         this.highestAltitude = 0;
 
         if (this.map.options.elevationMap.options.elevationType === "Flat") {
-            return this.recalculateCurveFlat(radius)
+            return this.recalculateCurveFlat()
         }
 
         // Use optimized Web Mercator version if we're using GoogleMapsCompatible projection
@@ -1087,7 +1095,7 @@ export class QuadTreeTile {
     // Flat version of recalculateCurve that assumes elevation is always 0
     // This skips all elevation tile lookups and interpolation for better performance
     // when using flat terrain
-    async recalculateCurveFlat(radius) {
+    async recalculateCurveFlat(skipNormalComputation = false) {
         this.highestAltitude = 0;
 
         var geometry = this.geometry;
@@ -1146,10 +1154,7 @@ export class QuadTreeTile {
             console.warn(`Failed to generate flat elevation color texture for tile ${this.key()}:`, error);
         });
 
-        // Update geometry using async worker for normal computation
-        await fastComputeVertexNormalsAsync(geometry).catch(error => {
-            console.warn(`Failed to compute vertex normals for tile ${this.key()}:`, error);
-        });
+
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
         geometry.attributes.position.needsUpdate = true;
@@ -1158,6 +1163,16 @@ export class QuadTreeTile {
         if (this.skirtMesh && this.skirtGeometry) {
             this.updateSkirtGeometry();
         }
+
+        if (skipNormalComputation) {
+            return;
+        }
+
+        // Update geometry using async worker for normal computation
+        await fastComputeVertexNormalsAsync(geometry).catch(error => {
+            console.warn(`Failed to compute vertex normals for tile ${this.key()}:`, error);
+        });
+
     }
 
     // Optimized Web Mercator version of recalculateCurve that steps directly over tile coordinates
@@ -1360,6 +1375,15 @@ export class QuadTreeTile {
             this.textureAbortController = null;
             return material;
         }).catch((error) => {
+            // add it to the badUrls set to avoid retrying
+            // but not if aborted
+            if (error.message !== "Aborted") {
+                console.warn(`Failed to load texture for tile ${this.key()} from URL: ${url}`, error);
+                badTextureUrls.add(url);
+            }
+
+
+
             // Clean up on error
             textureLoadPromises.delete(cacheKey);
             this.textureAbortController = null;
@@ -1483,7 +1507,7 @@ export class QuadTreeTile {
      * @returns {Material} A material with the resampled texture from parent
      */
     buildMaterialFromParent(parentTile) {
-        if (!parentTile || !parentTile.mesh || !parentTile.mesh.material || !parentTile.mesh.material.map) {
+        if (!parentTile || !parentTile.mesh || !parentTile.mesh.material || !parentTile.mesh.getMap()) {
             console.warn(`Cannot build material from parent for tile ${this.key()}: parent data not available`);
             return null;
         }
@@ -1496,7 +1520,7 @@ export class QuadTreeTile {
         const quadrantY = this.y % 2; // 0 = top, 1 = bottom
 
         // Get parent texture
-        const parentTexture = parentTile.mesh.material.map;
+        const parentTexture = parentTile.mesh.getMap();
 
         // Create a canvas to extract and resample the quadrant
         const canvas = document.createElement('canvas');
@@ -1506,7 +1530,7 @@ export class QuadTreeTile {
         const ctx = canvas.getContext('2d');
 
         // Create a temporary image from the parent texture
-        const img = parentTexture.image;
+        const img = parentTexture.source.data;
         if (!img) {
             console.warn(`Cannot build material from parent for tile ${this.key()}: parent texture has no image`);
             return null;
@@ -1546,7 +1570,7 @@ export class QuadTreeTile {
      * @returns {Material} A material with the resampled texture from ancestor
      */
     buildMaterialFromAncestor(ancestorTile) {
-        if (!ancestorTile || !ancestorTile.mesh || !ancestorTile.mesh.material || !ancestorTile.mesh.material.map) {
+        if (!ancestorTile || !ancestorTile.mesh || !ancestorTile.mesh.material || !ancestorTile.mesh.getMap()) {
             console.warn(`Cannot build material from ancestor for tile ${this.key()}: ancestor data not available`);
             return null;
         }
@@ -1575,8 +1599,8 @@ export class QuadTreeTile {
         const regionHeight = 1 / scale;
 
         // Get ancestor texture
-        const ancestorTexture = ancestorTile.mesh.material.map;
-        const img = ancestorTexture.image;
+        const ancestorTexture = ancestorTile.mesh.getMap();
+        const img = ancestorTexture.source.data;
         if (!img) {
             console.warn(`Cannot build material from ancestor for tile ${this.key()}: ancestor texture has no image`);
             return null;
@@ -1689,9 +1713,7 @@ export class QuadTreeTile {
     static clearMaterialCache() {
         // Dispose of all cached materials and their textures
         materialCache.forEach((material, cacheKey) => {
-            if (material.map) {
-                material.map.dispose();
-            }
+            material.getMap()?.dispose();
             material.dispose();
         });
         materialCache.clear();
@@ -1784,9 +1806,7 @@ export class QuadTreeTile {
                 cacheKey === `static_${url}` ||
                 cacheKey.startsWith(`static_${url}_z`) ||
                 cacheKey === `static_${url}_base`) {
-                if (material.map) {
-                    material.map.dispose();
-                }
+                material.getMap()?.dispose();
                 material.dispose();
                 keysToDelete.push(cacheKey);
             }
@@ -2310,8 +2330,8 @@ export class QuadTreeTile {
     // Helper function to apply texture to mesh with proper cleanup
     applyElevationTexture(texture, logMessage) {
         // Dispose of old material if it exists
-        if (this.mesh.material && this.mesh.material.map) {
-            this.mesh.material.map.dispose();
+        if (this.mesh.material) {
+            this.mesh.getMap()?.dispose();
         }
         if (this.mesh.material && this.mesh.material !== tileMaterial) {
             this.mesh.material.dispose();
@@ -2323,9 +2343,7 @@ export class QuadTreeTile {
         // Dispose of the old material properly
         const oldMaterial = this.mesh.material;
         if (oldMaterial && oldMaterial !== tileMaterial) {
-            if (oldMaterial.map) {
-                oldMaterial.map.dispose();
-            }
+            oldMaterial.getMap()?.dispose();
             oldMaterial.dispose();
         }
 
@@ -2387,7 +2405,7 @@ export class QuadTreeTile {
         // Apply the texture to the mesh
         this.applyElevationTexture(
             textureData.texture,
-            `Applied elevation color texture to tile ${this.key()}, material type: ${this.mesh.material.constructor.name}, has texture: ${!!this.mesh.material.map}`
+            `Applied elevation color texture to tile ${this.key()}, material type: ${this.mesh.material.constructor.name}, has texture: ${!!this.mesh.getMap()}`
         );
     }
 
@@ -2562,9 +2580,7 @@ export class QuadTreeTile {
                     // Dispose of old material if we're replacing parent data
                     if (this.usingParentData && this.mesh.material) {
                         const oldMaterial = this.mesh.material;
-                        if (oldMaterial.map) {
-                            oldMaterial.map.dispose();
-                        }
+                        oldMaterial.getMap()?.dispose();
                         oldMaterial.dispose();
                     }
 
@@ -2896,7 +2912,7 @@ export class QuadTreeTile {
         // Use the same optimized static mipmap material building
         // This ensures we share the same cache and avoid duplicate loads
         const material = await this.buildStaticMipmapMaterial(oceanUrl, oceanSourceDef);
-        return material.uniforms.map.value;
+        return material.getMap();
     }
 
 

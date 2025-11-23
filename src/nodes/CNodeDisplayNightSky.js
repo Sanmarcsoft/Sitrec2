@@ -1,6 +1,6 @@
 import {CNode3DGroup} from "./CNode3DGroup";
 import {GlobalNightSkyScene, GlobalScene, GlobalSunSkyScene, setupNightSkyScene, setupSunSkyScene} from "../LocalFrame";
-import {Color, Group, Matrix4, Raycaster, Scene, Sphere, Vector3} from "three";
+import {Color, Group, Matrix4, Ray, Raycaster, Scene, Sphere, Vector3} from "three";
 import {degrees, radians} from "../utils";
 import {FileManager, GlobalDateTimeNode, Globals, guiMenus, guiShowHide, NodeMan, setRenderOne, Sit} from "../Globals";
 import {
@@ -39,7 +39,6 @@ import {CStarField} from "./CStarField";
 import {CCelestialElements} from "./CCelestialElements";
 import {CPlanets} from "./CPlanets";
 import {CSatellite} from "./CSatellite";
-import {Ray} from "three/src/math/Ray";
 
 
 // other source of stars, if we need more (for zoomed-in pics)

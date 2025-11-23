@@ -4,10 +4,9 @@ import {DebugArrowAB, removeDebugArrow} from "../threeExt";
 import {CNode} from "./CNode";
 import {guiShowHide} from "../Globals";
 import {convertColorInput} from "../ConvertColorInputs";
-import {Vector3} from "three/src/math/Vector3";
+import {Raycaster, Vector3} from "three";
 import * as LAYER from "../LayerMasks";
 import {GlobalScene} from "../LocalFrame";
-import {Raycaster} from "three/src/core/Raycaster";
 import {assert} from "../assert";
 
 export class CNodeBackgroundFlowIndicator extends CNode {

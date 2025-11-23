@@ -3,12 +3,12 @@ import {QuadTreeTile} from "./QuadTreeTile";
 import {QuadTreeMap} from "./QuadTreeMap";
 import {setRenderOne} from "./Globals";
 import {showError, showErrorOnce} from "./showError";
-import {CanvasTexture} from "three/src/textures/CanvasTexture";
-import {NearestFilter} from "three/src/constants";
+import {CanvasTexture, NearestFilter} from "three";
 import {createTerrainDayNightMaterial} from "./js/map33/material/TerrainDayNightMaterial";
 import {asyncOperationRegistry} from "./AsyncOperationRegistry";
 import {assert} from "./assert";
 import {isLocal} from "./configUtils";
+import "./threeExt";
 
 class QuadTreeMapTexture extends QuadTreeMap {
     constructor(scene, terrainNode, geoLocation, options = {}) {
@@ -124,9 +124,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
                 tile.mesh.geometry.dispose();
                 
                 // Dispose the texture if it exists
-                if (tile.mesh.material.uniforms?.map?.value) {
-                    tile.mesh.material.uniforms.map.value.dispose();
-                }
+                tile.mesh.getMap()?.dispose();
                 
                 tile.mesh.material.dispose()
             }
@@ -384,6 +382,9 @@ class QuadTreeMapTexture extends QuadTreeMap {
         tile.buildGeometry();
         tile.buildMesh();
 
+        // So at this point the tile has bad geometry, as it's just a flat mesh
+        // and not aligned to the globe yet.
+
         // Set the tile's layer mask BEFORE applying material to ensure it's available in addAfterLoaded()
 //        console.log(`activateTile: ${key} - layerMask=${layerMask}, existing tileLayers=${tile.tileLayers}`);
         if (layerMask > 0) {
@@ -553,7 +554,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
             
             // Ancestor is loaded, try to extract texture from it
             if (ancestorTile && ancestorTile.mesh && ancestorTile.mesh.material && 
-                ancestorTile.mesh.material.map && !ancestorTile.mesh.material.wireframe) {
+                ancestorTile.mesh.getMap() && !ancestorTile.mesh.material.wireframe) {
                 // Extract texture from ancestor tile
                 const ancestorMaterial = tile.buildMaterialFromAncestor(ancestorTile);
                 if (ancestorMaterial) {
@@ -608,7 +609,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
             // attempt to use parent data when the parent texture is actually available.
             // The deferred subdivision logic in subdivideTiles() ensures this is true.
             if (parentTile && parentTile.mesh && parentTile.mesh.material && 
-                parentTile.mesh.material.map && !parentTile.mesh.material.wireframe) {
+                parentTile.mesh.getMap() && !parentTile.mesh.material.wireframe) {
                 // Extract and downsample parent texture for this child tile
                 const parentMaterial = tile.buildMaterialFromParent(parentTile);
                 if (parentMaterial) {
@@ -645,12 +646,10 @@ class QuadTreeMapTexture extends QuadTreeMap {
                    showErrorOnce("TILE_LOADING_ERROR", `Failed to load texture for tile ${key}:`, error);
                 }
 
-                tile.tileLayers = 0;
+                // we leave the tile visible as is,  created from a quarter for the parent texture
+                //tile.tileLayers = 0;
+
                 tile.isLoading = false;
-                // if (tile.parent) {
-                //     tile.parent.isDeadBranch = true; // mark parent as dead branch to prevent further subdivision attempts
-                // }
-                // tile.loaded = false;
 
                 tile.isDeadBranch = true; // mark tile as dead branch to prevent further subdivision attempts
 

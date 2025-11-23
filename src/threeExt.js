@@ -9,6 +9,7 @@ import {
     LinearFilter,
     LineBasicMaterial,
     LineSegments,
+    Material,
     Mesh,
     MeshBasicMaterial,
     NearestFilter,
@@ -34,6 +35,13 @@ import {Line2} from "three/addons/lines/Line2.js";
 import {assert} from "./assert.js";
 import {intersectSphere2, makeMatrix4PointYAt, V3} from "./threeUtils";
 
+Material.prototype.getMap = function() {
+    return this.uniforms?.map?.value ?? this.map;
+};
+
+Mesh.prototype.getMap = function() {
+    return this.material?.getMap();
+};
 
 // Wrapper for calling dispose function on object, allowing undefined
 export function dispose(a) { if (a!=undefined) a.dispose()}

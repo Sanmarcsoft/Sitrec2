@@ -1,12 +1,11 @@
 import {wgs84} from "./LLA-ECEF-ENU";
-import {Matrix4} from "three/src/math/Matrix4";
-import {Frustum} from "three/src/math/Frustum";
-import {Vector3} from "three/src/math/Vector3";
+import {Frustum, Matrix4, Vector3} from "three";
 import {debugLog, Globals} from "./Globals";
 import {isLocal} from "./configUtils";
 import {altitudeAboveSphere, distanceToHorizon, hiddenByGlobe} from "./SphericalMath";
 import * as LAYER from "./LayerMasks";
 import {assert} from "./assert";
+import "./threeExt";
 
 // Reusable Vector3 objects to avoid garbage collection pressure
 // These are reused across all tile visibility calculations
@@ -351,7 +350,7 @@ export class QuadTreeMap {
                 this.scene.remove(child.mesh);
                 if (child.mesh.geometry) child.mesh.geometry.dispose();
                 if (child.mesh.material) {
-                    if (child.mesh.material.map) child.mesh.material.map.dispose();
+                    child.mesh.getMap()?.dispose();
                     child.mesh.material.dispose();
                 }
             }
@@ -714,8 +713,8 @@ export class QuadTreeMap {
         // During loading, tiles have a wireframe material, so this check will be false.
         // After the deferred subdivision logic above, this should be true (parent loaded).
         const useParentData = isTextureMap && tile.mesh && tile.mesh.material && 
-                             tile.mesh.material.map && !tile.mesh.material.wireframe;
-        
+                             tile.mesh.getMap() && !tile.mesh.material.wireframe;
+
         // Create 4 child tiles (standard quadtree subdivision)
         // note activateTile will set the parent tile automatically
         const child1 = this.activateTile(tile.x * 2,     tile.y * 2, tile.z + 1, tileLayers, useParentData);
