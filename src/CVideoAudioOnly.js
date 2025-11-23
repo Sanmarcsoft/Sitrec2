@@ -254,8 +254,14 @@ export class CVideoAudioOnly extends CVideoAndAudio {
             audioBuffer: audioBuffer,
             gainNode: gainNode,
             _bufferCreatedSuccessfully: true,
+            debug: false,
             
-            play: (startFrame, fps) => {
+            enableDebug: function() {
+                this.debug = true;
+                console.log('[Audio] Debug mode enabled for WebAudio playback');
+            },
+            
+            play: function(startFrame, fps) {
                 if (!audioContext || !audioBuffer) return;
                 
                 try {
@@ -263,8 +269,12 @@ export class CVideoAudioOnly extends CVideoAndAudio {
                         audioContext.resume();
                     }
                     
-                    const frameJumped = Math.abs(startFrame - lastStartFrame) > 1;
+                    const frameJumped = Math.abs(startFrame - lastStartFrame) > 5;
                     const needsRestart = !isPlaying || frameJumped;
+                    
+                    if (this.debug) {
+                        console.log(`[Audio] play() called: startFrame=${startFrame}, lastStartFrame=${lastStartFrame}, frameJumped=${frameJumped}, needsRestart=${needsRestart}, isPlaying=${isPlaying}`);
+                    }
                     
                     if (needsRestart) {
                         if (bufferSource) {
@@ -281,10 +291,15 @@ export class CVideoAudioOnly extends CVideoAndAudio {
                         
                         const startTime = startFrame / fps;
                         const offset = Math.min(startTime, audioBuffer.duration);
+                        
+                        if (this.debug) {
+                            console.log(`[Audio] Restarting playback at offset=${offset.toFixed(4)}s (frame ${startFrame})`);
+                        }
+                        
                         bufferSource.start(0, offset);
                         
                         isPlaying = true;
-                        this.audioHandler.isPlaying = true;
+                        this.isPlaying = true;
                     }
                     
                     lastStartFrame = startFrame;
@@ -293,7 +308,7 @@ export class CVideoAudioOnly extends CVideoAndAudio {
                 }
             },
             
-            pause: () => {
+            pause: function() {
                 if (bufferSource) {
                     try {
                         bufferSource.stop(0);
@@ -302,10 +317,10 @@ export class CVideoAudioOnly extends CVideoAndAudio {
                     bufferSource = null;
                 }
                 isPlaying = false;
-                this.audioHandler.isPlaying = false;
+                this.isPlaying = false;
             },
             
-            stop: () => {
+            stop: function() {
                 if (bufferSource) {
                     try {
                         bufferSource.stop(0);
@@ -314,18 +329,18 @@ export class CVideoAudioOnly extends CVideoAndAudio {
                     bufferSource = null;
                 }
                 isPlaying = false;
-                this.audioHandler.isPlaying = false;
+                this.isPlaying = false;
                 lastStartFrame = -1;
             },
             
-            setVolume: (volume) => {
+            setVolume: function(volume) {
                 gainNode.gain.value = volume;
-                this.audioHandler.volume = volume;
+                this.volume = volume;
             },
             
-            setMuted: (muted) => {
-                gainNode.gain.value = muted ? 0 : this.audioHandler.volume;
-                this.audioHandler.isMuted = muted;
+            setMuted: function(muted) {
+                gainNode.gain.value = muted ? 0 : this.volume;
+                this.isMuted = muted;
             },
             
             dispose: () => {

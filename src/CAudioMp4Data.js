@@ -53,7 +53,7 @@ export class CAudioMp4Data {
         this._bufferCreatedSuccessfully = false;
         this.playbackStartTime = 0;
         this.playbackStartFrame = 0;
-        this.debug = true;
+        this.debug = false;
 
         this.checkAudioSupport();
     }
@@ -253,7 +253,7 @@ export class CAudioMp4Data {
             }
 
             const wasPlaying = this.isPlaying;
-            const frameJumped = Math.abs(startFrame - this.startFrame) > 1;
+            const frameJumped = Math.abs(startFrame - this.startFrame) > 5;
 
 
             this.isPlaying = true;
