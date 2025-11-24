@@ -55,7 +55,7 @@ import {findRootTrack} from "../FindRootTrack";
 // Note these files are CASE SENSIVE. Mac OS is case insensitive, so be careful. (e.g. F-15.glb will not work on my deployed server)
 export const ModelFiles = {
 // TODO: X1-B
-    "737 MAX 8 BA":         { file: 'data/models/737 MAX 8 BA.glb',},
+    "737 MAX 8 BA":         { file: 'data/models/B737Max8.glb',},
     "A340-600":             { file: 'data/models/A340-600.glb',},
     "A-10":                 { file: 'data/models/A-10.glb',},
     "AC690 Rockwell":       { file: 'data/models/AC690.glb',},
@@ -67,7 +67,7 @@ export const ModelFiles = {
     "MQ-9 (loaded)":        { file: 'data/models/MQ9.glb',},
     "MQ-9 (clean)":         { file: 'data/models/MQ9-clean.glb',},
     "SR-71":                { file: 'data/models/SR-71.glb',},
-    "PA-28-181":            { file: 'data/models/PA28-181.glb',},
+    "PA-28-181":            { file: 'data/models/PA28.glb',},
  //   "737 MAX 8 (White)":    { file: 'data/models/737_MAX_8_White.glb',},
  //   "777-200ER (Malyasia)": { file: 'data/models/777-200ER-Malaysia.glb',},
 //    "DC-10":                { file: 'data/models/DC-10.glb',},

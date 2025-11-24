@@ -10,7 +10,7 @@ export const SitKansas = {
     files: {
         cameraFile:   'kansas/N615UX-track-EGM96.kml',
         TargetTrack: 'kansas/N121DZ-track-EGM96.kml',
-        TargetObjectFile: './models/737 MAX 8 BA.glb',
+        TargetObjectFile: './models/B737Max8.glb',
     },
     startTime: "2022-09-01T20:07:32.3Z",
 

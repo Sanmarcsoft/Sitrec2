@@ -20,7 +20,7 @@ export const SitChilean = {
 
 
         TargetObjectFile: 'models/A340-600.glb',
-        OtherObjectFile: 'models/737 MAX 8 BA.glb',
+        OtherObjectFile: 'models/B737Max8.glb',
         DataFile: 'chilean/Chilean Navy Extracted Data 720.csv', // 720p version as videos have slight differences
     },
     videoFile: "../sitrec-videos/public/Chilean Navy 13-51-55 from HD 720p.mp4",
