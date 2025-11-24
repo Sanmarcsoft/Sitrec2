@@ -989,7 +989,7 @@ export function disableAllInput(message) {
     document.addEventListener('click', preventDefaultHandler, true);
 }
 
-export function updateUploadProgress(filename, uploadedBytes, totalBytes) {
+export function updateUploadProgress(filename, uploadedBytes, totalBytes, speedMbps) {
     const filenameDiv = document.getElementById('input-blocker-filename');
     const progressContainer = document.getElementById('input-blocker-progress-container');
     const progressBar = document.getElementById('input-blocker-progress-bar');
@@ -1005,7 +1005,12 @@ export function updateUploadProgress(filename, uploadedBytes, totalBytes) {
         
         const uploadedMB = (uploadedBytes / 1024 / 1024).toFixed(2);
         const totalMB = (totalBytes / 1024 / 1024).toFixed(2);
-        progressText.textContent = `${uploadedMB} MB / ${totalMB} MB (${percentage}%)`;
+        
+        let text = `${uploadedMB} MB / ${totalMB} MB (${percentage}%)`;
+        if (speedMbps !== undefined && speedMbps > 0) {
+            text += ` - ${speedMbps.toFixed(1)} Mb/s`;
+        }
+        progressText.textContent = text;
     }
 }
 

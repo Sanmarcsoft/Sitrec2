@@ -11,18 +11,27 @@ export class CRehoster {
         this.rehostPromises = [];
     }
 
-    async uploadPartWithXHR(blob, url, partNumber, totalParts, filename, totalFileSize, previouslyUploadedBytes) {
+    async uploadPartWithXHR(blob, url, partNumber, totalParts, filename, totalFileSize, previouslyUploadedBytes, uploadStartTime) {
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
             xhr.open('PUT', url);
             
+            let lastLoggedPercent = -1;
+            
             xhr.upload.onprogress = (evt) => {
                 if (evt.lengthComputable) {
-                    const percentComplete = (evt.loaded / evt.total * 100).toFixed(1);
-                    console.log(`  Part ${partNumber}/${totalParts}: ${percentComplete}% uploaded`);
-                    
                     const totalUploaded = previouslyUploadedBytes + evt.loaded;
-                    updateUploadProgress(filename, totalUploaded, totalFileSize);
+                    
+                    const elapsedSeconds = (Date.now() - uploadStartTime) / 1000;
+                    const speedMbps = elapsedSeconds > 0 ? (totalUploaded * 8 / 1000000) / elapsedSeconds : 0;
+                    
+                    updateUploadProgress(filename, totalUploaded, totalFileSize, speedMbps);
+                    
+                    const percentComplete = Math.floor(evt.loaded / evt.total * 100);
+                    if (percentComplete !== lastLoggedPercent && percentComplete % 10 === 0) {
+                        console.log(`  Part ${partNumber}/${totalParts}: ${percentComplete}% uploaded`);
+                        lastLoggedPercent = percentComplete;
+                    }
                 }
             };
             
@@ -109,12 +118,13 @@ export class CRehoster {
 
         if (parseBoolean(process.env.SAVE_TO_S3) && parseBoolean(process.env.USE_S3_PRESIGNED_URLS)) {
             const MULTIPART_THRESHOLD = 100 * 1024 * 1024;
-            const CHUNK_SIZE = 50 * 1024 * 1024;
+            const CHUNK_SIZE = 10 * 1024 * 1024;
 
             if (data.byteLength > MULTIPART_THRESHOLD) {
                 console.log(`[Multipart Upload] Starting upload for ${filename} (${(data.byteLength / 1024 / 1024).toFixed(2)} MB)`);
                 
                 try {
+                    const uploadStartTime = Date.now();
                     const totalParts = Math.ceil(data.byteLength / CHUNK_SIZE);
                     console.log(`[Multipart Upload] File will be split into ${totalParts} parts of ~${CHUNK_SIZE / 1024 / 1024}MB each`);
 
@@ -138,7 +148,8 @@ export class CRehoster {
                             totalParts, 
                             filename, 
                             data.byteLength, 
-                            cumulativeUploadedBytes
+                            cumulativeUploadedBytes,
+                            uploadStartTime
                         );
                         uploadedParts.push(part);
                         cumulativeUploadedBytes += chunk.byteLength;
@@ -194,9 +205,13 @@ export class CRehoster {
                     xhr.open('PUT', presignedUrl);
                     xhr.setRequestHeader('Content-Type', 'application/octet-stream');
                     
+                    const uploadStartTime = Date.now();
+                    
                     xhr.upload.onprogress = (evt) => {
                         if (evt.lengthComputable) {
-                            updateUploadProgress(filename, evt.loaded, evt.total);
+                            const elapsedSeconds = (Date.now() - uploadStartTime) / 1000;
+                            const speedMbps = elapsedSeconds > 0 ? (evt.loaded * 8 / 1000000) / elapsedSeconds : 0;
+                            updateUploadProgress(filename, evt.loaded, evt.total, speedMbps);
                         }
                     };
                     
@@ -241,9 +256,13 @@ export class CRehoster {
                     const xhr = new XMLHttpRequest();
                     xhr.open('POST', serverURL);
                     
+                    const uploadStartTime = Date.now();
+                    
                     xhr.upload.onprogress = (evt) => {
                         if (evt.lengthComputable) {
-                            updateUploadProgress(filename, evt.loaded, evt.total);
+                            const elapsedSeconds = (Date.now() - uploadStartTime) / 1000;
+                            const speedMbps = elapsedSeconds > 0 ? (evt.loaded * 8 / 1000000) / elapsedSeconds : 0;
+                            updateUploadProgress(filename, evt.loaded, evt.total, speedMbps);
                         }
                     };
                     
