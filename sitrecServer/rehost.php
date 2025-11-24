@@ -119,6 +119,165 @@ if (isset($_GET['action']) && $_GET['action'] === 'getPresignedUrl') {
     exit();
 }
 
+if (isset($_GET['action']) && $_GET['action'] === 'initiateMultipart') {
+    header('Content-Type: application/json');
+    
+    $input = file_get_contents('php://input');
+    $requestData = json_decode($input, true);
+    
+    if (!isset($requestData['filename']) || !isset($requestData['parts'])) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Filename and parts count required']);
+        exit();
+    }
+    
+    $fileName = basename($requestData['filename']);
+    $version = isset($requestData['version']) ? basename($requestData['version']) : null;
+    $totalParts = (int)$requestData['parts'];
+    
+    $fileName = preg_replace('/[^\w\s\.\-\(\)]/', '_', $fileName);
+    
+    if (!isSafeName($fileName) || ($version && !isSafeName($version))) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid filename or version']);
+        exit();
+    }
+    
+    if (!$useAWS) {
+        http_response_code(400);
+        echo json_encode(['error' => 'S3 not enabled']);
+        exit();
+    }
+    
+    $s3 = startS3();
+    
+    $extension = pathinfo($fileName, PATHINFO_EXTENSION);
+    $baseName = pathinfo($fileName, PATHINFO_FILENAME);
+    
+    if ($version) {
+        $newFileName = $version;
+    } else {
+        $newFileName = $baseName . '-' . uniqid() . '.' . $extension;
+    }
+    
+    $s3Path = $user_id . '/' . $newFileName;
+    if ($version) {
+        $s3Path = $user_id . '/' . $fileName . '/' . $newFileName;
+    }
+    
+    try {
+        $result = $s3->createMultipartUpload([
+            'Bucket' => $aws['bucket'],
+            'Key' => $s3Path,
+            'ACL' => $aws['acl']
+        ]);
+        
+        $uploadId = $result['UploadId'];
+        
+        $uploadUrls = [];
+        for ($partNumber = 1; $partNumber <= $totalParts; $partNumber++) {
+            $cmd = $s3->getCommand('UploadPart', [
+                'Bucket' => $aws['bucket'],
+                'Key' => $s3Path,
+                'UploadId' => $uploadId,
+                'PartNumber' => $partNumber
+            ]);
+            
+            $request = $s3->createPresignedRequest($cmd, '+60 minutes');
+            $uploadUrls[] = (string) $request->getUri();
+        }
+        
+        $objectUrl = 'https://' . $aws['bucket'] . '.s3.' . $aws['region'] . '.amazonaws.com/' . $s3Path;
+        
+        echo json_encode([
+            'uploadId' => $uploadId,
+            'uploadUrls' => $uploadUrls,
+            'objectUrl' => $objectUrl
+        ]);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to initiate multipart upload: ' . $e->getMessage()]);
+    }
+    
+    exit();
+}
+
+if (isset($_GET['action']) && $_GET['action'] === 'completeMultipart') {
+    header('Content-Type: application/json');
+    
+    $input = file_get_contents('php://input');
+    $requestData = json_decode($input, true);
+    
+    if (!isset($requestData['filename']) || !isset($requestData['uploadId']) || !isset($requestData['parts'])) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Filename, uploadId, and parts required']);
+        exit();
+    }
+    
+    $fileName = basename($requestData['filename']);
+    $version = isset($requestData['version']) ? basename($requestData['version']) : null;
+    $uploadId = $requestData['uploadId'];
+    $parts = $requestData['parts'];
+    
+    $fileName = preg_replace('/[^\w\s\.\-\(\)]/', '_', $fileName);
+    
+    if (!isSafeName($fileName) || ($version && !isSafeName($version))) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid filename or version']);
+        exit();
+    }
+    
+    if (!$useAWS) {
+        http_response_code(400);
+        echo json_encode(['error' => 'S3 not enabled']);
+        exit();
+    }
+    
+    $s3 = startS3();
+    
+    try {
+        $multipartUploads = $s3->listMultipartUploads([
+            'Bucket' => $aws['bucket'],
+            'Prefix' => $user_id . '/'
+        ]);
+        
+        $s3Path = null;
+        foreach ($multipartUploads['Uploads'] as $upload) {
+            if ($upload['UploadId'] === $uploadId) {
+                $s3Path = $upload['Key'];
+                break;
+            }
+        }
+        
+        if (!$s3Path) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Upload ID not found or expired']);
+            exit();
+        }
+        
+        $result = $s3->completeMultipartUpload([
+            'Bucket' => $aws['bucket'],
+            'Key' => $s3Path,
+            'UploadId' => $uploadId,
+            'MultipartUpload' => [
+                'Parts' => $parts
+            ]
+        ]);
+        
+        $objectUrl = 'https://' . $aws['bucket'] . '.s3.' . $aws['region'] . '.amazonaws.com/' . $s3Path;
+        
+        echo json_encode([
+            'objectUrl' => $objectUrl,
+            'eTag' => $result['ETag']
+        ]);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to complete multipart upload: ' . $e->getMessage()]);
+    }
+    
+    exit();
+}
+
 $isLocal = false;
 
 //if ($_SERVER['HTTP_HOST'] === 'localhost' || $_SERVER['SERVER_NAME'] === 'localhost') {

@@ -11,12 +11,144 @@ export class CRehoster {
         this.rehostPromises = [];
     }
 
+    async uploadPartWithXHR(blob, url, partNumber, totalParts) {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('PUT', url);
+            
+            xhr.upload.onprogress = (evt) => {
+                if (evt.lengthComputable) {
+                    const percentComplete = (evt.loaded / evt.total * 100).toFixed(1);
+                    console.log(`  Part ${partNumber}/${totalParts}: ${percentComplete}% uploaded`);
+                }
+            };
+            
+            xhr.onload = () => {
+                if (xhr.status === 200) {
+                    const etag = xhr.getResponseHeader('ETag');
+                    if (etag) {
+                        resolve({
+                            ETag: etag.replace(/"/g, ''),
+                            PartNumber: partNumber
+                        });
+                    } else {
+                        reject(new Error('No ETag in response'));
+                    }
+                } else {
+                    reject(new Error(`Upload failed with status ${xhr.status}`));
+                }
+            };
+            
+            xhr.onerror = () => reject(new Error('Network error during upload'));
+            xhr.send(blob);
+        });
+    }
+
+    async initiateMultipartUpload(filename, version, totalParts) {
+        const serverURL = SITREC_SERVER + 'rehost.php?action=initiateMultipart&unique=' + Date.now();
+        
+        const requestData = {
+            filename: filename,
+            parts: totalParts
+        };
+        if (version !== undefined) {
+            requestData.version = version;
+        }
+
+        const response = await fetch(serverURL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData),
+            cache: 'no-store'
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to initiate multipart upload: ' + response.status);
+        }
+
+        return await response.json();
+    }
+
+    async completeMultipartUpload(filename, version, uploadId, parts) {
+        const serverURL = SITREC_SERVER + 'rehost.php?action=completeMultipart&unique=' + Date.now();
+        
+        const requestData = {
+            filename: filename,
+            uploadId: uploadId,
+            parts: parts
+        };
+        if (version !== undefined) {
+            requestData.version = version;
+        }
+
+        const response = await fetch(serverURL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData),
+            cache: 'no-store'
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to complete multipart upload: ' + response.status);
+        }
+
+        return await response.json();
+    }
+
     // Function to promise to rehostFile the file from the client to the server
     //
     async rehostFilePromise(filename, data, version) {
         assert(filename !== undefined, "rehostFile needs a filename")
 
         if (parseBoolean(process.env.SAVE_TO_S3) && parseBoolean(process.env.USE_S3_PRESIGNED_URLS)) {
+            const MULTIPART_THRESHOLD = 100 * 1024 * 1024;
+            const CHUNK_SIZE = 50 * 1024 * 1024;
+
+            if (data.byteLength > MULTIPART_THRESHOLD) {
+                console.log(`[Multipart Upload] Starting upload for ${filename} (${(data.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+                
+                try {
+                    const totalParts = Math.ceil(data.byteLength / CHUNK_SIZE);
+                    console.log(`[Multipart Upload] File will be split into ${totalParts} parts of ~${CHUNK_SIZE / 1024 / 1024}MB each`);
+
+                    const { uploadId, uploadUrls, objectUrl } = await this.initiateMultipartUpload(filename, version, totalParts);
+                    console.log(`[Multipart Upload] Initiated with uploadId: ${uploadId}`);
+
+                    const uploadedParts = [];
+                    for (let i = 0; i < totalParts; i++) {
+                        const start = i * CHUNK_SIZE;
+                        const end = Math.min(start + CHUNK_SIZE, data.byteLength);
+                        const chunk = data.slice(start, end);
+                        
+                        console.log(`[Multipart Upload] Uploading part ${i + 1}/${totalParts} (${(chunk.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+                        
+                        const part = await this.uploadPartWithXHR(chunk, uploadUrls[i], i + 1, totalParts);
+                        uploadedParts.push(part);
+                        
+                        console.log(`[Multipart Upload] Part ${i + 1}/${totalParts} completed (ETag: ${part.ETag.substring(0, 8)}...)`);
+                    }
+
+                    console.log(`[Multipart Upload] All parts uploaded, completing multipart upload...`);
+                    const result = await this.completeMultipartUpload(filename, version, uploadId, uploadedParts);
+
+                    const resultUrl = result.objectUrl.replace(/ /g, "%20");
+                    
+                    console.log(`[Multipart Upload] Success! File uploaded to: ${resultUrl}`);
+                    console.log(`  Sent: ${filename} (version: ${version || 'none'})`);
+                    console.log(`  Received: ${resultUrl}`);
+
+                    return resultUrl;
+                } catch (error) {
+                    console.error('[Multipart Upload] Error:', error);
+                    showError('Error uploading large file to S3:', error);
+                    throw new Error("S3 multipart upload problem: " + error.message);
+                }
+            }
+
             try {
                 let requestData = {
                     filename: filename,
