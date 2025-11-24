@@ -16,12 +16,7 @@ export class CRehoster {
     async rehostFilePromise(filename, data, version) {
         assert(filename !== undefined, "rehostFile needs a filename")
 
-        const PRESIGNED_SIZE_LIMIT = 100 * 1024 * 1024;
-        const usePresignedUrl = parseBoolean(process.env.SAVE_TO_S3) && 
-                                parseBoolean(process.env.USE_S3_PRESIGNED_URLS) &&
-                                data.byteLength <= PRESIGNED_SIZE_LIMIT;
-
-        if (usePresignedUrl) {
+        if (parseBoolean(process.env.SAVE_TO_S3) && parseBoolean(process.env.USE_S3_PRESIGNED_URLS)) {
             try {
                 let requestData = {
                     filename: filename,
