@@ -4,7 +4,7 @@ import {loadImage} from "./utils";
 import {CVideoAndAudio} from "./CVideoAndAudio";
 import {par} from "./par";
 import {isLocal} from "./configUtils";
-import {showError} from "./showError";
+import {showError, showErrorOnce} from "./showError";
 
 /**
  * Base class for WebCodec-based video data handlers
@@ -500,9 +500,8 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
             this.decoder.flush().catch(() => { /* ignore mid-seek aborts */ });
         } catch (error) {
             // Some videos give a lot of these errors,
-            // but then they seem to play OK, so just warn for now.
-            // showError("Error during group decode:", error);
-            console.warn("Error during group decode:", error);
+            // and have jerky playback. e.g. '/Users/mick/Dropbox/Investigating/Rainmaking (1968).mp4'
+            showErrorOnce("GROUPDECODEERROR", "Error during group decode:", error);
             group.pending = 0;
             group.loaded = false;
             this.groupsPending--;
