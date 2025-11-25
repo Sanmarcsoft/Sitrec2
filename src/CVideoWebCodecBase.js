@@ -499,7 +499,10 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
             // Kick the reorder buffer so the tail frames are delivered.
             this.decoder.flush().catch(() => { /* ignore mid-seek aborts */ });
         } catch (error) {
-            showError("Error during group decode:", error);
+            // Some videos give a lot of these errors,
+            // but then they seem to play OK, so just warn for now.
+            // showError("Error during group decode:", error);
+            console.warn("Error during group decode:", error);
             group.pending = 0;
             group.loaded = false;
             this.groupsPending--;
