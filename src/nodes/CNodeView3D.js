@@ -456,6 +456,9 @@ export class CNodeView3D extends CNodeViewCanvas {
                     this.camera.updateProjectionMatrix();
                 }
 
+                // Store the rendered FOV for use in rendering celestial labels
+                this.camera.renderedFOV = this.camera.fov;
+
                 // popogate the view-specific camera setting to the current camera
                 // (currently this does not change, but it might in the future)
                 this.cameraNode.northUp = this.northUp;

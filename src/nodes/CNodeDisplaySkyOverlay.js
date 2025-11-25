@@ -50,6 +50,13 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
 
 
         const camera = this.camera.clone();
+
+        // restore the FOV if it was modified for rendering
+        if (this.camera.renderedFOV) {
+            camera.fov = this.camera.renderedFOV;
+        }
+
+
         camera.position.set(0, 0, 0)
         camera.aspect = this.widthPx / this.heightPx;
         camera.updateMatrix()
