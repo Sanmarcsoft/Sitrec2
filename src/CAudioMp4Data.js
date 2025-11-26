@@ -165,17 +165,19 @@ export class CAudioMp4Data {
     }
 
     decodeAudioSamples(samples, demuxer) {
+       // console.log("[Audio] decodeAudioSamples called with", samples?.length, "samples");
+        
         if (!this.audioDecoder) {
-            if (this.debug) console.warn("Audio decoder not initialized");
+            console.warn("[Audio] Audio decoder not initialized");
             return;
         }
 
         if (this.audioDecoder.state !== "configured") {
-            if (this.debug) console.warn("Audio decoder state:", this.audioDecoder.state);
+            console.warn("[Audio] Audio decoder state:", this.audioDecoder.state, "(expected: configured)");
             return;
         }
 
-        if (this.debug) console.log("Decoding", samples.length, "audio samples");
+       // console.log("[Audio] Decoding", samples.length, "audio samples");
         this.receivedEncodedSamples += samples.length;
 
         for (const sample of samples) {

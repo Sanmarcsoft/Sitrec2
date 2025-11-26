@@ -439,10 +439,19 @@ export class MP4Demuxer {
       codec = 'mp4a.40.2'; // Default to AAC-LC
     }
     
+    // MP4Box.js now correctly parses QuickTime V1/V2 audio sample entries
+    // Use audio.sample_rate which is now correct for all formats
+    const sampleRate = this.audioTrack.audio.sample_rate;
+    const numberOfChannels = this.audioTrack.audio.channel_count;
+    
+    console.log("[MP4Demuxer] Audio config from MP4Box:");
+    console.log("[MP4Demuxer]   Sample rate:", sampleRate, "Hz");
+    console.log("[MP4Demuxer]   Channels:", numberOfChannels);
+    
     let config = {
       codec: codec,
-      numberOfChannels: this.audioTrack.audio.channel_count,
-      sampleRate: this.audioTrack.audio.sample_rate,
+      numberOfChannels: numberOfChannels,
+      sampleRate: sampleRate,
     };
     
     console.log("Audio config prepared:", config);
