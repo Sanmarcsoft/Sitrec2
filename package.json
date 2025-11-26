@@ -63,6 +63,7 @@
     "fs-extra": "^11.3.1",
     "html-webpack-plugin": "^5.6.4",
     "http-proxy-middleware": "^3.0.3",
+    "iwer": "^2.1.1",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^30.0.4",
     "jest-image-snapshot": "^6.5.1",
@@ -79,4 +80,3 @@
     "webpack-merge": "^6.0.1"
   }
 }
-

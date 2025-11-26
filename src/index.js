@@ -39,6 +39,7 @@ import {disableScroll, f2m, parseBoolean, stripComments} from './utils.js'
 import {CSituation} from "./CSituation";
 import {par, resetPar} from "./par";
 
+// was here
 import * as LAYER from "./LayerMasks.js"
 import {SetupFrameSlider} from "./nodes/CNodeFrameSlider";
 import {registerNodes} from "./RegisterNodes";
@@ -244,6 +245,33 @@ const frameRateController = {
     }
 };
 
+// Check to see if we are running in a local environment
+checkLocal();
+
+
+if (isLocal) {
+// Initialize IWER (Immersive Web Emulation Runtime) for WebXR emulation
+// This must be done before any rendering or WebXR logic
+    if (typeof navigator !== 'undefined') {
+        import('iwer').then(({XRDevice, metaQuest3}) => {
+            console.log("Installing IWER for WebXR emulation");
+            const xrDevice = new XRDevice(metaQuest3);
+            xrDevice.fovy = Math.PI / 2; // Set a comfortable FOV
+            xrDevice.installRuntime();
+
+            // Store device globally for debugging
+            window._iwerDevice = xrDevice;
+            console.log("✓ IWER installed. Device available as window._iwerDevice");
+            console.log("✓ To test: Click the 'ENTER VR' button or use the 'Start VR/XR' menu item");
+        }).catch(err => {
+            console.warn("Failed to load IWER:", err);
+        });
+    }
+}
+
+
+
+// Check the user agent for VR capability and mobile
 checkUserAgent();
 
 // we set Globals.wasPending to 5 so if we get to the render loop with no pending async actions
@@ -840,6 +868,12 @@ function checkUserAgent() {
     Globals.onMac = false;
     Globals.isMobile = false;
 
+
+    if (isLocal) {
+        Globals.canVR = true;
+    }
+
+
     if (!isConsole) {
         const userAgent = navigator.userAgent;
         console.log("User Agent = " + userAgent);
@@ -1036,8 +1070,7 @@ async function initializeOnce() {
 
     ColorManagement.enabled = false;
 
-// Check to see if we are running in a local environment
-    checkLocal()
+
 
     // Check if running in serverless mode (IndexedDB-based)
     await checkServerlessMode();

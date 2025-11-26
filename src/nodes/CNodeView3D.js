@@ -103,6 +103,12 @@ export class CNodeView3D extends CNodeViewCanvas {
                 this.recalculate();
             })
                 .tooltip("Set the look view to be north up, instead of world up.\nfor Satellite views and similar, looking straight down.\nDoes not apply in PTZ mode")
+            
+            // Add XR test button if VR is enabled
+            if (Globals.canVR) {
+                guiMenus.view.add(this, "startXR").name("Start VR/XR")
+                    .tooltip("Start WebXR session for testing (works with Immersive Web Emulator)");
+            }
         }
         this.addSimpleSerial("northUp");
 
@@ -216,9 +222,29 @@ export class CNodeView3D extends CNodeViewCanvas {
             // The VRButton automatically handles session creation, we just need to listen
             this.renderer.xr.addEventListener('sessionstart', this.onXRSessionStarted);
             this.renderer.xr.addEventListener('sessionend', this.onXRSessionEnded);
+            
+            // Add console helper for testing
+            console.log("WebXR enabled for lookView");
+            console.log("To start VR: Click 'ENTER VR' button or use 'Start VR/XR' menu item");
         }
     }
 
+
+    /**
+     * Manually start a WebXR session
+     * Useful for testing with Immersive Web Emulator
+     */
+    startXR() {
+        // Simply click the VR button that's already set up
+        const vrButton = document.getElementById('VRButton');
+        if (vrButton) {
+            console.log("Clicking VR button...");
+            vrButton.click();
+        } else {
+            console.error("VR button not found");
+            alert("VR button not found. Make sure WebXR is enabled.");
+        }
+    }
 
     /**
      * Called when a WebXR session starts
