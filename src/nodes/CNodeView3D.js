@@ -197,49 +197,124 @@ export class CNodeView3D extends CNodeViewCanvas {
             // Setup WebXR
             this.renderer.xr.enabled = true;
             this.xrSession = null;
+            this.xrActive = false; // Track whether we're currently in an XR session
 
             // Bind event handlers
             this.onXRSessionStarted = this.onXRSessionStarted.bind(this);
             this.onXRSessionEnded = this.onXRSessionEnded.bind(this);
+            this.renderXR = this.renderXR.bind(this);
 
-            // Add WebXR button
-            // const xrButton = document.createElement('button');
-            // xrButton.textContent = 'Enter VR';
-            // xrButton.addEventListener('click', this.startXRSession.bind(this));
-            // // give it a high z-index so it's on top of everything
-            // xrButton.style.zIndex = 10003;
-            // // center it in the middle of the screen
-            // xrButton.style.position = 'absolute';
-            // xrButton.style.left = '50%';
-            // xrButton.style.top = '50%';
-            // xrButton.style.transform = 'translate(-50%, -50%)';
-            // document.body.appendChild(xrButton);
+            // Add WebXR button using Three.js VRButton helper (only once)
+            // Check if VR button already exists to avoid duplicates
+            if (!document.getElementById('VRButton')) {
+                const xrButton = VRButton.createButton(this.renderer);
+                xrButton.style.zIndex = 10003;
+                document.body.appendChild(xrButton);
+            }
 
-            const xrButton = VRButton.createButton(this.renderer);
-            xrButton.style.zIndex = 10003;
-            document.body.appendChild(xrButton);
+            // Monitor XR session state by checking when the button initiates a session
+            // The VRButton automatically handles session creation, we just need to listen
+            this.renderer.xr.addEventListener('sessionstart', this.onXRSessionStarted);
+            this.renderer.xr.addEventListener('sessionend', this.onXRSessionEnded);
         }
     }
 
 
-    startXRSession() {
-        if (navigator.xr) {
-            navigator.xr.requestSession('immersive-vr').then(this.onXRSessionStarted);
-        } else {
-            showError('WebXR not supported on this device');
-        }
+    /**
+     * Called when a WebXR session starts
+     * Sets up the XR animation loop and enables lookCamera synchronization
+     */
+    onXRSessionStarted() {
+        console.log("WebXR session started");
+        this.xrActive = true;
+        
+        // Set the XR animation loop - Three.js will handle stereo rendering automatically
+        // This replaces the normal requestAnimationFrame loop
+        this.renderer.setAnimationLoop(this.renderXR);
     }
 
-    onXRSessionStarted(session) {
-        this.xrSession = session;
-        this.renderer.xr.setSession(session);
-
-        session.addEventListener('end', this.onXRSessionEnded);
-    }
-
+    /**
+     * Called when a WebXR session ends
+     * Restores the normal rendering loop
+     */
     onXRSessionEnded() {
-        this.xrSession = null;
-        this.renderer.xr.setSession(null);
+        console.log("WebXR session ended");
+        this.xrActive = false;
+        
+        // Clear the animation loop - return to normal requestAnimationFrame rendering
+        this.renderer.setAnimationLoop(null);
+    }
+
+    /**
+     * XR rendering loop - called by Three.js for each XR frame
+     * Synchronizes the view camera with lookCamera and renders the scene
+     * Three.js automatically handles stereo rendering for VR headsets
+     */
+    renderXR(time, frame) {
+        // Get the lookCamera node to sync our view with
+        const lookCameraNode = NodeMan.get("lookCamera");
+        if (!lookCameraNode) {
+            console.warn("lookCamera not found, cannot render XR frame");
+            return;
+        }
+
+        // Get the lookCamera's Three.js camera object
+        const lookCamera = lookCameraNode.camera;
+        
+        // Synchronize this view's camera with the lookCamera's position and rotation
+        // This makes the VR viewpoint match the lookCamera location
+        
+        // Copy position from lookCamera
+        this.camera.position.copy(lookCamera.position);
+        
+        // Copy rotation (quaternion) from lookCamera
+        // Using quaternion ensures we preserve the exact orientation
+        this.camera.quaternion.copy(lookCamera.quaternion);
+        
+        // Copy the up vector to maintain proper orientation
+        this.camera.up.copy(lookCamera.up);
+        
+        // Copy the FOV to match the lookCamera's field of view
+        this.camera.fov = lookCamera.fov;
+        
+        // Update camera matrices and projection to reflect the new position/orientation/FOV
+        this.camera.updateProjectionMatrix();
+        this.camera.updateMatrix();
+        this.camera.updateMatrixWorld();
+
+        // Update shared uniforms for shaders (near/far planes)
+        sharedUniforms.nearPlane.value = this.camera.near;
+        sharedUniforms.farPlane.value = this.camera.far;
+        
+        // Calculate and set focal length uniform
+        const fov = this.camera.fov * Math.PI / 180;
+        const focalLength = this.heightPx / (2 * Math.tan(fov / 2));
+        sharedUniforms.cameraFocalLength.value = focalLength;
+
+        // Update lighting before rendering (essential for proper scene appearance)
+        const lightingNode = NodeMan.get("lighting", true);
+        if (lightingNode) {
+            lightingNode.recalculate(false); // false = not main view for lighting purposes
+            
+            // Update sun-related uniforms
+            sharedUniforms.sunGlobalTotal.value =
+                lightingNode.sunIntensity
+                + lightingNode.sunIntensity * lightingNode.sunScattering
+                + lightingNode.ambientIntensity;
+            sharedUniforms.sunAmbientIntensity.value = lightingNode.ambientIntensity;
+            sharedUniforms.useDayNight.value = !lightingNode.noMainLighting;
+        }
+        
+        // Update sun position if sun node exists
+        const sunNode = NodeMan.get("theSun", true);
+        if (sunNode) {
+            sunNode.update();
+        }
+
+        // Render the scene - Three.js XR system handles stereo rendering automatically
+        // This will render twice (once per eye) with proper camera offsets for VR
+        // Note: We skip post-processing effects in XR mode for performance
+        this.renderer.render(GlobalScene, this.camera);
     }
 
 

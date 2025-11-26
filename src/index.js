@@ -2090,60 +2090,73 @@ function renderMain(elapsed) {
     // render each viewport
     if (globalProfiler) globalProfiler.push('#2ca02c', 'Viewports');
     
+    // Check if any view is in XR mode - if so, skip normal rendering
+    // The XR animation loop will handle rendering for the active view
+    let xrActive = false;
     ViewMan.iterate((key, view) => {
-
-        // if this is an overlay view, then inherit the "visible" flag from the parent view (this this view overlays)
-        if (view.overlayView && !view.seperateVisibility) {
-            view.setVisible(view.overlayView.visible);
+        if (view.xrActive) {
+            xrActive = true;
         }
+    });
+    
+    // Only render viewports if not in XR mode
+    // When in XR mode, the XR animation loop handles rendering
+    if (!xrActive) {
+        ViewMan.iterate((key, view) => {
 
-        let visible = view.visible;
-        if (view.overlayView && !view.seperateVisibility)
-            visible = view.overlayView.visible;
-        if (view.relativeTo)
-            visible = view.relativeTo.visible;
+            // if this is an overlay view, then inherit the "visible" flag from the parent view (this this view overlays)
+            if (view.overlayView && !view.seperateVisibility) {
+                view.setVisible(view.overlayView.visible);
+            }
 
-        if (visible) {
-            if (globalProfiler) globalProfiler.push(getViewProfileColor(key), `${key}`);
+            let visible = view.visible;
+            if (view.overlayView && !view.seperateVisibility)
+                visible = view.overlayView.visible;
+            if (view.relativeTo)
+                visible = view.relativeTo.visible;
 
-            // we set from div, which can be moved or resized by the user, or by screen/window resizing
-            view.setFromDiv(view.div)
+            if (visible) {
+                if (globalProfiler) globalProfiler.push(getViewProfileColor(key), `${key}`);
 
-            view.updateWH()
-            // view needs to a 3D view, not just have a camea
-            if (view.camera && ( view instanceof CNodeView3D ) ) {
-                view.camera.updateMatrix();
-                view.camera.updateMatrixWorld();
-                // Label3DMan.updateScale(view.camera)
-                // some nodes need code running on a per-viewport basis - like textSprites
+                // we set from div, which can be moved or resized by the user, or by screen/window resizing
+                view.setFromDiv(view.div)
+
+                view.updateWH()
+                // view needs to a 3D view, not just have a camea
+                if (view.camera && ( view instanceof CNodeView3D ) ) {
+                    view.camera.updateMatrix();
+                    view.camera.updateMatrixWorld();
+                    // Label3DMan.updateScale(view.camera)
+                    // some nodes need code running on a per-viewport basis - like textSprites
+
+                    for (const entry of Object.values(NodeMan.list)) {
+                        const node = entry.data;
+                        if (node.preRender !== undefined) {
+                            node.preRender(view)
+                        }
+                    }
+
+                    // // patch in arrow head scaling
+                    // scaleArrows(view);
+
+                }
+                updateLockTrack(view, par.frame)
+                
+                if (globalProfiler) globalProfiler.push('#9467bd', 'RenderCanvas');
+                view.renderCanvas(par.frame)
+                if (globalProfiler) globalProfiler.pop();
 
                 for (const entry of Object.values(NodeMan.list)) {
                     const node = entry.data;
-                    if (node.preRender !== undefined) {
-                        node.preRender(view)
+                    if (node.postRender !== undefined) {
+                        node.postRender(view)
                     }
                 }
-
-                // // patch in arrow head scaling
-                // scaleArrows(view);
-
+                
+                if (globalProfiler) globalProfiler.pop();
             }
-            updateLockTrack(view, par.frame)
-            
-            if (globalProfiler) globalProfiler.push('#9467bd', 'RenderCanvas');
-            view.renderCanvas(par.frame)
-            if (globalProfiler) globalProfiler.pop();
-
-            for (const entry of Object.values(NodeMan.list)) {
-                const node = entry.data;
-                if (node.postRender !== undefined) {
-                    node.postRender(view)
-                }
-            }
-            
-            if (globalProfiler) globalProfiler.pop();
-        }
-    })
+        })
+    }
     
     if (globalProfiler) globalProfiler.pop();
 
