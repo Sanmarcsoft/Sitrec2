@@ -830,12 +830,15 @@ export class QuadTreeMap {
 
     // Set the layer mask on a tile's mesh objects
     setTileLayerMask(tile, layerMask) {
+
+        layerMask |= LAYER.MASK_EYES;
+
         if (tile.mesh) {
-            tile.mesh.layers.disableAll();
+            //tile.mesh.layers.disableAll();
             tile.mesh.layers.mask = layerMask;
         }
         if (tile.skirtMesh) {
-            tile.skirtMesh.layers.disableAll();
+            //tile.skirtMesh.layers.disableAll();
             tile.skirtMesh.layers.mask = layerMask;
         }
     }

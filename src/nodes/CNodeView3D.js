@@ -20,10 +20,12 @@ import {GPUMemoryMonitor} from "../GPUMemoryMonitor";
 import {
     Camera,
     Color,
+    Group,
     LinearFilter,
     Mesh,
     NearestFilter,
     NormalBlending,
+    PerspectiveCamera,
     PlaneGeometry,
     Raycaster,
     RGBAFormat,
@@ -198,9 +200,9 @@ export class CNodeView3D extends CNodeViewCanvas {
 
         this.initSky();
 
-        if (Globals.canVR) {
+        if (Globals.canVR && this.id === "lookView") {
 
-            // Setup WebXR
+            // Setup WebXR - only on lookView
             this.renderer.xr.enabled = true;
             this.xrSession = null;
             this.xrActive = false; // Track whether we're currently in an XR session
@@ -254,6 +256,92 @@ export class CNodeView3D extends CNodeViewCanvas {
         console.log("WebXR session started");
         this.xrActive = true;
         
+        // Get lookCamera position to set up camera rig
+        const lookCameraNode = NodeMan.get("lookCamera");
+        if (lookCameraNode) {
+            const lookCamera = lookCameraNode.camera;
+            lookCamera.updateMatrixWorld(true);
+
+            // CRITICAL: Create a new camera for XR that's independent from lookCamera
+            // lookView normally shares lookCamera's camera object, which causes position conflicts
+            // Store the original camera reference so we can restore it later
+            this.originalCamera = this.camera;
+
+            // Create a new PerspectiveCamera for XR use
+            this.xrCamera = new PerspectiveCamera(
+                lookCamera.fov,
+                this.camera.aspect
+            );
+            this.xrCamera.near = lookCamera.near;
+            this.xrCamera.far = lookCamera.far;
+
+            // Copy layer mask from lookCamera so XR sees the same layers
+            this.xrCamera.layers.mask = lookCamera.layers.mask;
+
+
+            console.log("XR: Copied lookCamera layers.mask to xrCamera:", this.xrCamera.layers.mask.toString(2), "(" + this.xrCamera.layers.mask + ")");
+            this.xrCamera.updateProjectionMatrix();
+
+            console.log("XR: Created independent XR camera");
+
+            // Create camera rig positioned at lookCamera's world location
+            this.xrCameraRig = new Group();
+            this.xrCameraRig.name = "XRCameraRig";
+            this.xrCameraRig.position.copy(lookCamera.position);
+            console.log("XR: Camera rig positioned at:", this.xrCameraRig.position.x.toFixed(1), this.xrCameraRig.position.y.toFixed(1), this.xrCameraRig.position.z.toFixed(1));
+
+            // Add rig to scene
+            GlobalScene.add(this.xrCameraRig);
+
+            // Add XR camera to rig
+            this.xrCameraRig.add(this.xrCamera);
+
+            // Reset camera local position - XR will control this for head tracking
+            this.xrCamera.position.set(0, 0, 0);
+            this.xrCamera.rotation.set(0, 0, 0);
+
+            let redSphere = null;
+            // // Add debug spheres to the camera rig for testing
+            // const sphereGeometry = new SphereGeometry(5, 16, 16);
+            //
+            // const greenMaterial = new MeshBasicMaterial({color: 0x00ff00});
+            // const greenSphere = new Mesh(sphereGeometry, greenMaterial);
+            // greenSphere.position.set(-20, 0, -100);
+            // greenSphere.layers.enableAll();
+            // this.xrCameraRig.add(greenSphere);
+            //
+            // // Create a simple red texture for the red sphere
+            // const canvas = document.createElement('canvas');
+            // canvas.width = 1;
+            // canvas.height = 1;
+            // const ctx = canvas.getContext('2d');
+            // ctx.fillStyle = '#ff0000';
+            // ctx.fillRect(0, 0, 1, 1);
+            // const redTexture = new CanvasTexture(canvas);
+            //
+            // const redMaterial = createTerrainDayNightMaterial(redTexture, 0.3, false);
+            // redSphere = new Mesh(sphereGeometry, redMaterial);
+            // redSphere.position.set(20, 0, -100);
+            // redSphere.layers.enableAll();
+            // this.xrCameraRig.add(redSphere);
+
+            // Try to get the material from tile 0,0,0 directly
+            const terrainNode = NodeMan.get("TerrainModel", true);
+            if (terrainNode && terrainNode.UI) {
+                const mapType = terrainNode.UI.mapType;
+                const map = terrainNode.maps?.[mapType]?.map;
+                if (map) {
+                    const tile000 = map.getTile(0, 0, 0);
+                    if (redSphere && tile000?.mesh?.material) {
+                        console.log("XR: Setting red sphere material from tile 0,0,0");
+                        redSphere.material = tile000.mesh.material;
+                    }
+                }
+            }
+
+            console.log("XR: Camera parented to rig with debug spheres at session start");
+        }
+        
         // Set the XR animation loop - Three.js will handle stereo rendering automatically
         // This replaces the normal requestAnimationFrame loop
         this.renderer.setAnimationLoop(this.renderXR);
@@ -269,6 +357,29 @@ export class CNodeView3D extends CNodeViewCanvas {
         
         // Clear the animation loop - return to normal requestAnimationFrame rendering
         this.renderer.setAnimationLoop(null);
+        
+        // Clean up XR camera and rig
+        if (this.xrCameraRig) {
+            GlobalScene.remove(this.xrCameraRig);
+            this.xrCameraRig = null;
+        }
+        
+        // Clean up XR camera
+        if (this.xrCamera) {
+            this.xrCamera = null;
+        }
+        
+        // Restore original camera reference if it was saved
+        if (this.originalCamera) {
+            this.originalCamera = null;
+        }
+        
+        // Clean up red sphere reference
+        if (this.xrRedSphere) {
+            this.xrRedSphere = null;
+        }
+        
+        console.log("XR: Session ended, XR resources cleaned up");
     }
 
     /**
@@ -277,43 +388,78 @@ export class CNodeView3D extends CNodeViewCanvas {
      * Three.js automatically handles stereo rendering for VR headsets
      */
     renderXR(time, frame) {
-        // Get the lookCamera node to sync our view with
+        // console.log("XR: === START of renderXR === time:", time.toFixed(3), "view:", this.id);
+
+        // Get lookCamera for settings like near/far planes
         const lookCameraNode = NodeMan.get("lookCamera");
         if (!lookCameraNode) {
             console.warn("lookCamera not found, cannot render XR frame");
             return;
         }
-
-        // Get the lookCamera's Three.js camera object
         const lookCamera = lookCameraNode.camera;
+
+
+        const xrCamera = this.renderer.xr.getCamera(this.xrCamera)
+
+        // Use the XR camera we created
+        if (!xrCamera) {
+            console.error("XR camera not initialized");
+            return;
+        }
+
+
+        // Synchronize xrCameraRig position with lookCamera world position
+        this.xrCameraRig.position.copy(lookCamera.position);
+        // and orientation
+        this.xrCameraRig.quaternion.copy(lookCamera.quaternion);
+
+
+        // Copy near/far planes from lookCamera (critical for logarithmic depth buffer)
+        xrCamera.near = lookCamera.near;
+        xrCamera.far = lookCamera.far;
         
-        // Synchronize this view's camera with the lookCamera's position and rotation
-        // This makes the VR viewpoint match the lookCamera location
+        // Update camera projection
+        xrCamera.updateProjectionMatrix();
         
-        // Copy position from lookCamera
-        this.camera.position.copy(lookCamera.position);
+        // Update world matrix
+        xrCamera.updateMatrixWorld(true);
         
-        // Copy rotation (quaternion) from lookCamera
-        // Using quaternion ensures we preserve the exact orientation
-        this.camera.quaternion.copy(lookCamera.quaternion);
+        // Get camera world position for debugging
+        const camWorldPos = new Vector3();
+        xrCamera.getWorldPosition(camWorldPos);
+        // console.log("XR: Camera local pos:", xrCamera.position.x.toFixed(1), xrCamera.position.y.toFixed(1), xrCamera.position.z.toFixed(1));
+        // console.log("XR: Camera world pos:", camWorldPos.x.toFixed(1), camWorldPos.y.toFixed(1), camWorldPos.z.toFixed(1));
+        // console.log("XR: Camera rig pos:", xrCameraRig ? (xrCameraRig.position.x.toFixed(1) + " " + xrCameraRig.position.y.toFixed(1) + " " + xrCameraRig.position.z.toFixed(1)) : "none");
+
+
+
+
+        // Call preRender on all nodes (important for terrain LOD and visibility)
+        for (const entry of Object.values(NodeMan.list)) {
+            const node = entry.data;
+            if (node.preRender !== undefined) {
+                node.preRender(this); // Pass this view to preRender
+            }
+        }
         
-        // Copy the up vector to maintain proper orientation
-        this.camera.up.copy(lookCamera.up);
-        
-        // Copy the FOV to match the lookCamera's field of view
-        this.camera.fov = lookCamera.fov;
-        
-        // Update camera matrices and projection to reflect the new position/orientation/FOV
-        this.camera.updateProjectionMatrix();
-        this.camera.updateMatrix();
-        this.camera.updateMatrixWorld();
+        // Update terrain for XR (needed for tile visibility/LOD) ?????
+        const terrainUI = NodeMan.get("terrainUI", true);
+        if (terrainUI) {
+            terrainUI.update();
+        }
 
         // Update shared uniforms for shaders (near/far planes)
-        sharedUniforms.nearPlane.value = this.camera.near;
-        sharedUniforms.farPlane.value = this.camera.far;
-        
+        // sharedUniforms.nearPlane.value = xrCamera.near;
+        // sharedUniforms.farPlane.value = xrCamera.far;
+        //
         // Calculate and set focal length uniform
-        const fov = this.camera.fov * Math.PI / 180;
+//        const fov = xrCamera.fov * Math.PI / 180;
+
+
+        // TODO: this is probably wrong in XR mode with two different fovs
+        // so we really need to go in the other direction
+
+        const fov = lookCamera.fov * Math.PI / 180;
         const focalLength = this.heightPx / (2 * Math.tan(fov / 2));
         sharedUniforms.cameraFocalLength.value = focalLength;
 
@@ -336,11 +482,18 @@ export class CNodeView3D extends CNodeViewCanvas {
         if (sunNode) {
             sunNode.update();
         }
+        
+        // Configure renderer for manual clearing (needed for proper depth buffer handling)
+        this.renderer.autoClear = false;
+        
+        // Clear buffers manually before rendering
+        this.renderer.clear(true, true, true);
+
 
         // Render the scene - Three.js XR system handles stereo rendering automatically
         // This will render twice (once per eye) with proper camera offsets for VR
         // Note: We skip post-processing effects in XR mode for performance
-        this.renderer.render(GlobalScene, this.camera);
+        this.renderer.render(GlobalScene, this.xrCamera);
     }
 
 

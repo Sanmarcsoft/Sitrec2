@@ -425,8 +425,8 @@ export class CNodeTerrainUI extends CNode {
             // Update globe visibility based on new state
             this.updateGlobeVisibility();
             
-            // Update black sphere visibility based on new state
-            this.terrainNode.updateBlackSphereVisibility();
+            // Update grey sphere visibility based on new state
+            this.terrainNode.updateGreySphereVisibility();
         });
 
         console.log("CNodeTerrainUI: calling setMapType for initial map type " + this.mapType);

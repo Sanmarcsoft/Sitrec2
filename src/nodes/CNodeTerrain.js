@@ -3,7 +3,7 @@ import {pointAbove} from "../threeExt";
 import {cos, radians} from "../utils";
 import {Globals, NodeMan, Sit} from "../Globals";
 import {EUSToLLA, RLLAToECEFV_Sphere, wgs84} from "../LLA-ECEF-ENU";
-import {Group, Mesh, MeshBasicMaterial, Raycaster, SphereGeometry} from "three";
+import {CanvasTexture, Group, Mesh, MeshBasicMaterial, Raycaster, SphereGeometry} from "three";
 import {GlobalScene} from "../LocalFrame";
 import {V3} from "../threeUtils";
 import {assert} from "../assert";
@@ -15,6 +15,7 @@ import * as LAYER from "../LayerMasks";
 import {ViewMan} from "../CViewManager";
 import {CNodeViewUI} from "./CNodeViewUI";
 import {isLocal} from "../configUtils";
+import {createTerrainDayNightMaterial} from "../js/map33/material/TerrainDayNightMaterial";
 
 const terrainGUIColor = "#c0ffc0";
 
@@ -119,16 +120,49 @@ export class CNodeTerrain extends CNode {
         this.group = new Group();
         GlobalScene.add(this.group);
 
-        // Create a black sphere positioned at the center of the Earth
+        // Create a grey sphere positioned at the center of the Earth
         // Radius is 1km less than the globe radius to prevent z-fighting
         // Only visible when Globals.dynamicSubdivision is true
-        const blackSphereRadius = wgs84.RADIUS - 1000;
-        const blackSphereGeometry = new SphereGeometry(blackSphereRadius, 32, 32);
-        const blackSphereMaterial = new MeshBasicMaterial({ color: 0x808080 });
-        this.blackSphere = new Mesh(blackSphereGeometry, blackSphereMaterial);
-        this.blackSphere.position.set(0, -wgs84.RADIUS, 0);
-        this.blackSphere.visible = Globals.dynamicSubdivision === true;
-        GlobalScene.add(this.blackSphere);
+        const greySphereRadius = wgs84.RADIUS - 1000;
+        const greySphereGeometry = new SphereGeometry(greySphereRadius, 32, 32);
+        const greySphereMaterial = new MeshBasicMaterial({ color: 0x808080 }); // Grey
+        this.greySphere = new Mesh(greySphereGeometry, greySphereMaterial);
+        this.greySphere.position.set(0, -wgs84.RADIUS, 0);
+        this.greySphere.visible = Globals.dynamicSubdivision === true;
+        GlobalScene.add(this.greySphere);
+
+        // DEBUG: Create test spheres to verify rendering in VR
+        const testSphereRadius = 10; // 10m radius
+        const testSphereGeometry = new SphereGeometry(testSphereRadius, 32, 32);
+        
+        // Create a checkerboard texture
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+        const tileSize = 32;
+        for (let y = 0; y < canvas.height; y += tileSize) {
+            for (let x = 0; x < canvas.width; x += tileSize) {
+                const isWhite = ((x / tileSize) + (y / tileSize)) % 2 === 0;
+                ctx.fillStyle = isWhite ? '#ffffff' : '#ff0000';
+                ctx.fillRect(x, y, tileSize, tileSize);
+            }
+        }
+        const checkerTexture = new CanvasTexture(canvas);
+        
+        // Red sphere with TerrainDayNightMaterial (shader)
+        const redMaterial = createTerrainDayNightMaterial(checkerTexture, 0.3, false);
+        this.testSphereRed = new Mesh(testSphereGeometry, redMaterial);
+        this.testSphereRed.position.set(20, 0, -100); // 20m right, 100m forward (in -Z direction)
+        GlobalScene.add(this.testSphereRed);
+        
+        // Green sphere with standard MeshBasicMaterial
+        const greenMaterial = new MeshBasicMaterial({ color: 0x00ff00 });
+        this.testSphereGreen = new Mesh(testSphereGeometry, greenMaterial);
+        this.testSphereGreen.position.set(-20, 0, -100); // 20m left, 100m forward (in -Z direction)
+        GlobalScene.add(this.testSphereGreen);
+        
+        console.log("DEBUG: Red sphere now uses TerrainDayNightMaterial with checkerboard texture");
 
         this.maps = []
         for (const mapName in this.UI.mapTypesKV) {
@@ -296,12 +330,26 @@ export class CNodeTerrain extends CNode {
             this.group = undefined;
         }
 
-        // Clean up the black sphere
-        if (this.blackSphere !== undefined) {
-            GlobalScene.remove(this.blackSphere);
-            this.blackSphere.geometry.dispose();
-            this.blackSphere.material.dispose();
-            this.blackSphere = undefined;
+        // Clean up the grey sphere
+        if (this.greySphere !== undefined) {
+            GlobalScene.remove(this.greySphere);
+            this.greySphere.geometry.dispose();
+            this.greySphere.material.dispose();
+            this.greySphere = undefined;
+        }
+
+        // Clean up test spheres
+        if (this.testSphereRed !== undefined) {
+            GlobalScene.remove(this.testSphereRed);
+            this.testSphereRed.geometry.dispose();
+            this.testSphereRed.material.dispose();
+            this.testSphereRed = undefined;
+        }
+        if (this.testSphereGreen !== undefined) {
+            GlobalScene.remove(this.testSphereGreen);
+            this.testSphereGreen.geometry.dispose();
+            this.testSphereGreen.material.dispose();
+            this.testSphereGreen = undefined;
         }
 
         if (this.elevationMap !== undefined) {
@@ -324,10 +372,10 @@ export class CNodeTerrain extends CNode {
         super.dispose();
     }
 
-    updateBlackSphereVisibility() {
-        // Black sphere should only be visible when Globals.dynamicSubdivision is true
-        if (this.blackSphere) {
-            this.blackSphere.visible = Globals.dynamicSubdivision === true;
+    updateGreySphereVisibility() {
+        // Grey sphere should only be visible when Globals.dynamicSubdivision is true
+        if (this.greySphere) {
+            this.greySphere.visible = Globals.dynamicSubdivision === true;
         }
     }
 
