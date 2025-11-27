@@ -33,7 +33,7 @@ export const MASK_TARGET = (1<<TARGET)     // things that are targets, like the 
 export const MASK_LIGHTING = MASK_WORLD | MASK_MAIN | MASK_LOOK | MASK_TARGET ;
 
 export const MASK_MAINRENDER = MASK_WORLD | MASK_MAIN | MASK_TARGET | MASK_HELPERS ;
-export const MASK_LOOKRENDER = MASK_WORLD | MASK_LOOK | MASK_TARGET | MASK_EYES;
+export const MASK_LOOKRENDER = MASK_WORLD | MASK_LOOK | MASK_TARGET;
 export const MASK_TARGETRENDER = MASK_TARGET;  // for the target-only window
 
 
