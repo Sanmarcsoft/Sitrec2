@@ -583,7 +583,13 @@ export class CNodeView3D extends CNodeViewCanvas {
                 this.fullscreenQuadScene.add(this.fullscreenQuad);
                 
                 this.updateSkyUniforms(skyColor, skyOpacity);
+                
+                // Temporarily disable XR camera management to render 2D overlay
+                const savedXREnabled = this.renderer.xr.enabled;
+                this.renderer.xr.enabled = false;
                 this.renderer.render(this.fullscreenQuadScene, this.fullscreenQuadCamera);
+                this.renderer.xr.enabled = savedXREnabled;
+                
                 this.renderer.clearDepth();
                 
                 // Render sun/day sky
