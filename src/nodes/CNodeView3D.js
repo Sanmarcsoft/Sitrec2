@@ -205,6 +205,12 @@ export class CNodeView3D extends CNodeViewCanvas {
 
             // Setup WebXR - only on lookView
             this.renderer.xr.enabled = true;
+            
+            // Increase XR framebuffer resolution for better quality
+            // Values > 1.0 increase resolution (improves sharpness but costs performance)
+            // Default is 1.0, common values are 1.2-1.5 for Quest, up to 2.0 for high-end
+            this.renderer.xr.setFramebufferScaleFactor(1.5);
+            
             this.xrSession = null;
             this.xrActive = false; // Track whether we're currently in an XR session
 
