@@ -250,7 +250,7 @@ checkLocal();
 
 
 // Check the user agent for VR capability and mobile
-checkUserAgent();
+await checkUserAgent();
 
 if (!Globals.canVR && isLocal) {
 // Initialize IWER (Immersive Web Emulation Runtime) for WebXR emulation
@@ -864,7 +864,7 @@ async function requestFileSystemAccessIfNeeded() {
     }
 }
 
-function checkUserAgent() {
+async function checkUserAgent() {
     Globals.canVR = false;
     Globals.inVR = false;
     Globals.onMetaQuest = false;
@@ -895,6 +895,18 @@ function checkUserAgent() {
             console.log("Mobile device detected");
         }
 
+        // Check for WebXR support (for desktop VR headsets like Valve Index, HTC Vive, etc.)
+        if (!Globals.canVR && navigator.xr) {
+            try {
+                const isVRSupported = await navigator.xr.isSessionSupported('immersive-vr');
+                if (isVRSupported) {
+                    console.log("WebXR VR support detected (desktop VR headset)");
+                    Globals.canVR = true;
+                }
+            } catch (err) {
+                console.log("WebXR check failed:", err);
+            }
+        }
     }
 }
 
