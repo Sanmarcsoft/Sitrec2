@@ -375,7 +375,7 @@ const gTypes = {
             height: [1, 0, 100, 0.01],
             radialSegments: [10, 4, 40, 1],
             heightSegments: [10, 3, 40, 1],
-            openEnded: false,
+            openEnded: [false, "Whether the ends of the cylinder are open or closed"],
             thetaStart: [0, 0, 2 * Math.PI, 0.01],
             thetaLength: [2 * Math.PI, 0, 2 * Math.PI, 0.1],
         }
