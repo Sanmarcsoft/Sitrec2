@@ -1,18 +1,6 @@
-import {
-    AlwaysDepth,
-    DirectionalLight,
-    HemisphereLight,
-} from "three";
-import {EarthRadiusMiles, FileManager, guiJetTweaks, NodeFactory, Sit} from "../Globals";
-import * as LAYER from "../LayerMasks";
-import {
-    ExpandKeyframes,
-    f2m,
-    metersFromNM,
-    NMFromMeters,
-    RollingAverage,
-    scaleF2M
-} from "../utils";
+import {AlwaysDepth, Color, MeshStandardMaterial, TextureLoader,} from "three";
+import {EarthRadiusMiles, FileManager, gui, NodeFactory, NodeMan, Sit} from "../Globals";
+import {ExpandKeyframes, f2m, metersFromNM, NMFromMeters, RollingAverage, scaleF2M} from "../utils";
 import {CNodeCurveEditor} from "../nodes/CNodeCurveEdit";
 import {par} from "../par";
 import {CNodeJetTrack} from "../nodes/CNodeJetTrack";
@@ -33,10 +21,8 @@ import {CNodeLOSTraverseConstantAltitude} from "../nodes/CNodeLOSTraverseConstan
 import {CNodeTurnRateBS} from "../nodes/CNodeTurnRateBS";
 import {CNodeScale} from "../nodes/CNodeScale";
 import {CNodeDisplayTrackToTrack} from "../nodes/CNodeDisplayTrackToTrack";
-import {CNodeWind} from "../nodes/CNodeWind";
 import {CNodeHeading} from "../nodes/CNodeHeading";
 import {AddGenericNodeGraph, AddSpeedGraph} from "../JetGraphs";
-import {gui, guiTweaks, NodeMan, } from "../Globals";
 import {GlobalScene} from "../LocalFrame";
 import {initJetVariables, initViews, SetupCommon, SetupTrackLOSNodes, SetupTraverseNodes} from "../JetStuff";
 import {GridHelperWorld} from "../threeExt";
@@ -44,14 +30,13 @@ import {CNodeATFLIRUI} from "../nodes/CNodeATFLIRUI";
 import {CNodeDisplayLOS} from "../nodes/CNodeDisplayLOS";
 import {makeMatLine} from "../MatLines";
 import {CNodeLOSTrackTarget} from "../nodes/CNodeLOSTrackTarget";
-import {Color, MeshStandardMaterial, TextureLoader} from "three";
 import {addControllerTo} from "../nodes/CNodeController";
-import {commonJetLabels} from "./CommonSitch";
 import {CNodeInterpolateTwoFramesTrack} from "../nodes/CNodeInterpolateTwoFramesTrack";
 import {closingSpeed} from "../trackUtils";
-import {MV3, V3} from "../threeUtils";
 import {ViewMan} from "../CViewManager";
 import {SITREC_APP} from "../configUtils";
+import {CNodeBackgroundFlowIndicator} from "../nodes/CNodeBackgroundFlowIndicator";
+import {CNodeLOSFromCamera} from "../nodes/CNodeLOSFromCamera";
 
 export var SitGoFast = {
     name: "gofast",
@@ -146,6 +131,10 @@ export var SitGoFast = {
         near: 7132,
         far: 8422,
         camera: "lookCamera", visible: false},
+
+
+    terrain: {lat:29.3, lon:-79.3, zoom:7, nTiles:6},
+
 
     updateFunction: function (f) {
         const targetNode = NodeMan.get("LOSTraverseSelect")
@@ -415,7 +404,7 @@ export var SitGoFast = {
     // GUI related setup
     setup2: function() {
         SetupTrackLOSNodes()
-        
+
         new CNodeDisplayLOS({
             id: "DisplayJetLOS2",
             inputs: {
@@ -532,7 +521,7 @@ export var SitGoFast = {
                     new CNodeGUIValue({id: "DisplayTargetSphere_size",value: Sit.targetSize, start: 1, end: 50, step: 0.1, desc: "Target size ft"}, gui)
                 )
             },
-            
+
         })
 
 // GRAPHS GRAPHS GRAPHS GRAPHS GRAPHS GRAPHS GRAPHS GRAPHS GRAPHS GRAPHS GRAPHS
@@ -619,6 +608,13 @@ export var SitGoFast = {
         // which needs "jetstuff"
         initViews()
 
+
+        new CNodeLOSFromCamera( { id: "JetLOSCameraCenter", cameraNode: "lookCamera", useRecorded: false}),
+
+
+        new CNodeBackgroundFlowIndicator({
+            id: "backgroundFlow", visible:false, color:"#8080FF", overWater: true,
+        })
 
     }
 

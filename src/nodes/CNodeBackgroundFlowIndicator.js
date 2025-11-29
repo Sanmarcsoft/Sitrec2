@@ -1,6 +1,6 @@
 // Dispaly an arrow from an object to a celestial body
 
-import {DebugArrowAB, removeDebugArrow} from "../threeExt";
+import {DebugArrowAB, intersectMSL, removeDebugArrow} from "../threeExt";
 import {CNode} from "./CNode";
 import {guiShowHide} from "../Globals";
 import {convertColorInput} from "../ConvertColorInputs";
@@ -20,6 +20,8 @@ export class CNodeBackgroundFlowIndicator extends CNode {
         this.input("color");   // color of arrow
         this.arrowName = "backgroundFlow"
 
+        this.overWater = v.overWater ?? false; // whether to assume over water always
+
         guiShowHide.add(this, 'visible').onChange( (v) => {
             if (v) {
                 this.update(0);
@@ -37,7 +39,11 @@ export class CNodeBackgroundFlowIndicator extends CNode {
     update(f) {
         if (!this.visible) return;
 
-        const cameraLOS = NodeMan.get("JetLOSCameraCenter", false)
+        let cameraLOS = NodeMan.get("JetLOSCameraCenter", false)
+        if (!cameraLOS) {
+            // legacy sitches, e.g. GoFast, use JetLOS if no JetLOSCameraCenter
+            cameraLOS = NodeMan.get("JetLOS", false)
+        };
         if (!cameraLOS) return;
 
         const camera = NodeMan.get("lookCamera", false);
@@ -49,14 +55,14 @@ export class CNodeBackgroundFlowIndicator extends CNode {
         const losTrackA = cameraLOS.getValue(f);
         const losTrackB = cameraLOS.getValue(f + 1);
 
-        const losA = losTrackA.heading;
-        const losB = losTrackB.heading;
+        const losA = losTrackA.heading.clone();
+        const losB = losTrackB.heading.clone();
 
         assert(losA && losB, "No LOS values found");
         assert(typeof losA.clone === "function","Invalid LOS value")
 
-        const cameraPosA = losTrackA.position;
-        const cameraPosB = losTrackB.position;
+        const cameraPosA = losTrackA.position.clone();
+        const cameraPosB = losTrackB.position.clone();
 
         const rayA = new Raycaster(cameraPosA, losA)
         rayA.layers.mask  |= LAYER.MASK_MAIN | LAYER.MASK_LOOK;
@@ -67,12 +73,23 @@ export class CNodeBackgroundFlowIndicator extends CNode {
 
         const terrainNode = NodeMan.get("TerrainModel", false);
 
+        if (!terrainNode) {
+            console.warn("CNodeBackgroundFlowIndicator: No TerrainModel node found");
+            return;
+        }
+
         // attmpet to get the closest intersecting objects/points on the terrain model
 
         let obA = terrainNode.getClosestIntersect(rayA, terrainNode);
         let obB = terrainNode.getClosestIntersect(rayB, terrainNode);
 
         let pointA, pointB;
+
+        // also get closest intersection with the globe
+        // and use that if it's close (i.e. over ocean)
+        const globeA = intersectMSL(cameraPosA, losA);
+        const globeB = intersectMSL(cameraPosB, losB);
+
 
         if (obA && obB) {
             pointA = obA.point;
@@ -94,8 +111,34 @@ export class CNodeBackgroundFlowIndicator extends CNode {
             pointB = cameraPosB.clone().add(losB.clone().multiplyScalar(10000))
         }
 
+        // use globe points if they are closer than the terrain points
+        if (globeA) {
+            const distGlobeA = globeA.distanceTo(cameraPosA);
+            const distPointA = pointA.distanceTo(cameraPosA);
+            if (distGlobeA < distPointA) {
+                pointA = globeA;
+            }
+        }
+
+        if (globeB) {
+            const distGlobeB = globeB.distanceTo(cameraPosB);
+            const distPointB = pointB.distanceTo(cameraPosB);
+            if (distGlobeB < distPointB) {
+                pointB = globeB;
+            }
+        }
+
+        // and finally, if overWater is set, just use the globe points
+        if (this.overWater) {
+            if (globeA) pointA = globeA;
+            if (globeB) pointB = globeB;
+        }
 
         const AtoB = new Vector3().subVectors(pointB, pointA);
+
+
+        DebugArrowAB(this.arrowName+"TO_A", pointA, cameraPosA, "#FF00FF",
+            true, GlobalScene, 20, LAYER.MASK_LOOKRENDER);
 
 
         DebugArrowAB(this.arrowName+"20", pointA, pointA.clone().add(AtoB.clone().multiplyScalar(20)), "#a0a0a0",       true, GlobalScene, 20, LAYER.MASK_LOOKRENDER);
