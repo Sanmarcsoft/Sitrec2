@@ -18,6 +18,7 @@ import {guiMenus, NodeMan, setSitchEstablished, Sit} from "../Globals";
 import {getApproximateLocationFromIP} from "../GeoLocation";
 import {customAltitudeFunction, customLocationFunction} from "../../config/config";
 import {showError} from "../showError";
+import {f2m} from "../utils";
 
 export class CNodePositionLLA extends CNode {
     constructor(v) {
@@ -323,16 +324,36 @@ export class CNodePositionLLA extends CNode {
         this._LLA[0] = LLA.x
         this._LLA[1] = LLA.y
 
-        // if the shift key is held, then set the altitude to the ground + 2m
-        if (isKeyHeld('Shift') && changeAlt) {
-            // get the ground altitude, buy first getting the cursor position, adjusted for height
-            const groundPoint = adjustHeightAboveGround(cursorPos, 2);
-            // converts the ground point to LLA
-            const groundPointLLA = EUSToLLA(groundPoint);
-            // so the altitude is in the Z component
-            const groundAlt = groundPointLLA.z;
-            this._LLA[2] = this.guiAlt.setValueWithUnits(groundAlt, "metric", "small", true)
+        if (changeAlt) {
+
+            if (this.agl) {
+                // AGL, so leave altitude alone, or
+                // (if shift held) set it to ground level
+                if (isKeyHeld('Shift')) {
+                    const groundAlt = f2m(7);  // 7 feet
+                    this._LLA[2] = this.guiAlt.setValueWithUnits(groundAlt, "metric", "small", true)
+                }
+
+            } else {
+                // altitude is absolute, so we either leave it alone, or
+                // (if shift held) set it to ground + 2m
+                // if the shift key is held, then set the altitude to the ground + 2m
+                if (isKeyHeld('Shift')) {
+                    // get the ground altitude, buy first getting the cursor position, adjusted for height
+                    const groundPoint = adjustHeightAboveGround(cursorPos, 2);
+                    // converts the ground point to LLA
+                    const groundPointLLA = EUSToLLA(groundPoint);
+                    // so the altitude is in the Z component
+                    const groundAlt = groundPointLLA.z;
+                    this._LLA[2] = this.guiAlt.setValueWithUnits(groundAlt, "metric", "small", true)
+                }
+            }
+
         }
+
+
+
+
         this.recalculateCascade();
         EventManager.dispatchEvent("PositionLLA.onChange", {id: this.id})
     }
