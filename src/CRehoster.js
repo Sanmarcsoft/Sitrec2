@@ -262,7 +262,7 @@ export class CRehoster {
 
                 return resultUrl;
             } catch (error) {
-                showError('Error uploading file to S3:', error);
+                showError(`Error uploading file ${filename} to S3:`, error);
                 throw new Error("S3 upload problem, maybe not logged in?");
             }
         } else {
