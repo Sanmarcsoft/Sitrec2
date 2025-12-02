@@ -436,9 +436,11 @@ export class CFileManager extends CManager {
             return this.inputSitchName().then(() => {
                 return this.saveSitchNamed(Sit.sitchName, local);  // return the Promise here
             }).then(() => {
-                addOptionToGUIMenu(this.guiLoad, Sit.sitchName);
-                addOptionToGUIMenu(this.guiLoadAlphabetical, Sit.sitchName);
-                addOptionToGUIMenu(this.guiDelete, Sit.sitchName);
+                if (!local) {
+                    addOptionToGUIMenu(this.guiLoad, Sit.sitchName);
+                    addOptionToGUIMenu(this.guiLoadAlphabetical, Sit.sitchName);
+                    addOptionToGUIMenu(this.guiDelete, Sit.sitchName);
+                }
             }).catch((error) => {
                 console.log("Failed to input sitch name:", error);
                 // propogate the error
