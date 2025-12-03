@@ -951,7 +951,7 @@ export class CFileManager extends CManager {
         // If it has no forward slash, then it's a local file
         // and will be in the this.directoryHandle folder
         if (!filename.includes("/")) {
-            assert(this.directoryHandle !== undefined, "No directory handle for local file")
+            assert(this.directoryHandle !== undefined, `No directory handle for local file ${filename}`);
             loadingPromise = this.directoryHandle.getFileHandle(filename).then(fileHandle => {
                 return fileHandle.getFile().then(file => {
                     return file.arrayBuffer().then(arrayBuffer => {
@@ -1492,6 +1492,8 @@ export class CFileManager extends CManager {
                         console.log("this.rehostedStarlink set as REHOSTING TLE " + rehostFilename)
                     }
                 }
+
+                assert(rehostFilename !== undefined, "Rehost filename is undefined for key " + key);
 
                 console.log("Dynamic Rehost: " + rehostFilename + " length=" + f.original.byteLength + " staticURL=" + f.staticURL)
                 const rehostPromise = this.rehoster.rehostFile(rehostFilename, f.original).then((staticURL) => {

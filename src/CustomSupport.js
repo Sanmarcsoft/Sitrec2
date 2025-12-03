@@ -2257,24 +2257,29 @@ export class CCustomManager {
             let files = {}
             for (let id in FileManager.list) {
                 const file = FileManager.list[id]
-                if (local) {
-                    // if we are saving locally, then we don't need to rehost the files
-                    // so just save the original name
-                    files[id] = file.filename
-                } else {
-                    // Only include files that have been successfully rehosted
-                    if (file.staticURL) {
-                        files[id] = file.staticURL
-                    } else if (!file.dynamicLink) {
-                        // For non-dynamic links (external static URLs), use filename directly
-                        // Note: External static URLs should have staticURL = filename set at load time,
-                        // so this is primarily a defensive fallback
-                        console.error("No static link, falling back to filename", id, file.filename);
+
+                // initial check for isMultiple is to skip synthetic files
+                // that are generated from .TS or (TODO) .ZIP  uploads
+                if (!file.isMultiple) {
+                    if (local) {
+                        // if we are saving locally, then we don't need to rehost the files
+                        // so just save the original name
                         files[id] = file.filename
                     } else {
-                        console.warn("File not rehosted but should be - skipping:", id, file.filename);
+                        // Only include files that have been successfully rehosted
+                        if (file.staticURL) {
+                            files[id] = file.staticURL
+                        } else if (!file.dynamicLink) {
+                            // For non-dynamic links (external static URLs), use filename directly
+                            // Note: External static URLs should have staticURL = filename set at load time,
+                            // so this is primarily a defensive fallback
+                            console.error("No static link, falling back to filename", id, file.filename);
+                            files[id] = file.filename
+                        } else {
+                            console.warn("File not rehosted but should be - skipping:", id, file.filename);
+                        }
+                        // else: skip files without staticURL - they weren't rehosted
                     }
-                    // else: skip files without staticURL - they weren't rehosted
                 }
             }
             out.loadedFiles = files;
@@ -2470,7 +2475,10 @@ export class CCustomManager {
         assert (Sit.canMod || Sit.isCustom, "one of Sit.canMod or Sit.isCustom must be true to serialize a sitch")
         assert (!Sit.canMod || !Sit.isCustom, "one of Sit.canMod or Sit.isCustom must be false to serialize a sitch")
 
+
+
         if (local) {
+
             // if we are saving locally, then we don't need to rehost the files
             // so just save the stringified sitch
             // with the loaded files using their original names
@@ -2494,6 +2502,8 @@ export class CCustomManager {
             // },
             // what we will need to do is make the videoFile point to the original TS file
             // and remove the other extracted TS files from loadedFiles
+
+
             const sitchObj = JSON.parse(str);
             if (sitchObj.videoFile && sitchObj.videoFile.endsWith(".h264")) {
                 const baseName = sitchObj.videoFile.replace(/_(h264|klv|ecm|emm)_\d+\.(h264|klv|ecm|emm)$/, "");
@@ -2518,7 +2528,6 @@ export class CCustomManager {
             // re-stringify
             str = JSON.stringify(sitchObj, null, 2);
 
-
             // save it with a dialog to select the name
             return new Promise((resolve, reject) => {
                 saveFilePrompted(new Blob([str]), name + ".json").then((filename) => {
@@ -2537,8 +2546,11 @@ export class CCustomManager {
 
         }
 
-
+        console.log("ABOUT TO REHOST DYNAMIC LINKS FOR SERIALIZE")
         return FileManager.rehostDynamicLinks(true).then(() => {
+
+            console.log("GETTING CUSTOM SITCH STRING AFTER REHOSTING DYNAMIC LINKS")
+            // get the string again, now that dynamic links have been rehosted
             const str = this.getCustomSitchString();
 //            console.log(str)
 

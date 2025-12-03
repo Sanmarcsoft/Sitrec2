@@ -360,24 +360,43 @@ class CDragDropHandler {
         return FileManager.parseAsset(filename, filename, result)
             .then(parsedResult => {
 
-                // Rehosting would be complicated with multiple results. Ignored for now.
-                // Maybe we need a FILE manager and an ASSET manager
-                // we'll rehost files, not assets
 
+                let isMultiple = false;
                 // parsing an asset file can return a single result,
                 // or an array of one or more results (like with a zip file)
                 // for simplicity, if it's a single result we wrap it in an array
-                if (!Array.isArray(parsedResult))
+                if (!Array.isArray(parsedResult)) {
                     parsedResult = [parsedResult]
+                } else {
+                    // it is an array, so we need to make an entry for the original
+                    FileManager.remove(filename); // allow reloading.
+                    FileManager.add(filename, result, result)
+                    const fileManagerEntry = FileManager.list[filename];
+                    fileManagerEntry.dynamicLink = true; // we DO want to rehost the original
+                    fileManagerEntry.staticURL = newStaticURL;
+
+                    // for multiple files, we don't want to keep the original static link
+                    // we set it to null, so we don't try to include it loadedFiles
+                    newStaticURL = null;
+
+                    fileManagerEntry.filename = filename;
+                    fileManagerEntry.dataType = "archive";
+                    isMultiple = true;
+                }
 
                 for (const x of parsedResult) {
+
+                    // if multi, do we even need to add them?
+                    // I think so.
+
                     FileManager.remove(x.filename); // allow reloading.
                     FileManager.add(x.filename, x.parsed, result)
                     const fileManagerEntry = FileManager.list[x.filename];
-                    fileManagerEntry.dynamicLink = true;
+                    fileManagerEntry.dynamicLink = !isMultiple;
                     fileManagerEntry.filename = x.filename;
                     fileManagerEntry.staticURL = newStaticURL;
                     fileManagerEntry.dataType = x.dataType;
+                    fileManagerEntry.isMultiple = isMultiple;
 
                     const parsedFile = x.parsed;
                     const filename = x.filename;
