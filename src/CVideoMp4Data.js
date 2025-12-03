@@ -49,6 +49,7 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
         // ANSWER The file manager does some parsing of the path???
 
         if (v.file !== undefined ) {
+            console.log(`[CVideoMp4Data] Loading video file: ${v.file}`);
             const loadPromise = FileManager.loadAsset(v.file, "video").then(result => {
                 // the file.appendBuffer expects an ArrayBuffer with a fileStart value (a byte offset) and
                 // and byteLength (total byte length)
@@ -63,7 +64,7 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
             }).catch(err => {
                 // Error will be ignored if callbacks are cleared
                 if (this.errorCallback) {
-                    console.error("Error loading video file:", err);
+                    console.error(`Error loading video file: ${v.file}`, err);
                     this.errorCallback(err);
                 }
             });
