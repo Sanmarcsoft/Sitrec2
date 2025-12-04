@@ -101,7 +101,7 @@ export class CNodeViewEphemeris extends CNodeViewText {
 
         for (const sat of top30) {
             const row = this.formatRow(
-                sat.name.substring(0, 15),
+                sat.name.substring(0, this.namePad-1).trim(),
                 sat.az.toFixed(1),
                 sat.el.toFixed(1),
                 sat.range.toFixed(0),

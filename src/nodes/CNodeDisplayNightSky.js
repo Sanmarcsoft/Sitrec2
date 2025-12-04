@@ -159,6 +159,14 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                 })
                 .tooltip("Get the CURRENT (not historical, now, real time) Starlink satellite positions. This will download the data from the internet, so it may take a few seconds.\n")
 
+
+            satGUI.add(this.satellites, "updateActive").name("Load ACTIVE Satellites")
+                .onChange(function (x) {
+                    this.parent.close()
+                })
+                .tooltip("Get the CURRENT (not historical, now, real time) ACTIVE satellite positions. This will download the data from the internet, so it may take a few seconds.\n")
+
+
             satGUI.add(this.satellites, "updateSLOWSats").name("(Experimental) Load SLOW Satellites")
                 .onChange(function (x) {
                     this.parent.close()

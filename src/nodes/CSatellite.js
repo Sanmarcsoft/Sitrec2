@@ -1165,6 +1165,15 @@ export class CSatellite {
         this.loadSatellites(url, id);
     }
 
+    updateActive() {
+        const url = SITREC_SERVER + "proxy.php?request=CURRENT_ACTIVE";
+        console.log("Getting active from " + url);
+        const id = "active_current.tle";
+        this.loadSatellites(url, id);
+    }
+
+
+
     /**
      * Update LEO satellites for the current simulation date
      */
