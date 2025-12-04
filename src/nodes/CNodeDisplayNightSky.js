@@ -27,6 +27,7 @@ import {ViewMan} from "../CViewManager";
 import {CNodeLabeledArrow} from "./CNodeLabels3D";
 import {CNodeDisplaySkyOverlay} from "./CNodeDisplaySkyOverlay";
 import {CNodeViewUI} from "./CNodeViewUI";
+import {CNodeViewEphemeris} from "./CNodeViewEphemeris";
 //import { eci_to_geodetic } from '../../pkg/eci_convert.js';
 // npm install satellite.js --save-dev
 // installed with
@@ -39,6 +40,7 @@ import {CStarField} from "./CStarField";
 import {CCelestialElements} from "./CCelestialElements";
 import {CPlanets} from "./CPlanets";
 import {CSatellite} from "./CSatellite";
+import {EventManager} from "../CEventManager";
 
 
 // other source of stars, if we need more (for zoomed-in pics)
@@ -615,6 +617,22 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                 this.color = "#00ff00";
             }
 
+        });
+
+        EventManager.addEventListener("tleLoaded", () => {
+            if (!this.ephemerisView) {
+                this.ephemerisView = new CNodeViewEphemeris({
+                    id: "ephemerisView",
+                    nightSkyNode: this,
+                    visible: false,
+                    draggable: true, resizable: true, freeAspect: true,
+                    left: 0.05, top: 0.10, width: 0.50, height: 0.80,
+                });
+                
+                this.celestialGUI.add(this.ephemerisView, "show").name("Satellite Ephemeris").onChange(() => {
+                    this.celestialGUI.close();
+                });
+            }
         });
 
 //        console.log("Done with CNodeDisplayNightSky constructor")
