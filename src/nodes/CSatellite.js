@@ -3,7 +3,7 @@ import {intersectSphere2, V3} from "../threeUtils";
 import {LLAToEUSRadians} from "../LLA-ECEF-ENU";
 import {SITREC_APP, SITREC_SERVER} from "../configUtils";
 import {sharedUniforms} from "../js/map33/material/SharedUniforms";
-import {FileManager, GlobalDateTimeNode, setRenderOne} from "../Globals";
+import {FileManager, GlobalDateTimeNode, guiMenus, setRenderOne} from "../Globals";
 import {DragDropHandler} from "../DragDropHandler";
 import {EventManager} from "../CEventManager";
 import * as satellite from 'satellite.js';
@@ -12,6 +12,7 @@ import {degrees} from "../utils";
 import {DebugArrow, DebugArrowAB, getPointBelow, removeDebugArrow} from "../threeExt";
 import * as LAYER from "../LayerMasks";
 import {assert} from "../assert";
+import {saveAs} from "../js/FileSaver";
 
 /**
  * CSatellite handles all satellite-related functionality
@@ -688,6 +689,19 @@ export class CSatellite {
         });
         EventManager.dispatchEvent("tleLoaded", {});
         setRenderOne(2); // force a render update after loading the TLE data
+
+
+        // if there's no export button, add one
+        if (!this.exportTLEButton) {
+            const obj = {
+                exportTLE: () => {
+                    const tleText = tle;
+                    saveAs(new Blob([tleText]), "satellites.tle");
+                }
+            };
+            this.exportTLEButton = guiMenus.file.add(obj, 'exportTLE').name('Export TLE');
+        }
+
     }
 
     /**

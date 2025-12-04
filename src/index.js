@@ -276,7 +276,8 @@ if (INCLUDE_IWER_EMULATOR) {
 }
 
 
-
+// Expose Globals to window for debugging
+window.Globals = Globals;
 
 
 // we set Globals.wasPending to 5 so if we get to the render loop with no pending async actions
