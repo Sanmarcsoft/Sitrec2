@@ -284,9 +284,15 @@ export class CNodeTerrain extends CNode {
         }
 
         const layerName = this.UI.layer;
-        const layerDef = sourceDef.layers[layerName];
-        assert(layerDef !== undefined, "CNodeTerrain: layer def for " + layerName + " not found in sourceDef")
-        // run it bound to this, so we can access the terrain node
+        let layerDef = sourceDef.layers[layerName];
+
+        // layerDefs are not really used, so just warn for now if not found
+        // this can happen with a saved layers type, when capabilities have not been loaded yet
+        if (layerDef === undefined) {
+            console.warn("CNodeTerrain: layer def for " + layerName + " not YET found in sourceDef")
+            layerDef = ({type: "Dummy Type You Should Not See"} ) // pass null type
+        }
+         // run it bound to this, so we can access the terrain node
         return sourceDef.mapURL.bind(this)(z, x, y, layerName, layerDef.type)
     }
 

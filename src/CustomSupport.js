@@ -2243,6 +2243,7 @@ export class CCustomManager {
                     nTiles: terrainModel.nTiles,
                     tileSegments: Globals.settings.tileSegments,  // Now always from global settings
                     mapType: terrainModel.mapType,
+                    layer: terrainModel.layer,
                     elevationType: terrainModel.elevationType,
                     elevationScale: terrainModel.elevationScale,
                     dynamic: terrainModel.dynamic,

@@ -32,7 +32,12 @@ export class CNodeTerrainUI extends CNode {
         this.elevationScale = v.elevationScale ?? 1;
         this.textureDetail = v.textureDetail ?? 1;
         this.elevationDetail = v.elevationDetail ?? 1;
-        
+
+        this._layer = null;
+
+        this.layer = v.layer ?? null;
+
+
         // Default subdivision sizes (can be overridden by mapTypes)
         this.elevationSubSize = 4000; // 2000 * 1.414;
         this.textureSubSize = 2000;
@@ -319,6 +324,7 @@ export class CNodeTerrainUI extends CNode {
 
         this.mapTypeMenu.onChange(v => {
 
+            this.layer = null; // reset the layer so setMapType can set it to default for new map type
             // do this async, as we might need to wait for the capabilities to be loaded
             this.setMapType(v).then(() => {
                 this.terrainNode.loadMapTexture(v)
@@ -444,6 +450,17 @@ export class CNodeTerrainUI extends CNode {
 
     }
 
+    // gettor and settor for layer
+    get layer() {
+        return this._layer;
+    }
+
+    set layer(v) {
+        console.log("CNodeTerrainUI: setting layer to " + v+" was "+this._layer);
+        this._layer = v;
+    }
+
+
     updateUIVisibility() {
         // When Dynamic Subdivision is true, hide lat, lon, zoom, nTiles and zoom to track
         // When Dynamic Subdivision is false, hide Disable Dynamic Subdivision
@@ -538,8 +555,11 @@ export class CNodeTerrainUI extends CNode {
         }
 
         this.mapDef = mapDef;
-        this.layer = this.mapDef.layer;
 
+        // only set the layer if it is not already set
+        if (!this.layer) {
+            this.layer = this.mapDef.layer;
+        }
 
         if (mapDef.layers !== undefined) {
             // use the pre-defined layers. of the fake layer we generated last time
@@ -615,7 +635,9 @@ export class CNodeTerrainUI extends CNode {
 
         // set the layer to the specified default, or the first one in the capabilities
         if (this.mapDef.layer !== undefined) {
-            this.layer = this.mapDef.layer;
+            if (!this.layer) {
+                this.layer = this.mapDef.layer;
+            }
         } else {
             this.layer = Object.keys(this.localLayers)[0]
         }

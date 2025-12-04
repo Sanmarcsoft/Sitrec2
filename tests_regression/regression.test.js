@@ -8,7 +8,7 @@ expect.extend({ toMatchImageSnapshot });
 // Array of test cases: each object contains a name and its corresponding URL.
 const testData = [
     { name: 'default', url: 'https://local.metabunk.org/sitrec/?frame=10' },
-    { name: 'WMTS', url: 'https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Regression%20test%20_%20NRL%20WMTS%20(4326%20tiles)/20251125_112039.js' },
+    { name: 'WMTS', url: 'https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Regression%20test%20NRL%20WMTS/20251204_001658.js' },
     { name: 'agua', url: 'https://local.metabunk.org/sitrec/?sitch=agua&frame=10' },
     { name: 'ocean surface', url: 'https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/REGRESSION%20TEST%20_%20Ocean%20Surface/20251114_234141.js&frame=10' },
     { name: 'pseudo color', url: 'https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/REGRESSION%20TEST%20_%20ELEVATION%20PSEUDOCOLOR/20251115_000233.js&frame=10' },
