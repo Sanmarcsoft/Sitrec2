@@ -10,6 +10,7 @@ import {MISB} from "../MISBUtils";
 import {Quaternion, Vector2, Vector3} from "three";
 import {assert} from "../assert.js";
 import {ViewMan} from "../CViewManager";
+import {get_real_horizon_angle_for_frame} from "../JetUtils";
 
 
 // Position the camera on the source track
@@ -41,6 +42,27 @@ export class CNodeControllerTrackToTrack extends CNodeController {
         objectNode.syncUIPosition(); //
     }
 }
+
+// Adjust horizon based on human horizon calculation
+// This is specific to Gimbal/GoFast tyoe sitches
+// and requires relative pitch and roll of the platform and the relative Az/El
+// of the camera line of sight
+// to calculate what the horizon should look like to a human observer
+// Assumes the camera is already pointed correctly, but with a level horizon
+export class CNodeControllerHumanHorizon extends CNodeController {
+    constructor(v) {
+        super(v);
+    }
+
+
+    apply(f, objectNode) {
+        const humanHorizon = get_real_horizon_angle_for_frame(f);
+        const camera = objectNode.camera;
+        camera.rotateZ(radians(humanHorizon));
+
+    }
+}
+
 
 // Just look at the target track
 export class CNodeControllerLookAtTrack extends CNodeController {

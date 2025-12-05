@@ -85,8 +85,8 @@ export var SitGoFast = {
     },
 
     mainView: {left: 0, top: 0, width: 1, height: 1,background:[0.05,0.05,0.05]},
-    lookView: {left: 0.64, top: 1 - 0.3333, width: -1, height: 0.333,},
-    videoView: {left: 0.8250, top: 0.6666, width: -1, height: 0.3333,},
+    lookView: {left: 0.60, top: 0.6, width: -1, height: 0.4,},
+    videoView: {left: 0.80, top: 0.6, width: -1, height: 0.4,},
     mirrorVideo: { transparency: 0.15, autoClear: true, autoFill: false},
 
     focusTracks:{
@@ -476,6 +476,10 @@ export var SitGoFast = {
             id: "lookTrackToTrack",
             sourceTrack: "JetLOS",
             targetTrack: "LOSTraverseSelect",
+        })
+
+        addControllerTo("lookCamera", "HumanHorizon", {
+            id: "lookHumanHorizon",
         })
 
         var ui = new CNodeATFLIRUI({
