@@ -1328,10 +1328,11 @@ class CTrackManager extends CManager {
         // so we need to keep it as trackID until after CNodeDisplayTrack finds it
         const guiFolder = guiMenus.contents.addFolder(trackID);
         
-        // Create spline editor node (the data track)
+        // Create unsmoothed spline editor node (the raw data track)
         // Pass skipGUI: true to prevent it from creating its own GUI in physics menu
+        const unsmoothedID = trackID + "_unsmoothed";
         const splineEditorNode = new CNodeSplineEditor({
-            id: trackID,
+            id: unsmoothedID,
             type: effectiveCurveType,
             scene: scene,
             camera: "mainCamera",
@@ -1339,10 +1340,31 @@ class CTrackManager extends CManager {
             frames: Sit.frames,
             initialPoints: initialPoints,
             skipGUI: true, // Don't create GUI in physics menu
+            pruneIfUnused: true,
         });
         
         splineEditorNode.menuText = name;
         const splineEditor = splineEditorNode.splineEditor;
+        
+        // Create smoothing window GUI control
+        new CNodeGUIValue({
+            id: trackID + "_smoothValue",
+            value: 0,
+            start: 0,
+            end: 200,
+            step: 1,
+            desc: "Smoothing window",
+        }, guiFolder);
+        
+        // Create smoothed track node that wraps the unsmoothed spline editor
+        const smoothedTrackNode = new CNodeSmoothedPositionTrack({
+            id: trackID,
+            source: unsmoothedID,
+            method: "moving",
+            window: trackID + "_smoothValue",
+            copyData: false,
+            exportable: false,
+        });
         
         // Convert hex color to RGB array for display track
         const trackColor = new Color(
@@ -1371,13 +1393,14 @@ class CTrackManager extends CManager {
         // This must happen AFTER CNodeDisplayTrack has found the folder
         guiFolder.$title.innerText = shortName;
         
-        // Create the track object first so we can reference it in the edit mode toggle
-        const trackOb = this.add(trackID, new CMetaTrack(null, splineEditorNode, splineEditorNode));
+        // Create the track object - use smoothedTrackNode as the primary track node
+        const trackOb = this.add(trackID, new CMetaTrack(null, smoothedTrackNode, smoothedTrackNode));
         trackOb.trackID = trackID;
         trackOb.menuText = shortName;
         trackOb.isSynthetic = true;
         trackOb.splineEditor = splineEditor;
-        trackOb.splineEditorNode = splineEditorNode;
+        trackOb.splineEditorNode = splineEditorNode; // Keep reference to unsmoothed node
+        trackOb.smoothedTrackNode = smoothedTrackNode; // Reference to smoothed wrapper
         trackOb.displayTrack = displayTrack;
         trackOb.displayTrackID = displayTrackID;
         trackOb.guiFolder = guiFolder;
@@ -1389,6 +1412,7 @@ class CTrackManager extends CManager {
         trackOb.objectID = options.objectID || null; // Store associated object ID
         
         splineEditorNode.shortName = shortName;
+        smoothedTrackNode.shortName = shortName;
         
         // Add edit mode checkbox to the GUI folder (before display track controls)
         // This checkbox controls whether the track is in edit mode
@@ -1564,8 +1588,10 @@ class CTrackManager extends CManager {
         // Remove color constant
         NodeMan.unlinkDisposeRemove("colorSynthetic_" + trackID);
         
-        // Remove spline editor node
-        NodeMan.unlinkDisposeRemove(trackID);
+        // Remove smoothing-related nodes
+        NodeMan.unlinkDisposeRemove(trackID + "_smoothValue"); // Smoothing window GUI value
+        NodeMan.unlinkDisposeRemove(trackID + "_unsmoothed"); // Unsmoothed spline editor
+        NodeMan.unlinkDisposeRemove(trackID); // Smoothed track wrapper
         
         // Remove from manager
         this.remove(trackID);
@@ -1724,7 +1750,9 @@ class CTrackManager extends CManager {
                 if (trackOb && trackData.positions && trackData.positions.length > 1) {
                     // Restore ALL positions using the spline editor's load method
                     // This will replace the initial point we just created
-                    const splineEditorNode = NodeMan.get(trackOb.trackID);
+                    // Note: The actual spline editor is the _unsmoothed node
+                    const unsmoothedID = trackOb.trackID + "_unsmoothed";
+                    const splineEditorNode = NodeMan.get(unsmoothedID);
                     if (splineEditorNode && splineEditorNode.splineEditor) {
                         // Use the load method which handles the positions array
                         splineEditorNode.splineEditor.load(trackData.positions);
@@ -1738,7 +1766,9 @@ class CTrackManager extends CManager {
                     trackOb.extrapolateTrack = trackData.extrapolateTrack ?? true;
                     
                     // Update the spline editor node with these properties
-                    const splineEditorNode = NodeMan.get(trackOb.trackID);
+                    // Note: The actual spline editor is the _unsmoothed node
+                    const unsmoothedID = trackOb.trackID + "_unsmoothed";
+                    const splineEditorNode = NodeMan.get(unsmoothedID);
                     if (splineEditorNode) {
                         splineEditorNode.constantSpeed = trackOb.constantSpeed;
                         splineEditorNode.extrapolateTrack = trackOb.extrapolateTrack;
