@@ -1284,7 +1284,7 @@ async function initializeOnce() {
 
     function addHelpLink(name, file) {
         if (parseBoolean(process.env.LOCAL_DOCS) ) {
-            return guiMenus.help.addExternalLink(name+ " (Local)", "./"+file+".html").perm();
+            return guiMenus.help.addExternalLink(name, "./"+file+".html").perm();
         } else {
             return guiMenus.help.addExternalLink(name+ " (Github)", "https://github.com/MickWest/sitrec2/blob/main/"+file+".md").perm();
         }

@@ -157,8 +157,26 @@ module.exports = (env = {}) => ({
                                 await fs.promises.mkdir(path.join(outputDir, relativePath), { recursive: true });
                                 await convertMarkdownFiles(fullPath);
                             } else if (file.name.endsWith('.md')) {
-                                const markdownContent = await fs.promises.readFile(fullPath, 'utf-8');
-                                const htmlContent = md.render(markdownContent);
+                                let markdownContent = await fs.promises.readFile(fullPath, 'utf-8');
+                                markdownContent = markdownContent.replace(/(\[.*?\]\((?:\.\/)?(?:docs\/)?)(.*?)(\.md\))/g, '$1$2.html)');
+                                const bodyContent = md.render(markdownContent);
+                                
+                                // Extract title from first H1 or use filename
+                                const titleMatch = markdownContent.match(/^#\s+(.+)$/m);
+                                const title = titleMatch ? titleMatch[1] : file.name.replace('.md', '');
+                                
+                                const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    <link rel="stylesheet" href="github-markdown.css">
+</head>
+<body>
+${bodyContent}
+</body>
+</html>`;
                                 await fs.promises.writeFile(outputPath, htmlContent, 'utf-8');
                             }
                         }
@@ -172,8 +190,26 @@ module.exports = (env = {}) => ({
 
                     // Convert the root README.md file
                     if (fs.existsSync(rootReadme)) {
-                        const readmeContent = await fs.promises.readFile(rootReadme, 'utf-8');
-                        const htmlContent = md.render(readmeContent);
+                        let readmeContent = await fs.promises.readFile(rootReadme, 'utf-8');
+                        readmeContent = readmeContent.replace(/(\[.*?\]\((?:\.\/)?(?:docs\/)?)(.*?)(\.md\))/g, '$1$2.html)');
+                        const bodyContent = md.render(readmeContent);
+                        
+                        // Extract title from first H1 or use "README"
+                        const titleMatch = readmeContent.match(/^#\s+(.+)$/m);
+                        const title = titleMatch ? titleMatch[1] : 'README';
+                        
+                        const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    <link rel="stylesheet" href="docs/github-markdown.css">
+</head>
+<body>
+${bodyContent}
+</body>
+</html>`;
                         await fs.promises.writeFile(outputRootReadme, htmlContent, 'utf-8');
                     }
                 });

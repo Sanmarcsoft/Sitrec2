@@ -1,7 +1,7 @@
 # Sitrec User Interface
 
 Sitrec is a web application that will run in many popular desktop browser like Chrome, Safari, Edge, or Firefox 
-but also refer to the [browser capabilities](BrowserCap.md) page for more details. 
+but also refer to the [browser capabilities](dev/BrowserCap.md) page for more details. 
 To run it you just enter or click on the URL of the installation. 
 In this documentation I'll assume you are using the standard Metabunk installation 
 

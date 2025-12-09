@@ -75,7 +75,7 @@ Note in the above, mainView covers the entire screen (width:1), but it's also ty
 
 Note: This was originally a sitch specified in code, but the same format is used for the dynamically loaded files that are parsed as text. This was in src/sitch/SitWestJet.js (as a code module), but is now in data/sitWestJet.js (as a text file)
 
-![WestJet Screenshot](readmeImages/westjet.jpg)
+![WestJet Screenshot](../readmeImages/westjet.jpg)
 
 ```javascript
 export const SitWestJet = {

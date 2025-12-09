@@ -1,7 +1,7 @@
 # Custom Terrain Sources
 
 "Terrain" is the surface of the Earth. In Sitrec we normally just show a portion of the local terrain, specific to the sitch. For example:
-![Example-of-terrain.jpg](docimages/terrain/Example-of-terrain.jpg)
+![Example-of-terrain.jpg](../docimages/terrain/Example-of-terrain.jpg)
 
 Terrain is a in two parts, a "map" and "elevation." 
 
