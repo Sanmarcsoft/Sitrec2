@@ -1476,11 +1476,20 @@ class CTrackManager extends CManager {
         if (options.objectID) {
             const objectNode = NodeMan.get(options.objectID);
             if (objectNode) {
-                if (objectNode.inputs && objectNode.inputs.track !== undefined) {
-                    objectNode.inputs.track = trackID;
-                    objectNode.recalculateCascade();
-                }
-                console.log(`Associated object ${options.objectID} with track ${trackID}`);
+                // Add TrackPosition controller to follow the track
+                objectNode.addController("TrackPosition", {
+                    sourceTrack: trackID
+                });
+
+                // Add ObjectTilt controller to orient in direction of motion
+                // NOTE: ObjectTilt creates internal CNodeSmoothedPositionTrack that must be cleaned up
+                // When disposing this object, use: CustomMan.disposeObjectWithControllers(objectID)
+                objectNode.addController("ObjectTilt", {
+                    track: trackID,
+                    tiltType: "banking"
+                });
+
+                console.log(`Associated object ${options.objectID} with track ${trackID} and added controllers`);
             } else {
                 console.warn(`Object ${options.objectID} not found`);
             }
@@ -1710,16 +1719,7 @@ class CTrackManager extends CManager {
                     console.log(`Created display track with ID: ${trackOb.displayTrackID}, exists in NodeMan: ${NodeMan.exists(trackOb.displayTrackID)}`);
                 }
                 
-                // If we recreated an object, add the TrackPosition controller to make it follow the track
-                if (trackOb && trackData.objectData) {
-                    const objectNode = NodeMan.get(trackData.objectData.id);
-                    if (objectNode) {
-                        objectNode.addController("TrackPosition", {
-                            sourceTrack: trackOb.trackID
-                        });
-                        console.log(`Added TrackPosition controller to object ${trackData.objectData.id}`);
-                    }
-                }
+                // Controllers (TrackPosition and ObjectTilt) are now added automatically by addSyntheticTrack
                 
                 if (trackOb && trackData.positions && trackData.positions.length > 1) {
                     // Restore ALL positions using the spline editor's load method

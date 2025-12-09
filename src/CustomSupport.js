@@ -1488,6 +1488,7 @@ export class CCustomManager {
                 });
                 
                 // Create track and associate with object using TrackManager
+                // Controllers (TrackPosition and ObjectTilt) are added automatically by addSyntheticTrack
                 const trackOb = TrackManager.addSyntheticTrack({
                     startPoint: groundPoint,
                     name: `Object Track`,
@@ -1496,21 +1497,6 @@ export class CCustomManager {
                     color: 0x808080, // grey
                     startFrame: par.frame
                 });
-                
-                // Add TrackPosition controller to the object to follow the track
-                if (trackOb && objectNode) {
-                    objectNode.addController("TrackPosition", {
-                        sourceTrack: trackOb.trackID
-                    });
-
-                    // Add ObjectTilt controller to the object to face the track direction
-                    // NOTE: ObjectTilt creates internal CNodeSmoothedPositionTrack that must be cleaned up
-                    // When disposing this object, use: CustomMan.disposeObjectWithControllers(objectID)
-                    objectNode.addController("ObjectTilt", {
-                        track: trackOb.trackID,
-                        tiltType: "frontPointing"
-                    });
-                }
 
 
 
