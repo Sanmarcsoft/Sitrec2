@@ -138,24 +138,29 @@ Some platforms, like DJI or other drones, or commercial and military cameras, en
 
 The MISB format is commonly used in military and law enforcement applications, but is not widely used by the public. However, MISB has a very rich data definition, covering everything you are likely to have in other formats. So I use MISB as an internal data representation. ADS-B tracks are converted to a MISB table (a spreadsheet) with just the position data. The DJI drone data contains FOV and heading data which likewise is converted into the relevant fields in an internal MISB table. 
 
-Native MISB is also supported in either KLV or CSV formats. I don't have many examples to work with, so if you've got any you can share, I'd appreciate it. Mick@mickwest.com
+Native MISB is also supported from original .TS files, or extracted in either KLV or CSV formats. I don't have many examples to work with, so if you've got any you can share, I'd appreciate it. Mick@mickwest.com
 
 ### Using a single MISB-style complex track. 
 
 In the scenario where we have a single complex track, we likely have a UAP that is being tracked by a plane or a drone. So we will have the position of the camera, and then the heading and elevation angles, as well as FOV. We might also have a center track, which is essentially the same as the angles, but is also generally more accurate. 
 
-Complex video is the original video file. This may need splitting into a data file (.CSV or .KLV, or .BIN) and a video files (.MP4). Once this is split, drag them both into Sitrec. Example: 
+Complex video is the original video file. You can use the original .TS file, or use it split into a data file (.CSV or .KLV, or .BIN) and a video files (.MP4). Splitting is useful as you can recode the video to fit in the size limits (and play back facter) Just drag the .TS file, or the extracted files, into Sitrec. Example: 
 ![truck-initial.jpg](docimages/truck-initial.jpg)
 
-Here's what you see immediately after dragging in a MISB file (split in to a .KLV and a .MP4). Since the MISB file contain time code information, it is automatically synced to the correct start time. The video file is used to set the length. This assumes the KLV and the Video start at the same time. If the video is just showing a portion of the MISB data, then they may have to manually adjust the start time. 
+Here's what you see immediately after dragging in a MISB .TS file (or a .KLV and a .MP4). Since the MISB file contain time code information, it is automatically synced to the correct start time. The video file is used to set the length. This assumes the KLV and the Video start at the same time. If the video is just showing a portion of the MISB data, then they may have to manually adjust the start time. 
 
 In this instance we see the road is correct, but a bit low resolution. We need to adjust the terrain
 
 ## Adjusting the terrain
 
-"Terrain" in Sitrec is the background graphics - i.e. the ground. Sitrec currently only loads a small square section of the terrain. This is defined by the contents of the "Terrain" menu:
+"Terrain" in Sitrec is the background graphics - i.e. the ground. Sitrec displays detailed background similar to Google Earth. This is defined by the contents of the "Terrain" menu:
 
 ![terrain-menu.jpg](docimages/terrain-menu.jpg)
+
+
+# Legacy Terrain Mode
+
+If you disable Dynamic Subdivision, you will just see a small local square of terrain set on a larger low-resolution globe. 
 
 - lat and lon = Latitude and Longitude of the _center_ of the square of terrain
 - zoom = zoom level. Higher levels are higher resolution, and smaller squares. 15 is the highest currently available.

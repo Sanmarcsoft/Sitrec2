@@ -23,6 +23,50 @@ function createGLTFLoader() {
     return loader;
 }
 
+// Check for hierarchy depth issues that can cause floating-point precision errors
+function checkModelHierarchy(gltf, filename) {
+    const issues = [];
+    const meshesWithArmature = [];
+    
+    // Find all meshes parented to an Armature
+    gltf.scene.traverse((node) => {
+        if (node.isMesh) {
+            let current = node;
+            let hasArmature = false;
+            const path = [];
+            
+            while (current.parent && current.parent !== gltf.scene) {
+                current = current.parent;
+                const nodeName = current.name || 'unnamed';
+                path.unshift(nodeName);
+                
+                // Check if this node is an Armature (common Blender export pattern)
+                if (nodeName.toLowerCase().includes('armature')) {
+                    hasArmature = true;
+                }
+            }
+            
+            if (hasArmature) {
+                meshesWithArmature.push({
+                    name: node.name || 'unnamed mesh',
+                    path: path
+                });
+            }
+        }
+    });
+    
+    // Check for meshes parented to Armatures (can cause precision issues with large translations)
+    if (meshesWithArmature.length > 0) {
+        issues.push(`Meshes parented to Armature detected. This can cause vertex distortion when positioned far from origin. Consider flattening the hierarchy in Blender by unparenting meshes from the Armature (Select mesh → Option+P → Clear Parent, then delete the Armature node).`);
+    }
+    
+    if (issues.length > 0) {
+        const message = `⚠️ Model Hierarchy Warning: ${filename}\n\n${issues.join('\n\n')}\n\nThe model will still load, but may exhibit visual artifacts at large distances from origin.`;
+        console.warn(message);
+        alert(message);
+    }
+}
+
 export function loadGLTFModel(file, callback) {
 
     console.log("Async Loading asset for", file);
@@ -36,6 +80,10 @@ export function loadGLTFModel(file, callback) {
                     if (child.material.emissiveMap) child.material.emissiveMap.colorSpace = NoColorSpace;
                 }
             });
+            
+            // Check for hierarchy issues
+            checkModelHierarchy(gltf, file);
+            
             callback(gltf);
         })
     })
@@ -46,9 +94,13 @@ export class CNode3DModel extends CNode3DGroup {
         super(v);
 
         const data = FileManager.get(v.TargetObjectFile ?? "TargetObjectFile")
+        const filename = v.TargetObjectFile ?? "TargetObjectFile"
 
         const loader = createGLTFLoader()
         loader.parse(data, "", (gltf2) => {
+            // Check for hierarchy issues
+            checkModelHierarchy(gltf2, filename);
+            
             this.model = gltf2.scene //.getObjectByName('FA-18F')
             this.model.scale.setScalar(1);
             this.model.visible = true
