@@ -464,7 +464,8 @@ class QuadTreeMapTexture extends QuadTreeMap {
             blackTexture.magFilter = NearestFilter;
             
             // Use the same shader material as regular tiles for consistency
-            const material = createTerrainDayNightMaterial(blackTexture, 0.3);
+            const transparency = this.terrainNode.UI.transparency ?? 1;
+            const material = createTerrainDayNightMaterial(blackTexture, 0.3, false, transparency);
             
             tile.mesh.material = material;
             tile.updateSkirtMaterial();

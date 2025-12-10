@@ -1366,7 +1366,8 @@ export class QuadTreeTile {
                 );
             }
 
-            const material = createTerrainDayNightMaterial(finalTexture, 0.3);
+            const transparency = this.map.terrainNode.UI.transparency ?? 1;
+            const material = createTerrainDayNightMaterial(finalTexture, 0.3, false, transparency);
             // Cache the material for future use
             materialCache.set(cacheKey, material);
             // Clean up the promise cache once loading is complete
@@ -1454,7 +1455,8 @@ export class QuadTreeTile {
                                 texture.dispose();
                             }
 
-                            const baseMaterial = createTerrainDayNightMaterial(finalTexture, 0.3);
+                            const transparency = this.map.terrainNode.UI.transparency ?? 1;
+                            const baseMaterial = createTerrainDayNightMaterial(finalTexture, 0.3, false, transparency);
                             materialCache.set(baseCacheKey, baseMaterial);
                             // Clean up the promise cache once loading is complete
                             textureLoadPromises.delete(baseCacheKey);
@@ -1479,7 +1481,8 @@ export class QuadTreeTile {
                     true  // isSeamless = true for static textures
                 );
 
-                const material = createTerrainDayNightMaterial(mipmapTexture, 0.3);
+                const transparency = this.map.terrainNode.UI.transparency ?? 1;
+                const material = createTerrainDayNightMaterial(mipmapTexture, 0.3, false, transparency);
 
                 // Cache the final material
                 materialCache.set(materialCacheKey, material);
@@ -1558,7 +1561,8 @@ export class QuadTreeTile {
         texture.needsUpdate = true;
 
         // Create and return material
-        const material = createTerrainDayNightMaterial(texture, 0.3);
+        const transparency = this.map.terrainNode.UI.transparency ?? 1;
+        const material = createTerrainDayNightMaterial(texture, 0.3, false, transparency);
 
         return material;
     }
@@ -1627,7 +1631,8 @@ export class QuadTreeTile {
         texture.needsUpdate = true;
 
         // Create and return material
-        const material = createTerrainDayNightMaterial(texture, 0.3);
+        const transparency = this.map.terrainNode.UI.transparency ?? 1;
+        const material = createTerrainDayNightMaterial(texture, 0.3, false, transparency);
 
         return material;
     }
@@ -1930,7 +1935,8 @@ export class QuadTreeTile {
         const texture = new CanvasTexture(canvas);
         texture.minFilter = NearestFilter;
         texture.magFilter = NearestFilter;
-        const material = createTerrainDayNightMaterial(texture, 0.3);
+        const transparency = this.map.terrainNode.UI.transparency ?? 1;
+        const material = createTerrainDayNightMaterial(texture, 0.3, false, transparency);
 
 
         this.mesh.material = material;
@@ -2338,7 +2344,8 @@ export class QuadTreeTile {
         }
 
         // Create new material
-        const material = createTerrainDayNightMaterial(texture, 0.3);
+        const transparency = this.map.terrainNode.UI.transparency ?? 1;
+        const material = createTerrainDayNightMaterial(texture, 0.3, false, transparency);
 
         // Dispose of the old material properly
         const oldMaterial = this.mesh.material;

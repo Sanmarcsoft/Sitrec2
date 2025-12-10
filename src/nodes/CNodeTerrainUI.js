@@ -32,6 +32,7 @@ export class CNodeTerrainUI extends CNode {
         this.elevationScale = v.elevationScale ?? 1;
         this.textureDetail = v.textureDetail ?? 1;
         this.elevationDetail = v.elevationDetail ?? 1;
+        this.transparency = v.transparency ?? 1;
 
         this._layer = null;
 
@@ -392,6 +393,30 @@ export class CNodeTerrainUI extends CNode {
             this.startLoading = true
         }).elastic(10, 100)
             .tooltip("Scale factor for the elevation data. 1 is normal, 0.5 is half height, 2 is double height")
+
+        this.transparencyController = this.gui.add(this, "transparency", 0, 1, 0.01).name("Terrain Opacity")
+            .tooltip("Opacity of the terrain. 0 is fully transparent, 1 is fully opaque")
+            .onChange(v => {
+                if (this.terrainNode && this.terrainNode.maps) {
+                    for (const mapID in this.terrainNode.maps) {
+                        const map = this.terrainNode.maps[mapID].map;
+                        if (map && map.tileCache) {
+                            for (const z in map.tileCache) {
+                                for (const x in map.tileCache[z]) {
+                                    for (const y in map.tileCache[z][x]) {
+                                        const tile = map.tileCache[z][x][y];
+                                        if (tile && tile.mesh && tile.mesh.material) {
+                                            if (tile.mesh.material.uniforms && tile.mesh.material.uniforms.transparency) {
+                                                tile.mesh.material.uniforms.transparency.value = v;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            })
 
         // Note: Tile Segments is controlled via the global settings menu in CustomSupport.js
         // No local UI controller needed here

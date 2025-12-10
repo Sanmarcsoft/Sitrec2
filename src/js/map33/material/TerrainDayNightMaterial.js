@@ -10,18 +10,22 @@ import {Globals} from "../../../Globals";
  * 
  * @param {Texture} texture - The texture to apply to the terrain
  * @param {number} terrainShadingStrength - How much terrain shading to apply (0-1), default 0.3 (30% variation)
+ * @param {boolean} doubleSided - Whether to render both sides of the geometry, default false
+ * @param {number} transparency - Transparency of the terrain (0-1), where 0 is fully transparent and 1 is fully opaque, default 1
  * @returns {ShaderMaterial} The custom shader material
  */
-export function createTerrainDayNightMaterial(texture, terrainShadingStrength = 0.3, doubleSided = false) {
+export function createTerrainDayNightMaterial(texture, terrainShadingStrength = 0.3, doubleSided = false, transparency = 1) {
     const material = new ShaderMaterial({
         uniforms: {
             map: { value: texture },
             sunDirection: { value: Globals.sunLight.position }, // reference, so normalize before use
             earthCenter: { value: new Vector3(0, -wgs84.RADIUS, 0) },
             terrainShadingStrength: { value: terrainShadingStrength },
+            transparency: { value: transparency },
             ...sharedUniforms,
         },
         side: doubleSided ? 2 : 0, // 2 = DoubleSide, 0 = FrontSide
+        transparent: true,
         vertexShader: `
             varying vec2 vUv;
             varying vec3 vNormal;
@@ -48,6 +52,7 @@ export function createTerrainDayNightMaterial(texture, terrainShadingStrength = 
             uniform vec3 sunDirection;
             uniform vec3 earthCenter;
             uniform float terrainShadingStrength;
+            uniform float transparency;
             uniform float sunGlobalTotal;
             uniform float sunAmbientIntensity;
             uniform float nearPlane;
@@ -99,8 +104,8 @@ export function createTerrainDayNightMaterial(texture, terrainShadingStrength = 
                     finalColor = textureColor;
                 }
                 
-                // Set alpha to 1.0
-                finalColor.a = 1.0;
+                // Set alpha based on transparency parameter
+                finalColor.a = transparency;
                 
                 gl_FragColor = finalColor;
                 
