@@ -37,8 +37,8 @@ This does the following for you:
 
 - Enables "Live" mode **(Time Menu)**, which locks the time to your computer clock until you change it. This will show you flares as they are happening, and can be used on a mobile device in AR mode. 
 - Loads the current satellites, based on their NORAD tracking data. **(Satellite Menu)**
-- Turns on constellation lines and the equatorial grid display to aid with oriented where you are looking in the sky **(Show/Hide Menu-> Celestial)**
-- Enables "Sun Angle Arrows" and "Flare Band", two vital tools for recreating flare situations. **(Satllite Menu)**
+- Turns on constellation lines and the equatorial grid display to aid with orienting where you are looking in the sky **(Show/Hide Menu-> Celestial)**
+- Enables "Sun Angle Arrows" and "Flare Band", two vital tools for recreating flare situations. **(Satellite Menu)**
 
 ### Flare Band and Sun Angle Arrows
 
@@ -46,9 +46,9 @@ The Flare Band is the region of the globe from which you can see horizon flares 
 
 ![sitrec-starlink-flare-band-and-sun-arrows.jpg](docimages/sitrec-starlink-flare-band-and-sun-arrows.jpg)
 
-Above, we see the Earth, with a thin layer of Starlink satellites. On the left, we see the Sun, 93 million miles away, so the rays of sunlight are nearly parallel. The center of the two circles that outline the flare band is the point on Earth that is directly opposite the sun. You can see that yellow circle is parallel to the Earth's terminator (the line bettween day and night that divides the globe in two)
+Above, we see the Earth, with a thin layer of Starlink satellites. On the left, we see the Sun, 93 million miles away, so the rays of sunlight are nearly parallel. The center of the two circles that outline the flare band is the point on Earth that is directly opposite the sun. You can see that the yellow circle is parallel to the Earth's terminator (the line between day and night that divides the globe in two)
 
-The light blue triangle is the view frustum, a pyramid that shows what direction the "look" camera is looking in, and the field of view. In this image, we see red lines coming from the camera position (at the apex of the frustum), bouncing off the bottom of some nearby satellites, and reflecting towards the sun. These are the Starlink satllites that are currently flaring when viewed from that camera position. 
+The light blue triangle is the view frustum, a pyramid that shows what direction the "look" camera is looking in, and the field of view. In this image, we see red lines coming from the camera position (at the apex of the frustum), bouncing off the bottom of some nearby satellites, and reflecting towards the sun. These are the Starlink satellites that are currently flaring when viewed from that camera position. 
 
 ![sitrec-two-view-starlink-flares.jpg](docimages/sitrec-two-view-starlink-flares.jpg)
 
@@ -58,11 +58,11 @@ Above,  we see the view from the look camera on the right. Some of the Satellite
 
 To get a good sense of when and where (and how often) Starlink Horizon Flares happen. I recommend you play with the default setup.  Open the Time menu and drag the "day" slider to see how the position of the flare band varies through the year with the seasons (due to the tilt of the Earth's axis).
 
-While doing this you can move the look camera around by holding down "C" while moving the mouse. You can also adjust the camera altitude in the Camera menu. 
+While doing this, you can move the look camera around by holding down "C" while moving the mouse. You can also adjust the camera altitude in the Camera menu. 
 
 You will notice that since the sunward edge is always the same distance from the terminator, in summer, the flare band is much further south in the middle of the night.  You can visualise this by noting that the north pole is in constant daylight in summer. The flare band has a minimum distance it needs to be away from daylight, so the sunny north pole can be thought of as pushing the flare band south. 
 
-Then, at different times of year, experiment with moving the minute slider. Note that around the equinoxes (March and September), there exist regions that are in the flare region all through the middle of the night, some for five hours or more. 
+Then, at different times of the year, experiment with moving the minute slider. Note that around the equinoxes (March and September), there exist regions that are in the flare region all through the middle of the night, some for five hours or more. 
 
 Drag the "minute" slider to see just how this works. 
 
@@ -76,11 +76,11 @@ Like any sitch, you need the DTLDs:  the Date, Time, Location, and Direction. Of
 
 ### Step 1 - Set the date (and time)
 
-Time in Sitrec is UTC or Zulu time. But it can also be displayed in the the local time zone. In the time menu if you have "Use Time Zone in UI" checked, then the time in the menu's sliders will be local time. Ensure you understand what the actual time is, and in what time zone (including daylight saving time). 
+Time in Sitrec is UTC or Zulu time. But it can also be displayed in the local time zone. In the time menu, if you have "Use Time Zone in UI" checked, then the time in the menu's sliders will be local time. Ensure you understand what the actual time is, and in what time zone (including daylight saving time). 
 
 ### Step 2 - Load the satellites
 
-The Starlink sitch will load the **current** satellites, but often we are investigating a past event. If it's more than a day or two you will need to click "Load LEO Satellites For Date" in the Satellite menu. 
+The Starlink sitch will load the **current** satellites, but often we are investigating a past event. If it's more than a day or two, you will need to click "Load LEO Satellites For Date" in the Satellite menu. 
 
 Note the text in the top right of the main view; this shows the accuracy of the satellite data. If it does not say In Range 100% then you need to load the satellites. 
 
@@ -90,13 +90,13 @@ You can also drag in your own TLE file, but it should never be necessary for a S
 
 The location will either be a fixed location (on the ground), or a moving location (usually in the air). 
 
-If you don't know the exact location, just use the best guess. For a fixed location you can just move the camera with the "C" key, or enter in a specific Lat/Lon in the camera menu (Tip: if you have a lat, lon pair you can post them both in Lat box and the Lon will also be updated. ) 
+If you don't know the exact location, just use the best guess. For a fixed location you can just move the camera with the "C" key, or enter a specific Lat/Lon in the camera menu (Tip: if you have a lat, lon pair you can post them both in Lat box and the Lon will also be updated. ) 
 
 You can look up a city or street address using the "Lookup" option in the Camera menu. 
 
 The camera's altitude defaults to 6m above sea level (about 20 feet) to clear the inaccurate terrain. You might want to raise this a bit or lower it to eye level as you refine things. If you're recreating an aerial sighting without a track file (i.e., ADSB or MISB FMV), then you should uncheck Above Ground Level, and set the altitude to whatever was reported, or a typical 30,000 feet if unknown (less for small planes) 
 
-If the camera is on a plane then you can drag in the track. The camera will automatically be set to follow that track if you've not edited anything yet. But you'll usually want to set the time first. So drag it in, then under the camera menu, select the track from the "Camera Track" drop-down.
+If the camera is on a plane, then you can drag in the track. The camera will automatically be set to follow that track if you've not edited anything yet. But you'll usually want to set the time first. So drag it in, then under the camera menu, select the track from the "Camera Track" drop-down.
 
 If the camera is off in space, that means you've got the date/time very wrong. You can go to the Time menu and then Sync Time to (select track) to sync to the start time of the track to figure out what went wrong.  
 
@@ -121,7 +121,7 @@ To add a video (or a photo) just drag it in. The viewports will reconfigure to t
 
 ### Step 6 - Refine the DTLSs
 
-You will often be missing exact time, location, direction, and field of view, so you will have to adjust one or more of these to match. Even if you have the time down to the second, you may need to adjust the millisecond (ms) value to get things perfectly aligned. 
+You will often be missing the exact time, location, direction, and field of view, so you will have to adjust one or more of these to match. Even if you have the time down to the second, you may need to adjust the millisecond (ms) value to get things perfectly aligned. 
 
 A helpful tool is the video overlay, in the View menu as "Vid overlay transparency". This allows you to overlay the video on the live view. 
 
@@ -135,7 +135,7 @@ If there's another plane in the view, then it's very helpful to drop in the trac
 
 ### Step 7 - Adjust Visuals
 
-Satellite and star visibility varies with lighting conditions, the weather, and the camera used. To match it, you can adjust the star brightness (View Menu) and limits (a cut-off for dim stars). For satellites, there are similar adjustments in the Satellite menu. Just adjust these to get a good match with the video. 
+Satellite and star visibility vary with lighting conditions, the weather, and the camera used. To match it, you can adjust the star brightness (View Menu) and limits (a cut-off for dim stars). For satellites, there are similar adjustments in the Satellite menu. Just adjust these to get a good match with the video. 
 
 You can also adjust the video itself under Effects->Video adjustment, mostly just for brightness in this case, but some of the other options (like the emboss convolution filter) can be helpful in spotting stars and satellites. 
 
