@@ -123,47 +123,20 @@ To add a video (or a photo) just drag it in. The viewports will reconfigure to t
 
 You will often be missing exact time, location, direction, and field of view, so you will have to adjust one or more of these to match. Even if you have the time down to the second, you may need to adjust the millisecond (ms) value to get things perfectly aligned. 
 
-A useful tool is the video overlay, in the View menu as "Vid overlay transparency". This allows you to overlay the video on the live view. 
+A helpful tool is the video overlay, in the View menu as "Vid overlay transparency". This allows you to overlay the video on the live view. 
 
 You can often use stars to line things up. Be aware that this might not be a perfect match if the original video was cropped or the lens introduces distortion. 
 
 The field of view always needs adjusting. If this is zoomed in a lot, you can enable finer steps if you first drag it down to zero, and then back up again. 
 
-To help finding the time, if stars are visible, then use their orientation and how far they are above the horizon. 
+To help find the time, if stars are visible, then use their orientation and how far they are above the horizon. 
 
-If there's another plane in the view, then it's very helpful to drop in the track for that plane. Set it to the 737 model(in the Objects menu) to get nav lights. Note there might be minor discrpencies between the plane position and the satellite position. The plane position is generally more accurate as it's recorded, whereas the satellite positions are calculated. 
+If there's another plane in the view, then it's very helpful to drop in the track for that plane. Set it to the 737 model(in the Objects menu) to get nav lights. Note that there might be minor discrepancies between the plane position and the satellite position. The plane position is generally more accurate as it's recorded, whereas the satellite positions are calculated. 
 
 ### Step 7 - Adjust Visuals
 
-Satellite and star visiblity varies with lighting conditions, the weather, and the camera used. To match it you can adjust the star brightness (View Menu) and limits (a cut-off for dim stars). For satellites there are similar adjustments in the Satellite menu. Just adjust these to get a good match with the video. 
+Satellite and star visibility varies with lighting conditions, the weather, and the camera used. To match it, you can adjust the star brightness (View Menu) and limits (a cut-off for dim stars). For satellites, there are similar adjustments in the Satellite menu. Just adjust these to get a good match with the video. 
 
 You can also adjust the video itself under Effects->Video adjustment, mostly just for brightness in this case, but some of the other options (like the emboss convolution filter) can be helpful in spotting stars and satellites. 
 
 Star names can be turned on with Show/Hide->Celestial->lookView and mainView Star Names. Satellite names can be toggled in the Satellite menu. Note that it is limited to nearby satellites unless you toggle "Show all labels".
-
-
-
-things to cover:
-
-- Date, Time, Location, Direction (and elevation)
-- Setting location
-- (AI agent)
-- Map Type and brightness
-- Setting date
-- Time zones
-- Toggling satellites
-- Laoding satellites for date
-- turn on bands
-- turn on flare region
-- scrub to get flares
-- flare arrows
-- Satellite names
-- Flare lines
-- Satellite Arrows
-- Video overlay
-- Adjusting FOV
-- FOV changes mid video
-- 
-- Sitch speed for timelapse. 
-- Sitch length
-- Number of Frames from video
