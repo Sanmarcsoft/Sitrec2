@@ -1,6 +1,7 @@
 import {SITREC_SERVER} from "../src/configUtils";
 import {GlobalDateTimeNode, NodeMan} from "../src/Globals";
 import {EUSToLLA} from "../src/LLA-ECEF-ENU";
+import {assert} from "../src/assert";
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -173,12 +174,23 @@ export const _configParams = {
 
         },
 
+
+        //  example: https://geoint.nrlssc.org/nrltileserver/wmts/1.0.0/BlueMarble_AUTO/default/GoogleCRS84Quad/7/18/20.jpg
+
         NRL_WMTS: {
             name: "Naval Research Laboratory WMS Tile",
 
             mapURL: function (z,x,y,  layerName, layerType) {
-                return this.mapProjectionTextures.wmtsGetMapURLFromTile("https://geoint.nrlssc.org/nrltileserver/wmts",layerName,z,x,y);
-            },
+
+                let maxY = 0
+
+                if (z >0) maxY = Math.pow(2, z-1) - 1;
+                assert (y >= 0 && y <= maxY,`NRL_WMTS: Y tile index out of range. z: ${z}, x: ${x}, y: ${y}, maxY: ${maxY}`);
+
+                const url = this.mapProjectionTextures.wmtsGetMapURLFromTile("https://geoint.nrlssc.org/nrltileserver/wmts",layerName,z,x,y);
+//                console.log("NRL_WMTS URL: ", url);
+                return url;
+                },
             capabilities: "https://geoint.nrlssc.org/nrltileserver/wmts?REQUEST=GetCapabilities&VERSION=1.0.0&SERVICE=WMTS",
             layer: "BlueMarble_AUTO",
             mapping: 4326,
@@ -248,12 +260,17 @@ export const _configParams = {
 
     extraHelpLinks: {
 
-        "Sitrec Helper Chatbot": "https://www.chatbase.co/chatbot-iframe/jm08ypN4zneL5S7wU2QOD",
-        // "ADS-B Helper Chatbot": "https://www.chatbase.co/chatbot-iframe/xPKq8RfpIPtnNw_dptU4p",
+        "Sitrec Helper Chatbot": {
+            url: "https://www.chatbase.co/chatbot-iframe/jm08ypN4zneL5S7wU2QOD",
+            tooltip: "External AI Chatbot to convert a natural language DTL (Data, Time, Location) request into links for plane tracking softwar, maps, and Sitrec configurations.\nAutomatically handles time zones and location lookups.",
+        },
         "ADSBExchange": "https://globe.adsbexchange.com/",
         "FlightAware": "https://flightaware.com/",
         "PlaneFinder": "https://planefinder.net/",
-        "Astrometry.net Image Solver": "https://nova.astrometry.net/upload",
+        "Astrometry.net Image Solver": {
+            url: "https://nova.astrometry.net/upload",
+            tooltip: "External tool to upload images of stars and get back the star, names, positions in the night sky and field of view",
+        },
     },
 
 
