@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/config_paths.php';
+require_once __DIR__ . '/curlGetRequest.php';
 
 // These are no-longer configurable via config.php
 // Instead, set them in shared.env (see example file)
@@ -49,7 +50,9 @@ if (strcmp($url_parts['host'],"celestrak.org") === 0) {
     $ext = "tle";
 }
 
-if ($ext !== "tle") {
+
+$allowed_extensions = ["txt", "tle", "2le", "3le"];
+if (!in_array($ext, $allowed_extensions, true)) {
     exit("Illegal File Type " . $ext);
 }
 
@@ -64,16 +67,8 @@ if (file_exists($cachedFile) && (time() - filemtime($cachedFile)) < $lifetime) {
     header("Location: " . $cachePath);
     exit();
 } else {
-    $options = array(
-        'http'=>array(
-            'method'=>"GET",
-            'header'=>"Accept-language: en\r\n" .
-                "Cookie: foo=bar\r\n" .  // check function.stream-context-create on php.net
-                "User-Agent: Mozilla/5.0 (iPad; U; CPU OS 3_2 like Mac OS X; en-us) AppleWebKit/531.21.10 (KHTML, like Gecko) Version/4.0.4 Mobile/7B334b Safari/531.21.102011-10-16 20:23:10\r\n" // i.e. An iPad
-        )
-    );
-    $context = stream_context_create($options);
-    $dataBlob = file_get_contents($url, false, $context);
+    $result = curlGetRequest($url);
+    $dataBlob = $result['data'];
 
     if ($dataBlob === false || strlen($dataBlob) === 0) {
         exit("Failed to fetch the URL");
