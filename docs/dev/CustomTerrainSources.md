@@ -119,7 +119,7 @@ The above example are all for map sources (i.e. the textures or bitmaps used to 
 # Custom Elevation Sources
 
 The default terrain source used by Metabunk Sitrec is a public domain EPSG:3857 tile source from MapZen that encodes elevation data into the RGB values of a PNG tile. This govers the entire globe. See:
-https://registry.opendata.aws/terrain-tiles/
+<https://registry.opendata.aws/terrain-tiles/>
 
 The second source seen in the example below is the National Map 3DEP GeoTIFF. This is a US only source that provides elevation data in GeoTIFF format. This is a WMS source that returns a GeoTIFF file with the elevation data in 32 bit floats. Decoding this is a bit more complex than the PNG source, but it is more accurate and has a higher resolution. However it is limited to the US. 
 

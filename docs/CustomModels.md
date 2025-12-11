@@ -60,7 +60,7 @@ The size of the object can be seen in the bounding box dimensions. Ensure this m
 ### Blender materials 
 
 Blender commonly uses the "Principled BSDF" material, an industry standard "physical" material which is largely supported in WebGL, and hence in Sitrec. For more details, see:
-https://docs.blender.org/manual/en/2.80/addons/io_scene_gltf2.html
+<https://docs.blender.org/manual/en/2.80/addons/io_scene_gltf2.html>
 
 If you import a model from a format like FBX, Collada, or Wavefront/OBJ, you might need to adjust the material in Blender before exporting. If a material is opaque and you expected it to be transparent, then you might simply need to set the Blend Mode to "Alpha Blend"
 

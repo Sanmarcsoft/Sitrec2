@@ -61,7 +61,7 @@ This method requires **only Docker Desktop** - no Node.js, PHP, or web server in
 
 **Prerequisites:**
 - Git
-- Docker Desktop from https://www.docker.com/
+- Docker Desktop from <https://www.docker.com/>
 
 Install Git and Docker Desktop, then run Docker Desktop.
 
@@ -164,7 +164,7 @@ php --version
 ```
 If PHP is not installed:
 - **Mac**: Use Homebrew: `brew install php` (or use the built-in PHP if available)
-- **Windows**: Download from https://windows.php.net/download/
+- **Windows**: Download from <https://windows.php.net/download/>
 - **Linux**: Use your package manager: `sudo apt install php` or `sudo yum install php`
 
 **Installation:**
@@ -312,7 +312,7 @@ The web server should be configured to run php files (i.e. php-fpm)
 It should also load an index.html file when there's one in the directory (this is usually default)
 
 You will also need to install node.js in you build environment, from:
-https://nodejs.org/en/download
+<https://nodejs.org/en/download>
 
 Node.js is used both for build tools (i.e. webpack) and for packages used by the app. It is not used server-side.
 
@@ -363,7 +363,7 @@ There's also an optional URL shortener, which is uses a folder called 'u' to sto
 ## Download the videos
 
 The private video folder contains videos taken by individuals and posted on the internet. I use them in Sitrec under fair-use, non-commercial, educational. But they are not included here. Ask me if you really need one.
-The public folder contain videos that are government produced, are by me, or are otherwise free of restrictions. They can be found here: https://www.dropbox.com/scl/fo/biko4zk689lgh5m5ojgzw/h?rlkey=stuaqfig0f369jzujgizsicyn&dl=0
+The public folder contain videos that are government produced, are by me, or are otherwise free of restrictions. They can be found here: <https://www.dropbox.com/scl/fo/biko4zk689lgh5m5ojgzw/h?rlkey=stuaqfig0f369jzujgizsicyn&dl=0>
 
 ## Create/Edit the config files in config/
 You will need to edit shared.env, config.js, config-install.js and config.php. The defaults will work to an extent (with no credentials for downloading Mapbox or Space-Data, etc), so the _minumum_ you need to edit is config-install.js

@@ -10,7 +10,7 @@ Before reading this, it's a good idea to familiarize yourself with the [User Int
 
 
 Here's an informal video demonstrating many of the concepts described here:
-https://www.youtube.com/watch?v=EMjTDRKbK5U
+<https://www.youtube.com/watch?v=EMjTDRKbK5U>
 
 
 ## Custom Sitch Basics

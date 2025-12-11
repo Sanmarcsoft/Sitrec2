@@ -35,7 +35,7 @@ Let's call the new stitch "Springfield" (just an example name), and assume you h
 If you don't have a video, you can just remove references to one, but you'll still need to specify a number of frames (you can leave fps at 30)
 
 For testing, you can either use a url denoting the sitch, like:
-https://www.metabunk.org/sitrec/?sitch=springfield
+<https://www.metabunk.org/sitrec/?sitch=springfield>
 Or you can change the "localSituation" line in config.js
 `const localSituation = "springfield";`
 

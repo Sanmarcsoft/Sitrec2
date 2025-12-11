@@ -29,7 +29,7 @@ This assumes you are familiar with the basic UI in Sitrec, as described here:
 
 The default Sitrec needs a few additional configurations to effectively recreate a Starlink sighting. For convenience, these are gathered in a default "sitch" at:
 
-https://www.metabunk.org/sitrec/?sitch=starlink
+<https://www.metabunk.org/sitrec/?sitch=starlink>
 
 You can also get to this from the default Sitrec by going to the Sitrec menu and clicking on "Starlink Horizon Flares (LIVE)", or you can enable the various options if you find you need Starlink analysis in an existing sitch. 
 
