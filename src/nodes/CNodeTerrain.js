@@ -742,7 +742,7 @@ export class CNodeTerrain extends CNode {
         return intersects.length > 0 ? intersects[0] : null
     }
 
-    getPointBelow(A, agl = 0, accurate = false) {
+    getPointBelow(A, agl = 0, raycast = false) {
         // given a point in EUS, return the point on the terrain (or agl meters above it, if not zero)
         // We use the terrain map to get the elevation
         // we use LL (Lat and Lon) to get the data from the terrain maps
@@ -753,7 +753,7 @@ export class CNodeTerrain extends CNode {
         // however, we can use raycasting if we want more accurate results
         // that match the actual polygons
         // this is useful for things like building that sit on the terrain
-        if (accurate) {
+        if (raycast) {
             // we are going to use a ray from 100000m above the point to
             const B = pointAbove(A, 100000)
             const BtoA = A.clone().sub(B).normalize()

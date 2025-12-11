@@ -656,10 +656,10 @@ export class CDisplayLine {
 
 // get the point on the ground below a point in ESU
 // if the terrain model is loaded, use that, otherwise use the sphere
-export function getPointBelow(A) {
+export function getPointBelow(A, raycast = false) {
     if (NodeMan.exists("TerrainModel")) {
         let terrainNode = NodeMan.get("TerrainModel")
-        return terrainNode.getPointBelow(A)
+        return terrainNode.getPointBelow(A, 0, raycast)
     } else {
         return pointOnSphereBelow(A);
     }
@@ -701,8 +701,8 @@ export function pointAbove(point, height) {
     return point.clone().add(toPoint.multiplyScalar(height));
 }
 
-export function adjustHeightAboveGround (point, height) {
-    const ground = getPointBelow(point);
+export function adjustHeightAboveGround (point, height, raycast = false) {
+    const ground = getPointBelow(point, raycast);
     return pointAbove(ground, height);
 }
 
@@ -715,11 +715,11 @@ export function calculateAltitude(point) {
 // given a lat/lon, calculate the terrainelevation of the ground above the WGS84 sphere
 // (i.e. the MSL altitude of the ground below that point)
 // uses the terrain model if available, otherwise uses the WGS84 sphere
-export function elevationAtLL(lat, lon) {
+export function elevationAtLL(lat, lon, raycast = false) {
     // get the point in ESU
     const point = LLAToEUS(lat, lon, 100000);
     // get the ground point below it
-    const groundPoint = getPointBelow(point);
+    const groundPoint = getPointBelow(point, raycast);
     // calculate the elevation
     return calculateAltitude(groundPoint);
 }

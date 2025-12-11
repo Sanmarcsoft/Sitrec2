@@ -286,7 +286,7 @@ export class CNodePositionLLA extends CNode {
     updateGroundLevel() {
         // given the current lat/lon, find this.groundLevel
         if (this._LLA !== undefined) {
-            this.groundLevel = elevationAtLL(this._LLA[0], this._LLA[1]);
+            this.groundLevel = elevationAtLL(this._LLA[0], this._LLA[1], true); // in meters
         }
     }
 
@@ -340,7 +340,7 @@ export class CNodePositionLLA extends CNode {
                 // if the shift key is held, then set the altitude to the ground + 2m
                 if (isKeyHeld('Shift')) {
                     // get the ground altitude, buy first getting the cursor position, adjusted for height
-                    const groundPoint = adjustHeightAboveGround(cursorPos, 2);
+                    const groundPoint = adjustHeightAboveGround(cursorPos, 2, true);
                     // converts the ground point to LLA
                     const groundPointLLA = EUSToLLA(groundPoint);
                     // so the altitude is in the Z component
