@@ -22,7 +22,7 @@ import {CNodeControllerMatrix, CNodeControllerTrackPosition} from "./nodes/CNode
 import {MISB} from "./MISBUtils";
 // Removed mathjs import - using native JavaScript Number.isFinite or typeof checks
 import {CNodeMISBDataTrack, makeLOSNodeFromTrackAngles, removeLOSNodeColumnNodes} from "./nodes/CNodeMISBData";
-import {getValidIndexedTrackInFolder} from "./KMLUtils";
+import {CTrackFileKML, CTrackFileXML} from "./KMLUtils";
 import {CNodeTrackFromMISB} from "./nodes/CNodeTrackFromMISB";
 import {assert} from "./assert.js";
 import {getLocalSouthVector, getLocalUpVector, pointOnSphereBelow} from "./SphericalMath";
@@ -1051,83 +1051,20 @@ class CTrackManager extends CManager {
         // check there first, which gives more flexibility in filenames (which might get changed by the user, or the system)
 
         const ext = getFileExtension(trackFileName);
-        if (ext === "kml") {
-            const kml = FileManager.get(trackFileName);
+        if (ext === "kml" || ext === "xml") {
+            const file = FileManager.get(trackFileName);
 
-            // adsbX flight number will be in
-            // kml.kml.Folder.Folder.name in the format "Flightnumber track"
-            // so first check that exits, along with intermedia objects
-            // kml is NOT an array, so we need to check for the existence of the object
-            if (kml.kml !== undefined && kml.kml.Folder !== undefined && kml.kml.Folder.Folder !== undefined
-            ) {
-
-                let indexedTrack = kml.kml.Folder.Folder;
-                // is it an array?
-                if (Array.isArray(indexedTrack)) {
-                    // first check if there's more data after this
-                    // so we can set moreTracks to true
-                    if (getValidIndexedTrackInFolder(indexedTrack, trackIndex+1) !== null) {
-                        moreTracks = true;
-                    }
-                    indexedTrack = getValidIndexedTrackInFolder(indexedTrack,trackIndex);
-                    // make a dummy short name with the index
-                    shortName = trackFileName + "_" + trackIndex;
-                    found = true;
-                    // We are default to the filename, and it's typically long and confusing
-                    // This should not happen, and we might want to address it if it arises
+            if (file instanceof CTrackFileKML) {
+                shortName = file.getShortName(trackIndex, trackFileName);
+                if (file.hasMoreTracks(trackIndex)) {
+                    moreTracks = true;
                 }
-
-                assert(indexedTrack, `KML track index ${trackIndex} not found in file ${trackFileName} in findShortName`)
-
-                if (indexedTrack.name !== undefined) {
-                    let match = indexedTrack.name['#text'].match(/([A-Z0-9\-]+) track/);
-
-                    // backwards compatability for the old format which did not allow for - in the flight number
-                    if (!Sit.allowDashInFlightNumber) {
-                        match = indexedTrack.name['#text'].match(/([A-Z0-9]+) track/);
-                    }
-
-                    if (match !== null) {
-                        shortName = match[1];
-                        found = true;
-                    }
-                }
-
+                found = true;
                 console.log("KML track short name: ", shortName, " index: ", trackIndex)
-
+            } else if (file instanceof CTrackFileXML) {
+                shortName = file.getShortName(trackIndex, trackFileName);
+                found = true;
             }
-
-            if (!found) {
-                if (kml.kml !== undefined
-                    && kml.kml.Document !== undefined
-                    && kml.kml.Document.name !== undefined
-                    && kml.kml.Document.name['#text'] !== undefined) {
-                    // example: FlightAware ✈ RYR5580 15-Oct-2022 (EDI / EGPH-ALC / LEAL)
-                    // so we want the RYR5580 part
-                    const name = kml.kml.Document.name['#text'];
-
-                    const match = name.match(/FlightAware ✈ ([A-Z0-9]+) /);
-                    if (match !== null) {
-                        shortName = match[1];
-                        found = true;
-                    } else {
-                        // another format is like:
-                        // "DL4113/SKW4113"
-                        // check to see if we have an alphanumeric string followed by a slash then another alphanumeric string
-                        // and use the first one if so
-                        const match = name.match(/([A-Z0-9]+)\/[A-Z0-9]+/);
-                        if (match !== null) {
-                            shortName = match[1];
-                            found = true;
-                        } else {
-                            // just use the Document name
-                            shortName = name;
-                            found = true;
-                        }
-                    }
-                }
-            }
-
         }
 
         if (ext === "json") {

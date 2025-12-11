@@ -631,7 +631,7 @@ class CDragDropHandler {
 
             if (fileExt === "kml") {
                 console.log("KML file detected, adding anything else in the file")
-                extractKMLObjects(parsedFile)
+                parsedFile.extractObjects()
                 return;
             }
 

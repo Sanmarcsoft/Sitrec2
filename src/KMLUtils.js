@@ -4,7 +4,7 @@ import {MISB, MISBFields} from "./MISBUtils";
 import {assert} from "./assert.js";
 import {CNodeTrackFromLLAArray} from "./nodes/CNodeTrack";
 import {CNodeDisplayTrack} from "./nodes/CNodeDisplayTrack";
-import {CustomManager, NodeMan} from "./Globals";
+import {CustomManager, NodeMan, Sit} from "./Globals";
 import * as LAYERS from "./LayerMasks";
 import {timeStrToEpoch} from "./DateTimeUtils";
 import {FeatureManager} from "./CFeatureManager";
@@ -51,12 +51,76 @@ export class CTrackFileKML extends CTrackFile {
         return misb;
     }
 
-    getShortName(trackIndex = 0) {
+    getShortName(trackIndex = 0, trackFileName = "") {
         const _times = [];
         const _coord = [];
         const info = {};
         getKMLTrackWhenCoord(this.data, trackIndex, _times, _coord, info);
-        return info.name || "Unnamed Track";
+        
+        let shortName = info.name || "Unnamed Track";
+        let found = false;
+
+        const kml = this.data;
+
+        if (kml.kml !== undefined && kml.kml.Folder !== undefined && kml.kml.Folder.Folder !== undefined) {
+            let indexedTrack = kml.kml.Folder.Folder;
+            if (Array.isArray(indexedTrack)) {
+                indexedTrack = getValidIndexedTrackInFolder(indexedTrack, trackIndex);
+                if (!indexedTrack && trackFileName) {
+                    shortName = trackFileName + "_" + trackIndex;
+                    found = true;
+                }
+            }
+
+            if (indexedTrack && indexedTrack.name !== undefined) {
+                let match;
+                if (Sit.allowDashInFlightNumber) {
+                    match = indexedTrack.name['#text'].match(/([A-Z0-9\-]+) track/);
+                } else {
+                    match = indexedTrack.name['#text'].match(/([A-Z0-9]+) track/);
+                }
+                if (match !== null) {
+                    shortName = match[1];
+                    found = true;
+                }
+            }
+        }
+
+        if (!found) {
+            if (kml.kml !== undefined
+                && kml.kml.Document !== undefined
+                && kml.kml.Document.name !== undefined
+                && kml.kml.Document.name['#text'] !== undefined) {
+                const name = kml.kml.Document.name['#text'];
+                const match = name.match(/FlightAware ✈ ([A-Z0-9]+) /);
+                if (match !== null) {
+                    shortName = match[1];
+                    found = true;
+                } else {
+                    const match2 = name.match(/([A-Z0-9]+)\/[A-Z0-9]+/);
+                    if (match2 !== null) {
+                        shortName = match2[1];
+                        found = true;
+                    } else {
+                        shortName = name;
+                        found = true;
+                    }
+                }
+            }
+        }
+
+        return shortName;
+    }
+
+    hasMoreTracks(trackIndex = 0) {
+        const kml = this.data;
+        if (kml.kml !== undefined && kml.kml.Folder !== undefined && kml.kml.Folder.Folder !== undefined) {
+            const indexedTrack = kml.kml.Folder.Folder;
+            if (Array.isArray(indexedTrack)) {
+                return getValidIndexedTrackInFolder(indexedTrack, trackIndex + 1) !== null;
+            }
+        }
+        return false;
     }
 
     extractObjects() {
@@ -134,8 +198,12 @@ export class CTrackFileXML extends CTrackFile {
         return misb;
     }
 
-    getShortName(trackIndex = 0) {
+    getShortName(trackIndex = 0, trackFileName = "") {
         return "XML Track";
+    }
+
+    hasMoreTracks(trackIndex = 0) {
+        return false;
     }
 
     extractObjects() {
