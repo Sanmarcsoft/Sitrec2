@@ -408,6 +408,8 @@ export class CNodeTerrainUI extends CNode {
                                         if (tile && tile.mesh && tile.mesh.material) {
                                             if (tile.mesh.material.uniforms && tile.mesh.material.uniforms.transparency) {
                                                 tile.mesh.material.uniforms.transparency.value = v;
+                                                tile.mesh.material.transparent = v < 1;
+                                                tile.mesh.material.needsUpdate = true;
                                             }
                                         }
                                     }

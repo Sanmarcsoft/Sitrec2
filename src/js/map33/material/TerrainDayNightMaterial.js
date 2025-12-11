@@ -25,7 +25,7 @@ export function createTerrainDayNightMaterial(texture, terrainShadingStrength = 
             ...sharedUniforms,
         },
         side: doubleSided ? 2 : 0, // 2 = DoubleSide, 0 = FrontSide
-        transparent: true,
+        transparent: transparency < 1,
         vertexShader: `
             varying vec2 vUv;
             varying vec3 vNormal;
