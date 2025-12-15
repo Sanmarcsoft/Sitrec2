@@ -1,8 +1,7 @@
-import {BufferAttribute, BufferGeometry, Color, Points, PointsMaterial, ShaderMaterial, TextureLoader} from "three";
+import {BufferAttribute, BufferGeometry, Color, Points, ShaderMaterial, TextureLoader} from "three";
 import {CNode3DGroup} from "./CNode3DGroup";
 import {guiMenus, NodeMan} from "../Globals";
 import * as LAYER from "../LayerMasks";
-import {radians} from "../utils";
 
 import {SITREC_APP} from "../configUtils";
 import {sharedUniforms} from "../js/map33/material/SharedUniforms";
@@ -145,7 +144,7 @@ constructor(v) {
     }).listen();
 
     // Size in meters, used a CNodeGUIValue to create a unit-scaled slider
-    this.gui.add(this, "size", 0.1, 10).name("Size (m)").onChange(() => {
+    this.gui.add(this, "size", 0.1, 10, 0.01).name("Size (m)").onChange(() => {
         // Adjust size attribute in geometry
         for (let i = 0; i < this.nSprites; i++) {
             this.sizes[i] = this.size;
@@ -155,7 +154,7 @@ constructor(v) {
         .tooltip("Diameter in meters.").listen();
 
 
-    this.gui.add(this, "mainSizeMultiplier", 1, 100).name("View Size Multiplier").tooltip("Adjusts the size of the flow orbs in the main view, but does not change the size in other views.").listen();
+    this.gui.add(this, "mainSizeMultiplier", 1, 100,0.1).name("View Size Multiplier").tooltip("Adjusts the size of the flow orbs in the main view, but does not change the size in other views.").listen();
 
     this.simpleSerials.push("size", "mainSizeMultiplier");
 }

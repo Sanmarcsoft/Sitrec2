@@ -114,8 +114,10 @@ export class CNodeGUIValue extends CNodeGUIConstant {
 
         // set it invisible
         if (v.hidden) {
-            this.hidden = true;
+            // hide once
             this.hide();
+            // then disable future show calls
+            this.hidden = true;
         }
 
         // the guiEntry has a _stepExplicit field, which flags
@@ -266,6 +268,17 @@ export class CNodeGUIValue extends CNodeGUIConstant {
     }
 
     show(visible=true) {
+
+        // first check for the permanent hidden flag
+        // used by some legacy UI elements like the FOV controller
+        // which need to exists for compaitibility with older sitches
+        // they would be set invisible at the start, and never shown
+        // so ignore all future show/hide calls.
+        if (this.hidden) {
+            return;
+        }
+
+
         if (this.visible === visible) {
             // note the gui has a _hidden flag, not a visible flag, so inverted logic
             if (this.gui && this.guiEntry._hidden !== visible)

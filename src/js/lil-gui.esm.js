@@ -737,7 +737,7 @@ class FunctionController extends Controller {
 
 class NumberController extends Controller {
 
-    constructor( parent, object, property, min, max, step ) {
+    constructor( parent, object, property, min, max, step, snap = true) {
 
         super( parent, object, property, 'number' );
 
@@ -746,40 +746,56 @@ class NumberController extends Controller {
         this.min( min );
         this.max( max );
 
-        const stepExplicit = step !== undefined;
-        this.step( stepExplicit ? step : this._getImplicitStep(), stepExplicit );
+        assert( step !== undefined, "NumberController requires a step value, deprecated the old explicit step logic" );
+
+        //const stepExplicit = step !== undefined;
+        //this.step( stepExplicit ? step : this._getImplicitStep(), stepExplicit );
+        this.step( step );
+        this.snap( snap );
 
         this.updateDisplay();
 
     }
 
+    // number of decimal places to show
     decimals( decimals ) {
         this._decimals = decimals;
         this.updateDisplay();
         return this;
     }
 
+    // value represened by the slider at 0%
     min( min ) {
         this._min = min;
         this._onUpdateMinMax();
         return this;
     }
 
+    // value represented by the slider at 100%
     max( max ) {
         this._max = max;
         this._onUpdateMinMax();
         return this;
     }
 
+    // step size for each increment/decrement with the arrow keys, draggin number up/down or mouse wheel
     step( step, explicit = true ) {
         this._step = step;
-        this._stepExplicit = explicit;
+        //this._stepExplicit = explicit;
         return this;
     }
 
+    snap(v) {
+        this._doSnap = v;
+        return this;
+    }
+
+
     // MICK: added wrapping and elastic sliders
     // wrapping will wrap the value around the min/max
-    // and add (or subtract)  1 to the wrapReceiver
+    // and add (or subtract) 1 to the wrapReceiver
+    // this allows you to have, say a slider for hours in a day and the next for minutes in the hour
+    // then wrapping the minutes slider will increment/decrement the hours slider
     wrap( wrapReceiver ) {
         this._canWrap = true;
         this._wrapReceiver = wrapReceiver;
@@ -787,6 +803,7 @@ class NumberController extends Controller {
     }
 
     // elastic will expand or contract the range if you push against the min or max
+    // this allows finer control
     elastic( min = 100, max = 1000000, integer = false, shrink = false ) {
         this._elastic = true;
         this._elasticMin = min;
@@ -797,6 +814,8 @@ class NumberController extends Controller {
         return this;
     }
 
+    // the eleastic step is 0.2% of the range
+    // it's recalcuclated on min/max changes (assuming elastic is on)
     updateElasticStep() {
         if (this._elastic) {
 
@@ -820,6 +839,7 @@ class NumberController extends Controller {
         return this;
     }
 
+    // given the value (in the object, not the GUI), update the display of the slider line and the input box
     updateDisplay() {
 
         const value = this.getValue();
@@ -843,6 +863,8 @@ class NumberController extends Controller {
 
     _initInput() {
 
+        // this.$input is the text input box for direct number entry
+        // (and displaying what the current value is when modifeid by the slider or externally)
         this.$input = document.createElement( 'input' );
         this.$input.setAttribute( 'type', 'text' );
         this.$input.setAttribute( 'aria-labelledby', this.$name.id );
@@ -863,13 +885,17 @@ class NumberController extends Controller {
 
         this.$disable = this.$input;
 
+        // now there's several event handlers which change the number in various ways
+
+        // onInput: when the user types in a number
+        // ---------------------------------------------------------------------
         const onInput = () => {
 
             let value = parseFloat( this.$input.value );
 
             if ( isNaN( value ) ) return;
 
-            if ( this._stepExplicit ) {
+            if ( this._doSnap ) {
                 value = this._snap( value );
             }
 
@@ -880,6 +906,7 @@ class NumberController extends Controller {
         // Keys & mouse wheel
         // ---------------------------------------------------------------------
 
+        // helper function to increment/decrement the value by the current step
         const increment = delta => {
 
             const value = parseFloat( this.$input.value );
@@ -1286,9 +1313,10 @@ class NumberController extends Controller {
             // If this is the first time we're hearing about min and max
             // and we haven't explicitly stated what our step is, let's
             // update that too.
-            if ( !this._stepExplicit ) {
-                this.step( this._getImplicitStep(), false );
-            }
+            // DEPRECATED
+            // if ( !this._stepExplicit ) {
+            //     this.step( this._getImplicitStep(), false );
+            // }
 
             this._initSlider();
             this.updateDisplay();
@@ -1307,7 +1335,7 @@ class NumberController extends Controller {
         if ( Math.floor( e.deltaY ) !== e.deltaY && e.wheelDelta ) {
             deltaX = 0;
             deltaY = -e.wheelDelta / 120;
-            deltaY *= this._stepExplicit ? 1 : 10;
+            //deltaY *= this._stepExplicit ? 1 : 10;
         }
 
         const wheel = deltaX + -deltaY;
@@ -1318,13 +1346,17 @@ class NumberController extends Controller {
 
     _arrowKeyMultiplier( e ) {
 
-        let mult = this._stepExplicit ? 1 : 10;
+        //let mult = this._stepExplicit ? 1 : 10;
+        let mult = 1;
 
+        // MICK: changed to make shift for fine control
+        // and removed alt for medium control (as it does not work on some keyboards)
         if ( e.shiftKey ) {
-            mult *= 10;
-        } else if ( e.altKey ) {
-            mult /= 10;
+            mult /= 100;
         }
+        // else if ( e.altKey ) {
+        //     mult /= 10;
+        // }
 
         return mult;
 
@@ -1332,6 +1364,8 @@ class NumberController extends Controller {
 
     _snap( value ) {
 
+        if (!this._doSnap)
+            return value;
         // This would be the logical way to do things, but floating point errors.
         // return Math.round( value / this._step ) * this._step;
 
@@ -2137,7 +2171,7 @@ class GUI {
      * @param {number} [step] Step value for number controllers.
      * @returns {Controller}
      */
-    add( object, property, $1, max, step ) {
+    add( object, property, $1, max, step, snap ) {
 
         if ( Object( $1 ) === $1 ) {
 
@@ -2153,7 +2187,7 @@ class GUI {
 
             case 'number':
 
-                return new NumberController( this, object, property, $1, max, step );
+                return new NumberController( this, object, property, $1, max, step, snap );
 
             case 'boolean':
 

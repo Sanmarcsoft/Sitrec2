@@ -244,6 +244,10 @@ export class CCustomManager {
     // It's called from setupFunctions() in index.js AFTER the non-deferred run of SituationSetupFromData
     // So at this point the sitch noded will be set up, and youcan add more
     async setup() {
+
+        // default to paused, as there's nothing to animate yet
+        par.paused = true;
+        
         // Initialize settings first (after login check)
         // this will only be done once per session
         if (!this.settingsInitialized) {

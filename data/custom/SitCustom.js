@@ -490,7 +490,8 @@ sitch = {
     // This isn't really used, but we need it for backwards compatibility
     // note, it's only used in the Custom sitch, and is hard linked in the code
     // to any instance of the CNodeControllerPTZUI
-     fovUI: {kind: "GUIValue", value: 30, start: 0.1, end: 40, step: 0.001, elastic: true, elasticMin: 5, elasticMax: 170, desc: "vFOV",gui:"camera", hidden: true},
+//    fovUI: {kind: "GUIValue", value: 30, start: 0.00001, end: 40, step: 0.001, elastic: true, elasticMin: 5, elasticMax: 170, desc: "vFOVx",gui:"camera", hidden: true},
+    fovUI: {kind: "GUIValue", value: 30, start: 0.00000, end: 180, step: 0.001, desc: "vFOV",gui:"camera", hidden: true},
 
     fovSwitch: {
         kind: "Switch",

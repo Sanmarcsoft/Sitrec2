@@ -108,10 +108,12 @@ export class CNodeControllerPTZUI extends CNodeControllerAzElZoom {
             this.setGUI(v,"camera");
             const guiPTZ = this.gui;
 
-            guiPTZ.add(this, "az", -180, 180, 0.1).listen().name("Pan (Az)").onChange(v => this.refresh()).setLabelColor(pszUIColor).wrap()
-            guiPTZ.add(this, "el", -89, 89, 0.1).listen().name("Tilt (El)").onChange(v => this.refresh()).setLabelColor(pszUIColor)
+            guiPTZ.add(this, "az", -180, 180, 0.01, false).listen().name("Pan (Az)").onChange(v => this.refresh()).setLabelColor(pszUIColor).wrap()
+            guiPTZ.add(this, "el", -89, 89, 0.01, false).listen().name("Tilt (El)").onChange(v => this.refresh()).setLabelColor(pszUIColor)
             if (this.fov !== undefined) {
-                guiPTZ.add(this, "fov", 0.01, 170, 0.1).listen().name("Zoom (fov)").onChange(v => this.refresh()).setLabelColor(pszUIColor).elastic(0.1, 170)
+                guiPTZ.add(this, "fov", 0.0001, 170, 0.01, false).listen().name("Zoom (fov)").onChange(v => {
+                    this.refresh()
+                }).setLabelColor(pszUIColor) // .elastic(0.0001, 170)
             }
             if (this.roll !== undefined ) {
                 guiPTZ.add(this, "roll", -180, 180, 0.005).listen().name("Roll").onChange(v => this.refresh()).setLabelColor(pszUIColor)
