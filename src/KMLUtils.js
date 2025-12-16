@@ -1,8 +1,8 @@
 // parseXML from https://stackoverflow.com/questions/4200913/xml-to-javascript-object
-import {CTrackFile} from "./CTrackFile";
-import {CTrackFileKML} from "./CTrackFileKML";
-import {CTrackFileXML} from "./CTrackFileXML";
-import {CTrackFileSRT, SRT} from "./CTrackFileSRT";
+import {CTrackFile} from "./TrackFiles/CTrackFile";
+import {CTrackFileKML} from "./TrackFiles/CTrackFileKML";
+import {CTrackFileXML} from "./TrackFiles/CTrackFileXML";
+import {CTrackFileSRT, SRT} from "./TrackFiles/CTrackFileSRT";
 
 export {CTrackFile, CTrackFileKML, CTrackFileXML, CTrackFileSRT, SRT};
 

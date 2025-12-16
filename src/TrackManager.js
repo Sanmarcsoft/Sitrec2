@@ -22,7 +22,6 @@ import {CNodeControllerMatrix, CNodeControllerTrackPosition} from "./nodes/CNode
 import {MISB} from "./MISBUtils";
 // Removed mathjs import - using native JavaScript Number.isFinite or typeof checks
 import {CNodeMISBDataTrack, makeLOSNodeFromTrackAngles, removeLOSNodeColumnNodes} from "./nodes/CNodeMISBData";
-import {CTrackFileKML, CTrackFileXML} from "./KMLUtils";
 import {CNodeTrackFromMISB} from "./nodes/CNodeTrackFromMISB";
 import {assert} from "./assert.js";
 import {getLocalSouthVector, getLocalUpVector, pointOnSphereBelow} from "./SphericalMath";
@@ -32,6 +31,7 @@ import {CNodeTrackGUI} from "./nodes/CNodeControllerTrackGUI";
 import {CGeoJSON} from "./geoJSONUtils";
 import {CNodeSmoothedPositionTrack} from "./nodes/CNodeSmoothedPositionTrack";
 import {CNodeSplineEditor} from "./nodes/CNodeSplineEdit";
+import {CTrackFile} from "./TrackFiles/CTrackFile";
 
 
 class CMetaTrack {
@@ -1047,35 +1047,27 @@ class CTrackManager extends CManager {
         }
         let found = false;
 
-        // if it's a KML file, then we might have the flight number in the data
-        // check there first, which gives more flexibility in filenames (which might get changed by the user, or the system)
+
+        // Check first if the parse file is a CTrackFile,
+
+        const file = FileManager.get(trackFileName);
+        if (file instanceof CTrackFile) {
+            shortName = file.getShortName(trackIndex, trackFileName);
+            if (file.hasMoreTracks(trackIndex)) {
+                moreTracks = true;
+            }
+            found = !!shortName;
+        }
 
         const ext = getFileExtension(trackFileName);
-        if (ext === "kml" || ext === "xml" || ext === "json") {
-            const file = FileManager.get(trackFileName);
+        if ( !found && ext === "json") {
+            const geo = new CGeoJSON();
+            geo.json = file;
+            shortName = geo.shortTrackIDForIndex(trackIndex);
+            found = true;
 
-            if (file instanceof CTrackFileKML) {
-                shortName = file.getShortName(trackIndex, trackFileName);
-                if (file.hasMoreTracks(trackIndex)) {
-                    moreTracks = true;
-                }
-                found = true;
-                console.log("KML track short name: ", shortName, " index: ", trackIndex)
-            } else if (file instanceof CTrackFileXML) {
-                shortName = file.getShortName(trackIndex, trackFileName);
-                if (file.hasMoreTracks(trackIndex)) {
-                    moreTracks = true;
-                }
-                found = true;
-            } else if (ext === "json") {
-                const geo = new CGeoJSON();
-                geo.json = file;
-                shortName = geo.shortTrackIDForIndex(trackIndex);
-                found = true;
-
-                if (trackIndex < geo.countTracks() - 1) {
-                    moreTracks = true;
-                }
+            if (trackIndex < geo.countTracks() - 1) {
+                moreTracks = true;
             }
         }
 

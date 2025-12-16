@@ -1,6 +1,6 @@
 import {CTrackFile} from "./CTrackFile";
-import {MISB, MISBFields} from "./MISBUtils";
-import {timeStrToEpoch} from "./DateTimeUtils";
+import {MISB, MISBFields} from "../MISBUtils";
+import {timeStrToEpoch} from "../DateTimeUtils";
 
 export class CTrackFileXML extends CTrackFile {
     doesContainTrack() {

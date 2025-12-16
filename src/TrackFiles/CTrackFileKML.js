@@ -1,12 +1,12 @@
 import {CTrackFile} from "./CTrackFile";
-import {MISB, MISBFields} from "./MISBUtils";
-import {CustomManager, NodeMan, Sit} from "./Globals";
-import {timeStrToEpoch} from "./DateTimeUtils";
-import {assert} from "./assert.js";
-import {CNodeTrackFromLLAArray} from "./nodes/CNodeTrack";
-import {CNodeDisplayTrack} from "./nodes/CNodeDisplayTrack";
-import * as LAYERS from "./LayerMasks";
-import {FeatureManager} from "./CFeatureManager";
+import {MISB, MISBFields} from "../MISBUtils";
+import {CustomManager, NodeMan, Sit} from "../Globals";
+import {timeStrToEpoch} from "../DateTimeUtils";
+import {assert} from "../assert.js";
+import {CNodeTrackFromLLAArray} from "../nodes/CNodeTrack";
+import {CNodeDisplayTrack} from "../nodes/CNodeDisplayTrack";
+import * as LAYERS from "../LayerMasks";
+import {FeatureManager} from "../CFeatureManager";
 
 export class CTrackFileKML extends CTrackFile {
     doesContainTrack() {

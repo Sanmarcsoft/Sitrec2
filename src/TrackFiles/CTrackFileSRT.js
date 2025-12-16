@@ -1,7 +1,7 @@
 import {CTrackFile} from "./CTrackFile";
-import {MISB, MISBFields} from "./MISBUtils";
-import {atan, degrees, radians, tan} from "./utils";
-import {timeStrToEpoch} from "./DateTimeUtils";
+import {MISB, MISBFields} from "../MISBUtils";
+import {atan, degrees, radians, tan} from "../utils";
+import {timeStrToEpoch} from "../DateTimeUtils";
 
 export const SRT = {
     FrameCnt: 0,

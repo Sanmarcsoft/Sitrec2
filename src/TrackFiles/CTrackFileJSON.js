@@ -1,5 +1,5 @@
 import {CTrackFile} from "./CTrackFile";
-import {CGeoJSON} from "./geoJSONUtils";
+import {CGeoJSON} from "../geoJSONUtils";
 
 export class CTrackFileJSON extends CTrackFile {
     constructor(data) {
