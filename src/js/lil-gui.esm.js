@@ -1392,6 +1392,8 @@ class NumberController extends Controller {
         // 0.006800000000000002
         // or 0.6000999999999996
         // then we want to clamp it to 0.0068 or 0.6001 respectively
+        // This still seems to cause issue with runaway precisions
+        // so still might want to snap to maybe 6 decimal places?
         value = cleanFloat(value);
 
 
