@@ -108,6 +108,23 @@ export class CTrackFileKML extends CTrackFile {
         return false;
     }
 
+    getTrackCount() {
+        const kml = this.data;
+        if (kml.kml !== undefined && kml.kml.Folder !== undefined && kml.kml.Folder.Folder !== undefined) {
+            const trackFolder = kml.kml.Folder.Folder;
+            if (Array.isArray(trackFolder)) {
+                let validCount = 0;
+                for (let i = 0; i < trackFolder.length; i++) {
+                    if (trackFolder[i].Placemark !== undefined) {
+                        validCount++;
+                    }
+                }
+                return validCount;
+            }
+        }
+        return 1;
+    }
+
     extractObjects() {
         this.extractKMLObjectsInternal(this.data);
     }

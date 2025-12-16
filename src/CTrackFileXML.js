@@ -80,6 +80,10 @@ export class CTrackFileXML extends CTrackFile {
         return false;
     }
 
+    getTrackCount() {
+        return 1;
+    }
+
     extractObjects() {
     }
 }

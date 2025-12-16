@@ -1051,7 +1051,7 @@ class CTrackManager extends CManager {
         // check there first, which gives more flexibility in filenames (which might get changed by the user, or the system)
 
         const ext = getFileExtension(trackFileName);
-        if (ext === "kml" || ext === "xml") {
+        if (ext === "kml" || ext === "xml" || ext === "json") {
             const file = FileManager.get(trackFileName);
 
             if (file instanceof CTrackFileKML) {
@@ -1063,22 +1063,20 @@ class CTrackManager extends CManager {
                 console.log("KML track short name: ", shortName, " index: ", trackIndex)
             } else if (file instanceof CTrackFileXML) {
                 shortName = file.getShortName(trackIndex, trackFileName);
+                if (file.hasMoreTracks(trackIndex)) {
+                    moreTracks = true;
+                }
                 found = true;
+            } else if (ext === "json") {
+                const geo = new CGeoJSON();
+                geo.json = file;
+                shortName = geo.shortTrackIDForIndex(trackIndex);
+                found = true;
+
+                if (trackIndex < geo.countTracks() - 1) {
+                    moreTracks = true;
+                }
             }
-        }
-
-        if (ext === "json") {
-            const geo = new CGeoJSON();
-            geo.json = FileManager.get(trackFileName);
-            shortName = geo.shortTrackIDForIndex(trackIndex);
-            found = true; // flag that we found a short name
-
-            // check if there are more tracks (telling us to loop again)
-            const numTracks = geo.countTracks();
-            if (trackIndex < numTracks - 1) {
-                moreTracks = true;
-            }
-
         }
 
         // Handle complex CSV files with multiple tracks
