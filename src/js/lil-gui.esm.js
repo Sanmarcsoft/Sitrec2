@@ -13,6 +13,7 @@
 import {assert} from "../assert";
 import {setRenderOne} from "../Globals";
 import {showError} from "../showError";
+import {cleanFloat} from "../utils";
 
 /**
  * Base class for all controllers.
@@ -895,9 +896,11 @@ class NumberController extends Controller {
 
             if ( isNaN( value ) ) return;
 
-            if ( this._doSnap ) {
-                value = this._snap( value );
-            }
+            // now never snap on text input, it's too confusing
+            // if the user enterd a number, they want that number
+            // if ( this._doSnap ) {
+            //     value = this._snap( value );
+            // }
 
             this.setValue( this._clamp( value ) );
 
@@ -1383,6 +1386,14 @@ class NumberController extends Controller {
         // either condition is false if min or max is undefined
         if ( value < this._min ) value = this._min;
         if ( value > this._max ) value = this._max;
+
+        // also clamp for small FP errors
+        // basically if there's a number like
+        // 0.006800000000000002
+        // or 0.6000999999999996
+        // then we want to clamp it to 0.0068 or 0.6001 respectively
+        value = cleanFloat(value);
+
 
         // if ( value < this._min ) {
         //     value = this._max;

@@ -1194,3 +1194,19 @@ export function md5AsFloat(inputString) {
     return intValue / maxIntValue;
 }
 
+// Clean floating point artifacts from a number
+// by trying to round to a number of decimal places
+// up to maxDecimals, and seeing if the result
+// is within a small tolerance of the original number
+export function cleanFloat(x, maxDecimals = 12) {
+    if (!Number.isFinite(x)) return x;
+
+    // scale-aware tolerance: a few ulps worth, proportional to magnitude
+    const tol = 16 * Number.EPSILON * Math.max(1, Math.abs(x));
+
+    for (let d = 0; d <= maxDecimals; d++) {
+        const y = Number(x.toFixed(d));
+        if (Math.abs(y - x) <= tol) return y;
+    }
+    return x; // nothing convincingly "artifacty"
+}
