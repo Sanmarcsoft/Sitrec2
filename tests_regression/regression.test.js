@@ -6,7 +6,7 @@ import fs from 'fs';
 expect.extend({ toMatchImageSnapshot });
 
 // Array of test cases: each object contains a name and its corresponding URL.
-const testData = [
+const testDataDefault = [
     { name: 'default', url: 'https://local.metabunk.org/sitrec/?frame=10' },
     { name: 'WMTS', url: 'https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Regression%20test%20NRL%20WMTS/20251204_001658.js' },
     { name: 'agua', url: 'https://local.metabunk.org/sitrec/?sitch=agua&frame=10' },
@@ -18,9 +18,19 @@ const testData = [
     { name: "orion", url: "https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Orion%20in%20Both%20views%20for%20Label%20Check/20251127_200130.js" },
     { name: "bledsoe", url: "https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/15857/BledsoeZoom/20250623_153507.js&frame=10" },
     { name: "mosul", url: "https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Mosul%20Orb/20250707_055311.js&frame=62"},
-    { name: "multi-CSV", url: "https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/REGRESSION%20_%20MULTI%20TRACK%20CSV%20AIRCRAFT/20251030_044434.js&frame=620"}
     // Add more objects as needed.
 ];
+
+
+// unit tests for trackfile related rendering
+const testDataTrackFiles = [
+    { name: "multi-CSV", url: "https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/REGRESSION%20_%20MULTI%20TRACK%20CSV%20AIRCRAFT/20251030_044434.js&frame=620"},
+
+    // we include mosul here as it has some building loaded from a KML file
+    // so we need to ensure
+    { name: "mosul", url: "https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Mosul%20Orb/20250707_055311.js&frame=62"},
+]
+
 
 /**
  * Wait for a specific text to appear in console messages.
@@ -89,6 +99,14 @@ describe('Visual Regression Testing', () => {
     afterAll(async () => {
         await browser.close();
     });
+
+    let testData;
+    // based a command line argument, choose which set of tests to run
+    if (process.env.TEST_TRACKFILES === 'true') {
+        testData = testDataTrackFiles;
+    } else {
+        testData = testDataDefault;
+    }
 
     // Iterate through each test data object.
     testData.forEach(({ name, url }) => {
