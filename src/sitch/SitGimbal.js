@@ -1,41 +1,38 @@
-
-import {AlwaysDepth, Color, Vector3} from "three";
+import {AlwaysDepth, Color} from "three";
 import {par} from "../par";
 import {arrayColumn, ExpandKeyframes, RollingAverage, scaleF2M} from "../utils";
 import {CNodeCurveEditor} from "../nodes/CNodeCurveEdit";
-import {FileManager, guiJetTweaks, NodeMan, Sit} from "../Globals";
+import {FileManager, gui, guiJetTweaks, guiTweaks, NodeMan, Sit} from "../Globals";
 import {CNodeArray} from "../nodes/CNodeArray";
 import {CNodeSwitch} from "../nodes/CNodeSwitch";
 import {CNodeInterpolate} from "../nodes/CNodeInterpolate";
 import {CNodeGUIValue, makeCNodeGUIValue} from "../nodes/CNodeGUIValue";
-import {CNodeDerivative, CNodeGForce, CNodeMunge, makeMunge} from "../nodes/CNodeMunge";
+import {CNodeGForce, CNodeMunge} from "../nodes/CNodeMunge";
 import {CNodeNegate} from "../nodes/CNodeNegate";
 import {CNodeTurnRateBS} from "../nodes/CNodeTurnRateBS";
 import {CNodeWatch} from "../nodes/CNodeWatch";
 import {CNodeTurnRateFromClouds} from "../nodes/CNodeTurnRateFromClouds";
 import {CNodeWind} from "../nodes/CNodeWind";
 import {CNodeHeading} from "../nodes/CNodeHeading";
-import {CNodeJetTrack, CNodeTrackSpeed} from "../nodes/CNodeJetTrack";
+import {CNodeJetTrack} from "../nodes/CNodeJetTrack";
 import {CNodeSAPage} from "../nodes/CNodeSAPage";
 import {CNodeLOSTrackAzEl} from "../nodes/CNodeLOSTrackAzEl";
 import {calculateGlareStartAngle} from "../JetHorizon";
 import {curveChanged, SetupCommon, SetupTrackLOSNodes, SetupTraverseNodes} from "../JetStuff";
 import {LocalFrame} from "../LocalFrame";
-import {gui, guiTweaks} from "../Globals";
 import {SetupJetGUI} from "../JetGUI";
 import {CNodeFleeter} from "../nodes/CNodeFleeter";
 import {CNodeGraphSeries} from "../nodes/CNodeGraphSeries";
 import {CNodeTraverseAngularSpeed} from "../nodes/CNodeTraverseAngularSpeed";
 import {SetupCloudNodes} from "../Clouds";
 import {CNodeDisplayTrack} from "../nodes/CNodeDisplayTrack";
-import {CNodeConstant, CNodeOrigin} from "../nodes/CNode";
+import {CNodeConstant} from "../nodes/CNode";
 import {AddGenericNodeGraph} from "../JetGraphs";
 import {CNodeLOSTraverseConstantSpeed} from "../nodes/CNodeLOSTraverseConstantSpeed";
 import {CNodeDisplayTargetModel} from "../nodes/CNodeDisplayTargetModel";
 import {CNodeScale} from "../nodes/CNodeScale";
 import {CNodeDisplayTargetSphere} from "../nodes/CNodeDisplayTargetSphere";
 import {setupOpts} from "../JetChart";
-import {commonJetLabels} from "./CommonSitch";
 import {CNodeTrackAir} from "../nodes/CNodeTrackAir";
 import {ViewMan} from "../CViewManager";
 
@@ -698,7 +695,7 @@ export function SetupGimbal() {
     console.log("+++ jetTAS Node")
     makeCNodeGUIValue("jetTAS", 351, 320, 360, 0.1, "TAS", guiJetTweaks)
     var elStartNode = makeCNodeGUIValue("elStart", -2.01, -4, 0, 0.001, "el Start", guiTweaks, curveChanged)
-    var elRiseNode = makeCNodeGUIValue("elRise", 0.025, -0.1, 0.1, 0.00001, "el Rise", guiTweaks, curveChanged)
+    var elRiseNode = makeCNodeGUIValue("elRise", 0.025, -1, 1, 0.00001, "el Rise", guiTweaks, curveChanged)
 
     new CNodeMunge({
         id: "el",
