@@ -45,6 +45,11 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
 
 
         super.renderCanvas(frame);
+        
+        // Ensure canvas is scaled for high DPI on every frame
+        this.canvas.width = this.widthPx * this.devicePixelRatio;
+        this.canvas.height = this.heightPx * this.devicePixelRatio;
+        this.ctx.scale(this.devicePixelRatio, this.devicePixelRatio);
 
         if (!this.showStarNames) return
 

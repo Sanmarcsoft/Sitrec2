@@ -368,6 +368,11 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
         // if no video file, this is just a drop target for now
         if (!this.videoData) return;
+        
+        // Ensure canvas is scaled for high DPI on every frame
+        this.canvas.width = this.widthPx * this.devicePixelRatio;
+        this.canvas.height = this.heightPx * this.devicePixelRatio;
+        this.ctx.scale(this.devicePixelRatio, this.devicePixelRatio);
 
         this.syncAudioWithVideo(frame);
 
@@ -375,7 +380,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         const image = this.videoData.getImage(frame);
         if (image) {
 
-            const ctx = this.canvas.getContext("2d");
+            const ctx = this.ctx;
 
            //  ctx.fillstyle = "#FF00FFFF"
            //  ctx.fillRect(0, 0, this.canvas.width/3, this.canvas.height);

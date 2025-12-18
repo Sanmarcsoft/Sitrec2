@@ -35,6 +35,12 @@ export class CNodeImageView extends CNodeViewUI {
 
     renderCanvas() {
         super.renderCanvas(0)
+        
+        // Ensure canvas is scaled for high DPI on every frame
+        this.canvas.width = this.widthPx * this.devicePixelRatio;
+        this.canvas.height = this.heightPx * this.devicePixelRatio;
+        this.ctx.scale(this.devicePixelRatio, this.devicePixelRatio);
+        
         if (this.stretchToFit) {
             this.ctx.drawImage(this.image, 0, 0, this.widthPx, this.heightPx)
         } else {
@@ -42,8 +48,8 @@ export class CNodeImageView extends CNodeViewUI {
             // by comparing the image aspect ratio to the canvas aspect ratio
             var imageWidth = this.image.width
             var imageHeight = this.image.height
-            var canvasWidth = this.canvas.width
-            var canvasHeight = this.canvas.height
+            var canvasWidth = this.widthPx
+            var canvasHeight = this.heightPx
             var imageAspectRatio = imageWidth / imageHeight
             var canvasAspectRatio = canvasWidth / canvasHeight
             var renderableHeight, renderableWidth, xStart, yStart

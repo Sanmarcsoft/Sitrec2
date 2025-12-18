@@ -6,7 +6,6 @@
 
 import {CNodeViewUI} from "./CNodeViewUI";
 import {par} from "../par";
-import {assert} from "../assert";
 
 export class CNodeGraphLine extends CNodeViewUI {
     constructor(v) {
@@ -26,6 +25,12 @@ export class CNodeGraphLine extends CNodeViewUI {
 
     renderCanvas(f) {
         super.renderCanvas(f)
+        
+        // Ensure canvas is scaled for high DPI on every frame
+        this.canvas.width = this.widthPx * this.devicePixelRatio;
+        this.canvas.height = this.heightPx * this.devicePixelRatio;
+        this.ctx.scale(this.devicePixelRatio, this.devicePixelRatio);
+        
         var e = this.overlayView.editor
         var c = this.ctx
 

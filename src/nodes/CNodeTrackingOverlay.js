@@ -144,6 +144,12 @@ export class CNodeActiveOverlay extends CNodeViewUI {
 
     renderCanvas(frame) {
         super.renderCanvas(frame)
+        
+        // Ensure canvas is scaled for high DPI on every frame
+        this.canvas.width = this.widthPx * this.devicePixelRatio;
+        this.canvas.height = this.heightPx * this.devicePixelRatio;
+        this.ctx.scale(this.devicePixelRatio, this.devicePixelRatio);
+        
         const ctx = this.ctx
         ctx.strokeStyle = '#FFFFFF';
         ctx.lineWidth = 1.5
@@ -668,6 +674,11 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
 
     renderCanvas(frame) {
         super.renderCanvas(frame) // will be CNodeViewCanvas2D
+        
+        // Ensure canvas is scaled for high DPI on every frame
+        this.canvas.width = this.widthPx * this.devicePixelRatio;
+        this.canvas.height = this.heightPx * this.devicePixelRatio;
+        this.ctx.scale(this.devicePixelRatio, this.devicePixelRatio);
 
         // The tracking overlay is based on integer frames
         frame = Math.floor(frame);
