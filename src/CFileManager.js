@@ -35,6 +35,7 @@ import {V3} from "./threeUtils";
 import {isAudioOnlyFormat} from "./AudioFormats";
 import {extractFeaturesFromFile, isFeaturesCSV} from "./ParseFeaturesCSV";
 import {createImageFromArrayBuffer} from "./FileUtils";
+import {ModelFiles} from "./nodes/CNode3DObject";
 
 
 // The file manager is a singleton that manages all the files
