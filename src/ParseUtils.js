@@ -1,4 +1,3 @@
-import {MISB} from "./MISBUtils";
 import {assert} from "./assert";
 
 export function splitOnCommas(str) {
@@ -106,6 +105,10 @@ export function findColumn(csv, text, exactMatch = false) {
 // If no timezone indicator is present, assumes Zulu time and appends "Z"
 // Returns a Date object
 export function parseISODate(dateStr) {
+    if (typeof dateStr !== 'string') {
+        return new Date(NaN);
+    }
+    
     let isoStr = dateStr;
     
     if (isoStr && !/Z$|[+-]\d{2}:\d{2}$/.test(isoStr)) {
@@ -160,21 +163,22 @@ export function stripDuplicateTimes(data) {
     let numDuplicates = 0;
     let lastDuplicate;
 
-    // data is an array of arrays, each containing a timestamp at index MISB.UnixTimeStamp
-    // eg. data[0][MISB.UnixTimeStamp] is the timestamp of the first data point
+    // data is an array of arrays, each containing a timestamp at index MISB.UnixTimeStamp (2)
+    // eg. data[0][2] is the timestamp of the first data point
     // Iterate through each data point
+    const UNIX_TIME_STAMP_INDEX = 2;
     let lastTime = -1;
     for (const point of data) {
-        if (point[MISB.UnixTimeStamp] !== lastTime) {
+        if (point[UNIX_TIME_STAMP_INDEX] !== lastTime) {
             // Add the data point to the uniqueData array
             uniqueData.push(point);
 
             // Update the lastTime variable
-            lastTime = point[MISB.UnixTimeStamp]
+            lastTime = point[UNIX_TIME_STAMP_INDEX]
         } else {
             numDuplicates++;
             lastDuplicate = lastTime
-           //  console.log("Duplicate time found: ", point[MISB.UnixTimeStamp]);
+           //  console.log("Duplicate time found: ", point[UNIX_TIME_STAMP_INDEX]);
         }
     }
 
