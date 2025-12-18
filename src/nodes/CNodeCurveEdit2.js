@@ -112,8 +112,8 @@ export class CNodeCurveEditorView2 extends CNodeTabbedCanvasView {
         const y = screenY - rect.top;
         
         const margin = 60;
-        const graphWidth = this.canvas.width - margin * 2;
-        const graphHeight = this.canvas.height - margin * 2;
+        const graphWidth = this.widthPx - margin * 2;
+        const graphHeight = this.heightPx - margin * 2;
         
         const graphX = this.minX + (x - margin) / graphWidth * (this.maxX - this.minX);
         const graphY = this.maxY - (y - margin) / graphHeight * (this.maxY - this.minY);
@@ -123,8 +123,8 @@ export class CNodeCurveEditorView2 extends CNodeTabbedCanvasView {
     
     graphToScreen(graphX, graphY) {
         const margin = 60;
-        const graphWidth = this.canvas.width - margin * 2;
-        const graphHeight = this.canvas.height - margin * 2;
+        const graphWidth = this.widthPx - margin * 2;
+        const graphHeight = this.heightPx - margin * 2;
         
         const x = margin + (graphX - this.minX) / (this.maxX - this.minX) * graphWidth;
         const y = margin + (this.maxY - graphY) / (this.maxY - this.minY) * graphHeight;

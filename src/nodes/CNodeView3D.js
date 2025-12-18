@@ -15,7 +15,6 @@ import {
 import {isKeyHeld} from "../KeyBoardHandler";
 import {GlobalDaySkyScene, GlobalNightSkyScene, GlobalScene, GlobalSunSkyScene} from "../LocalFrame";
 import {DRAG, makeMouseRay} from "../mouseMoveView";
-import {TrackManager} from "../TrackManager";
 import {GPUMemoryMonitor} from "../GPUMemoryMonitor";
 import {
     Camera,
