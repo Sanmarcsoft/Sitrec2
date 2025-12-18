@@ -1,12 +1,11 @@
 import {Color} from "three";
-import {FileManager, infoDiv, Sit, Units} from "./Globals";
+import {FileManager, infoDiv, Sit, TrackManager, Units} from "./Globals";
 import * as LAYER from "./LayerMasks";
 import {CNodeConstant} from "./nodes/CNode";
 import {NightSkyFiles} from "./ExtraFiles";
 import {CNodeDisplayTrack} from "./nodes/CNodeDisplayTrack";
 import {expandSitData} from "./SituationSetup";
 import stringify from "json-stringify-pretty-compact";
-import {TrackManager} from "./TrackManager";
 import {makePositionLLA} from "./nodes/CNodePositionLLA";
 import {isConsole, setupConfigPaths} from "./configUtils";
 import {updateNewCustomFields} from "./utils";

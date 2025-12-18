@@ -1,4 +1,15 @@
-import {FileManager, gui, guiMenus, guiPhysics, NodeFactory, NodeMan, setRenderOne, Sit, SitchMan} from "./Globals";
+import {
+    FileManager,
+    gui,
+    guiMenus,
+    guiPhysics,
+    NodeFactory,
+    NodeMan,
+    setRenderOne,
+    Sit,
+    SitchMan,
+    TrackManager
+} from "./Globals";
 import {CNode, CNodeConstant} from "./nodes/CNode";
 import {LLAToEUS, wgs84} from "./LLA-ECEF-ENU";
 import {CNodeGUIValue, makeCNodeGUIValue} from "./nodes/CNodeGUIValue";
@@ -19,7 +30,6 @@ import {par} from "./par";
 import {CNodeViewUI} from "./nodes/CNodeViewUI";
 import {AddTimeDisplayToUI, AddTimeDisplayToUIOld} from "./UIHelpers";
 import {SetupGUIFrames} from "./JetGUI";
-import {TrackManager} from "./TrackManager";
 import {CNodeWind} from "./nodes/CNodeWind";
 import {curveChanged, initJetVariables, initViews, SetupTraverseNodes, UIChangedAz} from "./JetStuff";
 import {addNightSky} from "./nodes/CNodeDisplayNightSky";

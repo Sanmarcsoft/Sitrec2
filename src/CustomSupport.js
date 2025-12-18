@@ -25,6 +25,7 @@ import {
     setSitchEstablished,
     Sit,
     Synth3DManager,
+    TrackManager,
     UndoManager,
     Units
 } from "./Globals";
@@ -44,7 +45,6 @@ import {EventManager} from "./CEventManager";
 import {SITREC_APP} from "./configUtils";
 import {CNodeDisplayTrack} from "./nodes/CNodeDisplayTrack";
 import {DebugArrowAB, elevationAtLL} from "./threeExt";
-import {TrackManager} from "./TrackManager";
 import {FeatureManager} from "./CFeatureManager";
 import {CNodeTrackGUI} from "./nodes/CNodeControllerTrackGUI";
 import {forceUpdateUIText} from "./nodes/CNodeViewUI";

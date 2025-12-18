@@ -89,7 +89,7 @@ import {CGuiMenuBar} from "./lil-gui-extras";
 import {assert} from "./assert.js";
 import {CNodeFactory} from "./nodes/CNodeFactory";
 import {extraCSS} from "./extra.css.js";
-import {TrackManager} from "./TrackManager";
+import {_TrackManager} from "./TrackManager";
 import {ViewMan} from "./CViewManager";
 import {glareSprite, targetSphere} from "./JetStuffVars";
 import {CCustomManager} from "./CustomSupport";
@@ -1106,7 +1106,7 @@ async function initializeOnce() {
 
     console.log('About to initialize NodeMan and DragDropHandler');
     setNodeMan(new CNodeManager())
-    setTrackManager(TrackManager)
+    setTrackManager(_TrackManager)
     setNodeFactory(new CNodeFactory(NodeMan))
     setSitchMan(new CSitchFactory())
     setSynth3DManager(new C3DSynthManager())

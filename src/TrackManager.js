@@ -14,7 +14,8 @@ import {
     NodeMan,
     setRenderOne,
     setSitchEstablished,
-    Sit
+    Sit,
+    TrackManager
 } from "./Globals";
 import {CNodeDisplayTrack} from "./nodes/CNodeDisplayTrack";
 import {CManager} from "./CManager";
@@ -1731,4 +1732,4 @@ export function addKMLMarkers(kml) {
     console.log(kml)
 }
 
-export const TrackManager = new CTrackManager();
+export const _TrackManager = new CTrackManager();
