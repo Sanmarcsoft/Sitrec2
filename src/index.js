@@ -34,6 +34,7 @@ import {
     setupGUIjetTweaks,
     Sit,
     SitchMan,
+    TrackManager,
 } from "./Globals";
 import {disableScroll, f2m, parseBoolean, stripComments} from './utils.js'
 import {CSituation} from "./CSituation";
