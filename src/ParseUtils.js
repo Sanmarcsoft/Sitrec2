@@ -101,11 +101,18 @@ export function findColumn(csv, text, exactMatch = false) {
 }
 
 
-// either 2024-04-24T16:44:11Z or 2024-04-24T16:44:11.000Z
-// the built in Date parser can handle this
-// returns a date object
+// Parse ISO date string, assuming Zulu (UTC) time if no timezone specified
+// Accepts: 2024-04-24T16:44:11Z or 2024-04-24T16:44:11.000Z or 2024-04-24T16:44:11+05:00
+// If no timezone indicator is present, assumes Zulu time and appends "Z"
+// Returns a Date object
 export function parseISODate(dateStr) {
-    const date = new Date(dateStr);
+    let isoStr = dateStr;
+    
+    if (isoStr && !/Z$|[+-]\d{2}:\d{2}$/.test(isoStr)) {
+        isoStr += "Z";
+    }
+    
+    const date = new Date(isoStr);
     return date
 }
 

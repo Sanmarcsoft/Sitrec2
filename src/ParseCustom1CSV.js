@@ -93,7 +93,8 @@ export function parseCustom1CSV(csv) {
         // any empty column will be null
         MISBArray[i - 1] = new Array(MISBFields).fill(null);
 
-        // date can either be an ISO date string, or
+        // date can either be an ISO date string, or a number (epoch time in µs, ms or seconds)
+        // parseISODate assumes Zulu time if no timezone specified
         let date = parseISODate(csv[i][dateCol]).getTime();
         if (isNaN(date)) {
             // try to parse as a number
