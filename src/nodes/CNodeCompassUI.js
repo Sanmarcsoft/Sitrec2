@@ -332,12 +332,18 @@ export class   CNodeCompassUI extends CNodeViewUI {
         const currentLocalWindFrom = localWind?.from;
 
         // Check if anything has changed (including AR mode status)
+        // Also redraw if canvas size changed (resize event)
         if (this.lastHeading === headingRound && this.lastElevation === elevationRound &&
             this.lastTargetWindFrom === currentTargetWindFrom &&
             this.lastLocalWindFrom === currentLocalWindFrom &&
-            this.lastARMode === Globals.arMode) {
+            this.lastARMode === Globals.arMode &&
+            this.lastCanvasWidth === this.widthPx && this.lastCanvasHeight === this.heightPx) {
             return; // Nothing changed, early out
         }
+        
+        // Store canvas dimensions to detect resize
+        this.lastCanvasWidth = this.widthPx;
+        this.lastCanvasHeight = this.heightPx;
 
         // set the text to the rounded heading
         let headingText = "";

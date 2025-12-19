@@ -110,6 +110,7 @@ export class CNodeViewCanvas extends CNodeView {
                 this.canvas.width = this.widthPx * this.devicePixelRatio;
                 this.canvas.height = this.heightPx * this.devicePixelRatio;
                 // Scale the 2D context so drawing commands work with logical coordinates
+                // Setting canvas.width/height automatically resets the transform
                 if (this.ctx) {
                     this.ctx.scale(this.devicePixelRatio, this.devicePixelRatio);
                     this._contextScaled = true;
