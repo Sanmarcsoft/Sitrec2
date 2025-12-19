@@ -331,6 +331,9 @@ export class   CNodeCompassUI extends CNodeViewUI {
         const currentTargetWindFrom = targetWind?.from;
         const currentLocalWindFrom = localWind?.from;
 
+        // Update canvas dimensions FIRST so we can detect resize
+        this.adjustSize();
+        
         // Check if anything has changed (including AR mode status)
         // Also redraw if canvas size changed (resize event)
         if (this.lastHeading === headingRound && this.lastElevation === elevationRound &&
@@ -365,7 +368,8 @@ export class   CNodeCompassUI extends CNodeViewUI {
         this.text = this.addText("heading", headingText, 50, 20, 
             Globals.showCompassElevation ? 16 : 20, "white", "center", "Arial");
 
-        // after updating the text, render the text
+        // after updating the text, render the text (handles autoFill and context scaling)
+        // The parent class renderCanvas will call adjustSize() and applyPendingResize()
         super.renderCanvas(frame);
 
         // Update state

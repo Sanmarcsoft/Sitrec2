@@ -425,42 +425,48 @@ class CNodeView extends CNode {
 
     changedSize() {
         if (this.renderer) {
-            if (this.in.canvasWidth) {
-                // if it's a fixed size canvas, ensure it's the right size
-                // and the renderer knows about it
-                // let width = Math.floor(this.in.canvasWidth.v0);
-                // let height = Math.floor(this.in.canvasHeight.v0);
+            // For WebGL renderer, debounce to avoid flickering from repeated setSize() calls
+            // During resize gestures, dimensions change multiple times per frame
+            if (this._resizeTimeout) {
+                clearTimeout(this._resizeTimeout);
+            }
+            this._resizeTimeout = setTimeout(() => {
+                this.deferredResizeWebGL();
+                this._resizeTimeout = null;
+            }, 100);
+        } else if (this.canvas) {
+            // For 2D canvas, mark as pending and apply before render to avoid squashing
+            this._pendingCanvasResize = true;
+        }
+    }
 
-                let long = Math.floor(this.in.canvasWidth.v0);
+    deferredResizeWebGL() {
+        if (!this.renderer) return;
+        
+        if (this.in.canvasWidth) {
+            let long = Math.floor(this.in.canvasWidth.v0);
 
-                if (this.widthPx > this.heightPx) {
-                    var width = long;
-                    var height = Math.floor(long * this.heightPx / this.widthPx);
-                } else {
-                    var height = long;
-                    var width = Math.floor(long * this.widthPx / this.heightPx);
-                }
+            if (this.widthPx > this.heightPx) {
+                var width = long;
+                var height = Math.floor(long * this.heightPx / this.widthPx);
+            } else {
+                var height = long;
+                var width = Math.floor(long * this.widthPx / this.heightPx);
+            }
 
-                if (this.canvas.width !== width
-                    || this.canvas.height !== height) {
-                    this.renderer.setSize(width, height, false);
-                 //   this.canvas.style.imageRendering ="pixelated"
-                }
-            } else if (this.canvas.width !== this.widthPx * window.devicePixelRatio
-                || this.canvas.height !== this.heightPx * window.devicePixelRatio) {
-                this.renderer.setSize(this.widthPx, this.heightPx);
+            if (width !== this._lastRendererWidth || height !== this._lastRendererHeight) {
+                this.renderer.setSize(width, height, false);
+                this._lastRendererWidth = width;
+                this._lastRendererHeight = height;
             }
         } else {
-            if (this.canvas) {
-                if (this.canvas.width !== this.widthPx
-                    || this.canvas.height !== this.heightPx) {
-                    // this.canvas.width = this.widthPx * window.devicePixelRatio;
-                    // this.canvas.height = this.heightPx * window.devicePixelRatio;
-                    this.canvas.width = this.widthPx;
-                    this.canvas.height = this.heightPx;
-                    if (this.recalculateOnCanvasChange)
-                        this.recalculate();
-                }
+            const width = this.widthPx;
+            const height = this.heightPx;
+            
+            if (width !== this._lastRendererWidth || height !== this._lastRendererHeight) {
+                this.renderer.setSize(width, height);
+                this._lastRendererWidth = width;
+                this._lastRendererHeight = height;
             }
         }
     }

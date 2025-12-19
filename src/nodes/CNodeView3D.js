@@ -1545,7 +1545,7 @@ export class CNodeView3D extends CNodeViewCanvas {
         const focalLength = this.heightPx / (2 * Math.tan(fov / 2));
         sharedUniforms.cameraFocalLength.value = focalLength;
 
-        this.camera.aspect = this.canvas.width / this.canvas.height;
+        this.camera.aspect = this.widthPx / this.heightPx;
         this.camera.updateProjectionMatrix();
         if (globalProfiler) globalProfiler.pop();
 

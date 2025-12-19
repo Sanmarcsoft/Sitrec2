@@ -24,6 +24,8 @@ export class CNodeViewCanvas extends CNodeView {
         // this.canvasHeight = v.canvasHeight;
 
         this.optionalInputs(["canvasWidth", "canvasHeight"])
+        
+        this._pendingCanvasResize = false;
 
         if (v.transparency !== undefined) {
             this.transparency = v.transparency;
@@ -100,47 +102,45 @@ export class CNodeViewCanvas extends CNodeView {
         if (changed) {
 
             if (this.renderer) {
-                this.renderer.setSize(this.heightPx, this.widthPx, false)
+                // TEMP: Comment out renderer.setSize to isolate flicker
+                // this.renderer.setSize(this.widthPx, this.heightPx, false)
             }
 
-            // Scale canvas backing store by devicePixelRatio for high DPI displays
-            // Logical dimensions (widthPx, heightPx) stay the same for coordinate calculations
-            // Physical canvas size is scaled for better resolution
-            if (this.canvas) {
-                this.canvas.width = this.widthPx * this.devicePixelRatio;
-                this.canvas.height = this.heightPx * this.devicePixelRatio;
-                // Scale the 2D context so drawing commands work with logical coordinates
-                // Setting canvas.width/height automatically resets the transform
-                if (this.ctx) {
-                    this.ctx.scale(this.devicePixelRatio, this.devicePixelRatio);
-                    this._contextScaled = true;
-                }
-            }
-
-            // shoudl not be neede
-            //this.canvas.style.width = "100%";
-            //this.canvas.style.height = "100%";
-
-            // this.canvas.style.width =  ((this.div.clientWidth/width)*100)+'%'; // Stretch to fill the parent div
-            // this.canvas.style.height =  ((this.div.clientHeight/height)*100)+'%'; // Stretch to fill the parent div
-
-            // console.log("this.div.clientWidth,Height", this.div.clientWidth +","+this.div.clientHeight)
-            console.log("Canvas resized to ", width, height, this.canvas.style.width, this.canvas.style.height + "from " + oldWidth + "," + oldHeight);
-
+            // Flag that canvas needs resizing, but defer the actual resize until applyPendingResize()
+            // This prevents clearing the canvas mid-render
+            this._pendingCanvasResize = true;
+            
             // bit of a patch to redraw the editor/graph, as resizing clears
             if (this.editor) {
                 // this is just resizing, so don't need to recalculate, just redraw.
                 this.editor.dirty = true;
             }
         } else {
-            if (this.autoClear) {
-                // not clearing it by changing the size, so clear it here
-                // Use logical coordinates (widthPx, heightPx) since context is scaled by devicePixelRatio
-                this.ctx.clearRect(0, 0, this.widthPx, this.heightPx);
-            }
-            // Context scaling is still valid if size hasn't changed
+            // Size hasn't changed, so context scaling is still valid
             this._contextScaled = true;
         }
+    }
+    
+    applyPendingResize() {
+        if (!this._pendingCanvasResize) {
+            return;
+        }
+        
+        // Scale canvas backing store by devicePixelRatio for high DPI displays
+        // Logical dimensions (widthPx, heightPx) stay the same for coordinate calculations
+        // Physical canvas size is scaled for better resolution
+        if (this.canvas) {
+            this.canvas.width = this.widthPx * this.devicePixelRatio;
+            this.canvas.height = this.heightPx * this.devicePixelRatio;
+            // Scale the 2D context so drawing commands work with logical coordinates
+            // Setting canvas.width/height automatically resets the transform and clears the canvas
+            if (this.ctx) {
+                this.ctx.scale(this.devicePixelRatio, this.devicePixelRatio);
+                this._contextScaled = true;
+            }
+        }
+        
+        this._pendingCanvasResize = false;
     }
 
 }
@@ -192,6 +192,7 @@ class CNodeViewCanvas2D extends CNodeViewCanvas {
 
         if (this.visible) {
             this.adjustSize()
+            this.applyPendingResize()
 
             // the autoClear will clear it to transparent, so need to
             // fill it with a solid color if we've got an autoFill
