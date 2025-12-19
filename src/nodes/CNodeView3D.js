@@ -917,8 +917,10 @@ export class CNodeView3D extends CNodeViewCanvas {
                     height = this.heightPx;
                 }
 
-                // Only resize render targets if dimensions actually changed
-                // This avoids thrashing GPU memory in split-screen mode
+                // Resize render targets to match final renderer dimensions
+                // Note: renderer.setSize() is deferred 100ms, but widthPx/heightPx are current
+                // So render targets use the current dimensions and will match once renderer catches up
+                // Deduping prevents redundant GPU memory allocations during resize gestures
                 if (width !== this.lastRenderTargetWidth || height !== this.lastRenderTargetHeight) {
                     this.renderTargetAntiAliased.setSize(width, height);
                     if (this.effectsEnabled) {
@@ -1524,6 +1526,9 @@ export class CNodeView3D extends CNodeViewCanvas {
     }
 
     renderCanvas(frame) {
+        // Parent class (CNodeViewCanvas) handles canvas sizing via adjustSize() + applyPendingResize()
+        // WebGL renderer resize is deferred via 100ms debounce in changedSize() -> deferredResizeWebGL()
+        // Render targets are resized in renderTargetAndEffects() based on current widthPx/heightPx
         super.renderCanvas(frame)
 
         // Profile: Update Effects

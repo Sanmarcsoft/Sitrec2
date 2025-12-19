@@ -100,14 +100,9 @@ export class CNodeViewCanvas extends CNodeView {
         //     this.canvas.height = this.div.clientHeight
 
         if (changed) {
-
-            if (this.renderer) {
-                // TEMP: Comment out renderer.setSize to isolate flicker
-                // this.renderer.setSize(this.widthPx, this.heightPx, false)
-            }
-
             // Flag that canvas needs resizing, but defer the actual resize until applyPendingResize()
-            // This prevents clearing the canvas mid-render
+            // For WebGL: deferredResizeWebGL() will be called via changedSize() with a 100ms debounce
+            // For 2D canvas: applyPendingResize() will be called immediately before render
             this._pendingCanvasResize = true;
             
             // bit of a patch to redraw the editor/graph, as resizing clears
@@ -191,7 +186,12 @@ class CNodeViewCanvas2D extends CNodeViewCanvas {
         super.renderCanvas(frame)
 
         if (this.visible) {
+            // 1. adjustSize() updates widthPx/heightPx based on container or canvasWidth input
+            //    and sets _pendingCanvasResize flag if dimensions changed
             this.adjustSize()
+            
+            // 2. applyPendingResize() applies the deferred canvas.width/height update
+            //    Setting canvas.width/height clears the canvas, so we do this before rendering
             this.applyPendingResize()
 
             // the autoClear will clear it to transparent, so need to

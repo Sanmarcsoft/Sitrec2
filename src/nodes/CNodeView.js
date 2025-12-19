@@ -425,8 +425,10 @@ class CNodeView extends CNode {
 
     changedSize() {
         if (this.renderer) {
-            // For WebGL renderer, debounce to avoid flickering from repeated setSize() calls
-            // During resize gestures, dimensions change multiple times per frame
+            // For WebGL renderers: debounce renderer.setSize() to avoid flickering
+            // Problem: During window resize drag gestures, widthPx/heightPx change 1-2 pixels every frame
+            // Without debounce: renderer.setSize() called dozens of times/sec, clearing canvas each time -> flicker
+            // Solution: Defer the actual resize 100ms, accumulating changes until gesture settles
             if (this._resizeTimeout) {
                 clearTimeout(this._resizeTimeout);
             }
@@ -435,7 +437,8 @@ class CNodeView extends CNode {
                 this._resizeTimeout = null;
             }, 100);
         } else if (this.canvas) {
-            // For 2D canvas, mark as pending and apply before render to avoid squashing
+            // For 2D canvas: just mark pending, will be applied in renderCanvas() before drawing
+            // This ensures dimensions are correct before rendering without extra debounce delay
             this._pendingCanvasResize = true;
         }
     }
@@ -443,7 +446,11 @@ class CNodeView extends CNode {
     deferredResizeWebGL() {
         if (!this.renderer) return;
         
+        // Called via 100ms debounce after resize gesture settles
+        // Calculates final renderer dimensions and applies resize with deduping to avoid redundant calls
+        
         if (this.in.canvasWidth) {
+            // Custom canvas resolution mode: scale proportionally to maintain aspect ratio
             let long = Math.floor(this.in.canvasWidth.v0);
 
             if (this.widthPx > this.heightPx) {
@@ -454,12 +461,14 @@ class CNodeView extends CNode {
                 var width = Math.floor(long * this.widthPx / this.heightPx);
             }
 
+            // Only call setSize() if dimensions actually changed (avoids redundant WebGL calls)
             if (width !== this._lastRendererWidth || height !== this._lastRendererHeight) {
                 this.renderer.setSize(width, height, false);
                 this._lastRendererWidth = width;
                 this._lastRendererHeight = height;
             }
         } else {
+            // Normal mode: resize to match container dimensions
             const width = this.widthPx;
             const height = this.heightPx;
             
