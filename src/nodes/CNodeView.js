@@ -480,6 +480,30 @@ class CNodeView extends CNode {
         }
     }
 
+    getRenderTargetHeight() {
+        if (!this.in.canvasWidth) {
+            return this.heightPx;
+        }
+        
+        const long = this.in.canvasWidth.v0;
+        let width = this.widthPx;
+        let height = this.heightPx;
+        
+        let rtHeight;
+        if (width > height) {
+            rtHeight = Math.floor(long * height / width);
+        } else {
+            rtHeight = long;
+        }
+        
+        if (ViewMan.isSideBySideMode()) {
+            const sideBySideResolutionScale = 0.7;
+            rtHeight = Math.floor(rtHeight * sideBySideResolutionScale);
+        }
+        
+        return rtHeight;
+    }
+
     adjustPointScale(scale)  {
 
         const view = this;
@@ -521,12 +545,8 @@ class CNodeView extends CNode {
         let veticalCanvasPx;
 
         if (view.in.canvasWidth) {
-            // if we have a fixed canvas width, then the height is the same
-            // as the width, so we can use that
-            veticalCanvasPx = view.canvas.height;
+            veticalCanvasPx = view.getRenderTargetHeight();
         } else {
-            // if we don't have a fixed canvas width, then the height is the same as the width
-            // so we can use that
             veticalCanvasPx = view.heightPx;
         }
 

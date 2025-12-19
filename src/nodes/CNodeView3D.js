@@ -91,8 +91,6 @@ export class CNodeView3D extends CNodeViewCanvas {
 
         super(v);
 
-
-
         this.tileLayers = 0;
         if (this.id === "mainView") {
             this.tileLayers |= LAYER.MASK_MAIN;
@@ -462,9 +460,11 @@ export class CNodeView3D extends CNodeViewCanvas {
         // TODO: this is probably wrong in XR mode with two different fovs
         // so we really need to go in the other direction
 
-        const fov = lookCamera.fov * Math.PI / 180;
-        const focalLength = this.heightPx / (2 * Math.tan(fov / 2));
-        sharedUniforms.cameraFocalLength.value = focalLength;
+        // NOTE: focal length is now set in renderTargetAndEffects() after render targets are sized
+        // Do NOT set it here as it would use heightPx instead of actual render target height
+        // const fov = lookCamera.fov * Math.PI / 180;
+        // const focalLength = this.heightPx / (2 * Math.tan(fov / 2));
+        // sharedUniforms.cameraFocalLength.value = focalLength;
 
         // Update lighting before rendering (essential for proper scene appearance)
         const lightingNode = NodeMan.get("lighting", true);
@@ -917,11 +917,21 @@ export class CNodeView3D extends CNodeViewCanvas {
                     height = this.heightPx;
                 }
 
+                // CRITICAL: Sync renderer size with current dimensions EVERY FRAME
+                // This prevents race conditions where resize gestures cause frames to render 
+                // before the 100ms deferred resize completes. Deduping avoids redundant WebGL calls.
+                if (width !== this._lastSyncedRendererWidth || height !== this._lastSyncedRendererHeight) {
+                    this.renderer.setSize(width, height, false);
+                    this._lastSyncedRendererWidth = width;
+                    this._lastSyncedRendererHeight = height;
+                }
+
                 // Resize render targets to match final renderer dimensions
                 // Note: renderer.setSize() is deferred 100ms, but widthPx/heightPx are current
                 // So render targets use the current dimensions and will match once renderer catches up
                 // Deduping prevents redundant GPU memory allocations during resize gestures
                 if (width !== this.lastRenderTargetWidth || height !== this.lastRenderTargetHeight) {
+
                     this.renderTargetAntiAliased.setSize(width, height);
                     if (this.effectsEnabled) {
                         this.renderTargetA.setSize(width, height);
@@ -929,10 +939,21 @@ export class CNodeView3D extends CNodeViewCanvas {
                     }
                     this.lastRenderTargetWidth = width;
                     this.lastRenderTargetHeight = height;
+
+                    // CRITICAL: Update canvas dimensions to match render target
+                    // Otherwise canvas stays at init size and render target render at wrong resolution
+                    if (this.in.canvasWidth !== undefined) {
+                        this.canvas.width = width;
+                        this.canvas.height = height;
+                    }
                 }
 
                 currentRenderTarget = this.renderTargetAntiAliased;
                 this.renderer.setRenderTarget(currentRenderTarget);
+                
+                // ALWAYS store render target height for use right before rendering
+                // Must be set every frame, not just on resize, or it will have stale values
+                this._rtHeightForFocalLength = height;
                 
                 // [DBG] Clear background
                 if (Globals.renderDebugFlags.dbg_clearBackground) {
@@ -1071,6 +1092,14 @@ export class CNodeView3D extends CNodeViewCanvas {
 
                 // [DBG] Render main scene
                 if (Globals.renderDebugFlags.dbg_renderMainScene) {
+                    // Set focal length immediately before rendering (not earlier, to avoid being overwritten by other views)
+                    if (this._rtHeightForFocalLength !== undefined) {
+                        const fov = this.camera.fov * Math.PI / 180;
+                        const rtHeight = this._rtHeightForFocalLength;
+                        const focalLength = rtHeight / (2 * Math.tan(fov / 2));
+                        sharedUniforms.cameraFocalLength.value = focalLength;
+                    }
+                    
                     // Render the scene to the off-screen canvas or render target
                     this.renderer.render(GlobalScene, this.camera);
                 }
@@ -1529,6 +1558,11 @@ export class CNodeView3D extends CNodeViewCanvas {
         // Parent class (CNodeViewCanvas) handles canvas sizing via adjustSize() + applyPendingResize()
         // WebGL renderer resize is deferred via 100ms debounce in changedSize() -> deferredResizeWebGL()
         // Render targets are resized in renderTargetAndEffects() based on current widthPx/heightPx
+
+
+        // Focal length is now calculated in renderTargetAndEffects() after the actual
+        // render target dimensions are known, ensuring it matches the render target being used
+        
         super.renderCanvas(frame)
 
         // Profile: Update Effects
@@ -1543,12 +1577,6 @@ export class CNodeView3D extends CNodeViewCanvas {
         if (globalProfiler) globalProfiler.push('#1f77b4', 'cameraSetup');
         sharedUniforms.nearPlane.value = this.camera.near;
         sharedUniforms.farPlane.value = this.camera.far;
-
-        // calculate the focal length in pixels
-        // to pass in a a uniform (cameraFocalLength) to the shader
-        const fov = this.camera.fov * Math.PI / 180;
-        const focalLength = this.heightPx / (2 * Math.tan(fov / 2));
-        sharedUniforms.cameraFocalLength.value = focalLength;
 
         //this.camera.aspect = this.widthPx / this.heightPx;
         this.camera.aspect = this.canvas.width / this.canvas.height;
@@ -1633,7 +1661,6 @@ export class CNodeView3D extends CNodeViewCanvas {
         CustomManager.postRenderUpdate(this)
         this.postRenderFunction();
         if (globalProfiler) globalProfiler.pop();
-
     }
 
 
