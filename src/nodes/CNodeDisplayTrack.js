@@ -1,5 +1,5 @@
 //
-import {Globals, guiMenus, NodeMan, Sit} from "../Globals";
+import {Globals, guiMenus, NodeMan, setRenderOne, Sit} from "../Globals";
 import {dispose} from "../threeExt";
 import {LineGeometry} from "three/addons/lines/LineGeometry.js";
 import {LineMaterial} from "three/addons/lines/LineMaterial.js";
@@ -128,6 +128,35 @@ export class CNodeDisplayTrack extends CNode3DGroup {
             // but we have a minimum value to ensure it's visible
             this.guiFolder.setLabelColor(this.in.color.v0, this.minGUIColor);
 
+            this.savedLineColor = null;
+
+            // add mouseover/mouseout handlers to highlight track on folder hover
+            this.guiFolder.$title.addEventListener("mouseover", () => {
+                this.savedLineColor = new Color(this.lineColor);
+                this.lineColor = new Color(1, 1, 1);
+                this.in.color.value = this.lineColor;
+                this.recalculate();
+                if (this.in.dataTrackDisplay !== undefined) {
+                    this.in.dataTrackDisplay.lineColor = this.lineColor;
+                    this.in.dataTrackDisplay.in.color.value = this.lineColor;
+                    this.in.dataTrackDisplay.recalculate();
+                }
+                setRenderOne(true);
+            });
+
+            this.guiFolder.$title.addEventListener("mouseout", () => {
+                if (this.savedLineColor !== null) {
+                    this.lineColor = this.savedLineColor;
+                    this.in.color.value = this.lineColor;
+                    this.recalculate();
+                    if (this.in.dataTrackDisplay !== undefined) {
+                        this.in.dataTrackDisplay.lineColor = this.lineColor;
+                        this.in.dataTrackDisplay.in.color.value = this.lineColor;
+                        this.in.dataTrackDisplay.recalculate();
+                    }
+                    setRenderOne(true);
+                }
+            });
 
             // toggle for visibility with optional linked data track
             this.guiFolder.add(this, "visible").listen().onChange(() => {
