@@ -36,8 +36,6 @@ export class CNodeImageView extends CNodeViewUI {
     renderCanvas() {
         super.renderCanvas(0)
         
-        this.ensureContextScaled();
-        
         if (this.stretchToFit) {
             this.ctx.drawImage(this.image, 0, 0, this.widthPx, this.heightPx)
         } else {

@@ -45,8 +45,6 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
 
 
         super.renderCanvas(frame);
-        
-        this.ensureContextScaled();
 
         if (!this.showStarNames) return
 

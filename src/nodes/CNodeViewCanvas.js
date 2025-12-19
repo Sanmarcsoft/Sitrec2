@@ -165,6 +165,8 @@ class CNodeViewCanvas2D extends CNodeViewCanvas {
     // This should be called before direct drawing operations when the context needs to be scaled
     // It will only re-scale if canvas dimensions have actually changed
     ensureContextScaled() {
+        if (!this.widthPx || !this.heightPx) return;
+        
         const requiredWidth = this.widthPx * this.devicePixelRatio;
         const requiredHeight = this.heightPx * this.devicePixelRatio;
         
@@ -193,6 +195,10 @@ class CNodeViewCanvas2D extends CNodeViewCanvas {
             // 2. applyPendingResize() applies the deferred canvas.width/height update
             //    Setting canvas.width/height clears the canvas, so we do this before rendering
             this.applyPendingResize()
+
+            // 3. Ensure context is properly scaled for high DPI displays
+            //    This handles cases where canvas was just resized or context needs re-scaling
+            this.ensureContextScaled()
 
             // the autoClear will clear it to transparent, so need to
             // fill it with a solid color if we've got an autoFill

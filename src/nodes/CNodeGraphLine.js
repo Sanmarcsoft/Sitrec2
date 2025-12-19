@@ -26,8 +26,6 @@ export class CNodeGraphLine extends CNodeViewUI {
     renderCanvas(f) {
         super.renderCanvas(f)
         
-        this.ensureContextScaled();
-        
         var e = this.overlayView.editor
         var c = this.ctx
 

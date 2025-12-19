@@ -34,10 +34,9 @@ export class CNodeCurveEditorView extends CNodeViewCanvas2D {
     }
 
     modDeserialize(v) {
-//        console.log("CNodeCurveEditorView.modDeserialize", v)
         super.modDeserialize(v);
 
-        // legacy views, we have to force it visible
+        // legacy views, we have to force it to toggle visibility
         this.visible = !v.visible
         this.show(v.visible)
 
@@ -64,8 +63,11 @@ export class CNodeCurveEditorView extends CNodeViewCanvas2D {
     // For example, see AddSpeedGraph (in JetGraphs.js), which sets up three munge nodes
     // for ground speed, air speed, and vertical speed
     renderCanvas(frame) {
+        const wasPendingResize = this._pendingCanvasResize;
         super.renderCanvas(frame)
-        this.ensureContextScaled();
+        if (wasPendingResize) {
+            this.editor.dirty = true;
+        }
         this.editor.update();
     }
 

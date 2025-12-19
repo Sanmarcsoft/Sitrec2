@@ -36,8 +36,6 @@ export class   CNodeMQ9UI extends CNodeViewUI {
 
         // after updating any text (none yet), render the text
         super.renderCanvas(frame)
-        
-        this.ensureContextScaled();
 
         const c = this.ctx;
 

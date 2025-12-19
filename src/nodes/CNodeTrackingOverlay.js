@@ -145,8 +145,6 @@ export class CNodeActiveOverlay extends CNodeViewUI {
     renderCanvas(frame) {
         super.renderCanvas(frame)
         
-        this.ensureContextScaled();
-        
         const ctx = this.ctx
         ctx.strokeStyle = '#FFFFFF';
         ctx.lineWidth = 1.5
@@ -671,8 +669,6 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
 
     renderCanvas(frame) {
         super.renderCanvas(frame) // will be CNodeViewCanvas2D
-        
-        this.ensureContextScaled();
 
         // The tracking overlay is based on integer frames
         frame = Math.floor(frame);

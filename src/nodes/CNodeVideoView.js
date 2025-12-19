@@ -368,8 +368,6 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
         // if no video file, this is just a drop target for now
         if (!this.videoData) return;
-        
-        this.ensureContextScaled();
 
         this.syncAudioWithVideo(frame);
 
