@@ -30,7 +30,7 @@ import {
     Units
 } from "./Globals";
 import {isKeyHeld, toggler} from "./KeyBoardHandler";
-import {ECEFToLLAVD_Sphere, EUSToECEF, EUSToLLA} from "./LLA-ECEF-ENU";
+import {ECEFToLLAVD_Sphere, EUSToECEF, EUSToLLA, LLAToEUS} from "./LLA-ECEF-ENU";
 import {par} from "./par";
 import {GlobalScene} from "./LocalFrame";
 import {refreshLabelsAfterLoading} from "./nodes/CNodeLabels3D";
@@ -49,6 +49,7 @@ import {CNodeTrackGUI} from "./nodes/CNodeControllerTrackGUI";
 import {forceUpdateUIText} from "./nodes/CNodeViewUI";
 import {configParams} from "./login";
 import {showError} from "./showError";
+import {parseObjectInput as parseObjectInputUtil} from "./utils/parseObjectInput";
 import {initializeSettings, SettingsSaver} from "./SettingsManager";
 import {CNodeCurveEditor2} from "./nodes/CNodeCurveEdit2";
 import {createCustomModalWithCopy, saveFilePrompted} from "./FileUtils";
@@ -1356,6 +1357,146 @@ export class CCustomManager {
             if (demoMenu) {
                 alert("Demo mirror created! You can drag it around and use all the controls.\nCheck the console for more details.");
             }
+        }
+    }
+
+    /**
+     * Parse flexible object input string for coordinates and name
+     * Supports formats like:
+     *   "MyObject 37.7749 -122.4194 100m"
+     *   "37.7749, -122.4194, 100m"
+     *   "Landmark 37.7749 -122.4194"
+     *   "37.7749 -122.4194 300ft"
+     * 
+     * @param {string} inputString - The user input string to parse
+     * @returns {Object|null} Parsed object with {name, lat, lon, alt, hasExplicitAlt} or null if invalid
+     */
+    parseObjectInput(inputString) {
+        return parseObjectInputUtil(inputString);
+    }
+
+    /**
+     * Generate the next sequential object name (Object 1, Object 2, etc.)
+     * Checks existing objects to find the highest number and increments
+     * @returns {string} Next sequential object name
+     */
+    getNextObjectName() {
+        let maxNumber = 0;
+        
+        // Iterate through all nodes to find existing "Object N" names
+        const allNodes = NodeMan.getAllNodes();
+        for (const nodeId in allNodes) {
+            const node = allNodes[nodeId];
+            // Check both node.id and node.menuName for "Object N" pattern
+            const names = [node.id, node.menuName].filter(n => n);
+            for (const name of names) {
+                const match = name.match(/^Object (\d+)$/);
+                if (match) {
+                    const number = parseInt(match[1], 10);
+                    if (number > maxNumber) {
+                        maxNumber = number;
+                    }
+                }
+            }
+        }
+        
+        return `Object ${maxNumber + 1}`;
+    }
+
+    /**
+     * Create a 3D object and track from parsed input
+     * @param {string} name - Object name
+     * @param {number} lat - Latitude in decimal degrees
+     * @param {number} lon - Longitude in decimal degrees
+     * @param {number} alt - Altitude in meters (or 0 if not explicit)
+     * @param {boolean} hasExplicitAlt - Whether altitude was explicitly provided
+     * @returns {Object} Object with {objectNode, trackOb, objectID, trackID}
+     */
+    createObjectFromInput(name, lat, lon, alt, hasExplicitAlt) {
+        // If altitude not explicitly provided, use terrain elevation
+        let finalAlt = alt;
+        if (!hasExplicitAlt) {
+            finalAlt = elevationAtLL(lat, lon);
+            console.log(`Using terrain elevation: ${finalAlt}m at ${lat}, ${lon}`);
+        }
+        
+        // Convert LLA to EUS coordinates
+        const eusPosition = LLAToEUS(lat, lon, finalAlt);
+        
+        // Generate unique IDs
+        const objectID = `syntheticObject_${Date.now()}`;
+        const trackID = `syntheticTrack_${Date.now()}`;
+        
+        // Create the 3D object
+        const objectNode = new CNode3DObject({
+            id: objectID,
+            geometry: "sphere",
+            radius: 5,
+            color: 0x808080,
+            material: "phong",
+            position: eusPosition,
+        });
+        
+        // Create track and associate with object
+        const trackOb = TrackManager.addSyntheticTrack({
+            startPoint: eusPosition,
+            name: name,
+            objectID: objectID,
+            editMode: true,
+            color: 0x808080,
+            startFrame: par.frame
+        });
+        
+        console.log(`Created object "${name}" at ${lat}, ${lon}, ${finalAlt}m`);
+        
+        return { objectNode, trackOb, objectID, trackID };
+    }
+
+    /**
+     * Position camera to view a newly created object
+     * Camera will be positioned 100m above and 100m south of the object
+     * @param {number} lat - Object latitude in decimal degrees
+     * @param {number} lon - Object longitude in decimal degrees
+     * @param {number} alt - Object altitude in meters
+     */
+    positionCameraToViewObject(lat, lon, alt) {
+        // Calculate camera position: 100m above and 100m south
+        // South means reducing latitude (approximately -0.0009 degrees per 100m)
+        const metersPerDegreeLat = 111320; // meters per degree latitude (approximate)
+        const southOffsetDegrees = -100 / metersPerDegreeLat;
+        
+        const cameraLat = lat + southOffsetDegrees;
+        const cameraLon = lon;
+        const cameraAlt = alt + 100; // 100m above object
+        
+        // Try to get mainCamera first, fallback to fixedCameraPosition
+        let cameraNode = null;
+        if (NodeMan.exists("mainCamera")) {
+            cameraNode = NodeMan.get("mainCamera");
+        } else if (NodeMan.exists("fixedCameraPosition")) {
+            cameraNode = NodeMan.get("fixedCameraPosition");
+        }
+        
+        if (cameraNode) {
+            // Use setLLA if available (for position nodes)
+            if (typeof cameraNode.setLLA === 'function') {
+                cameraNode.setLLA(cameraLat, cameraLon, cameraAlt);
+                console.log(`Camera positioned at: ${cameraLat}, ${cameraLon}, ${cameraAlt}m (100m south and 100m above object)`);
+            } else {
+                // Fallback: set camera position directly using EUS coordinates
+                const cameraEUS = LLAToEUS(cameraLat, cameraLon, cameraAlt);
+                const objectEUS = LLAToEUS(lat, lon, alt);
+                
+                if (cameraNode.camera) {
+                    cameraNode.camera.position.copy(cameraEUS);
+                    cameraNode.camera.lookAt(objectEUS);
+                    console.log(`Camera positioned and looking at object`);
+                } else if (cameraNode.position) {
+                    cameraNode.position.copy(cameraEUS);
+                }
+            }
+        } else {
+            console.warn("No camera node found (mainCamera or fixedCameraPosition)");
         }
     }
 

@@ -1262,6 +1262,37 @@ async function initializeOnce() {
     addGUIMenu("view", "View").tooltip("Miscellaneous view controls\nLike all menus, this menu can be dragged off the menu bar to make it a floating menu");
     addGUIMenu("time", "Time").tooltip("Time and frame controls\nDragging one time slider past the end will affect the above slider\nNote that the time sliders are UTC");
     addGUIMenu("objects", "Objects").tooltip("3D Objects and their properties\nEach folder is one object. The traverseObject is the object that traverses the lines of sight - i.e. the UAP we are interested in");
+    
+    // Add "Add Object" menu item
+    const objectMenuActions = {
+        addObject: () => {
+            const input = prompt("Enter: [Name] Lat Lon [Alt]\nExamples:\n  MyObject 37.7749 -122.4194 100m\n  37.7749, -122.4194\n  Landmark 37.7749 -122.4194");
+            if (input === null || input.trim() === "") return;
+            
+            const parsed = CustomManager.parseObjectInput(input);
+            if (!parsed) {
+                alert("Invalid input. Please enter coordinates in the format:\n[Name] Lat Lon [Alt]");
+                return;
+            }
+            
+            const name = parsed.name || CustomManager.getNextObjectName();
+            const { objectNode, trackOb } = CustomManager.createObjectFromInput(
+                name, parsed.lat, parsed.lon, parsed.alt, parsed.hasExplicitAlt
+            );
+            
+            CustomManager.positionCameraToViewObject(parsed.lat, parsed.lon, parsed.alt);
+            
+            // Open object editing dialog
+            if (objectNode && objectNode.gui) {
+                objectNode.gui.open();
+            }
+        }
+    };
+    
+    guiMenus.objects.add(objectMenuActions, 'addObject')
+        .name("Add Object")
+        .tooltip("Create a new object at specified coordinates");
+    
     addGUIMenu("satellites", "Satellites").tooltip("Loading and controlling satellites\nThe satellites.\nStarlink, ISS, etc. Controlls for Horizon flares and other satellite effects");
     addGUIMenu("terrain", "Terrain").tooltip("Terrain controls\nThe terrain is the 3D model of the ground. The 'Map' is the 2D image of the ground. The 'Elevation' is the height of the ground above sea level");
     // these four have legacy globals
