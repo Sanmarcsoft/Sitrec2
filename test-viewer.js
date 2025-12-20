@@ -13,6 +13,9 @@ const app = express();
 const port = 3456;
 const exitAfterTests = process.argv.includes('--exit') || process.env.TEST_VIEWER_EXIT === 'true';
 
+app.use('/test-results', express.static(__dirname + '/test-results'));
+app.use('/tests_regression', express.static(__dirname + '/tests_regression'));
+
 app.get('/', (req, res) => {
     res.send(`
 <!DOCTYPE html>
@@ -76,6 +79,31 @@ app.get('/', (req, res) => {
             background: #3e3e42;
             cursor: not-allowed;
         }
+        .image-diff-links {
+            margin-top: 10px;
+            padding: 15px;
+            background: #2d2d30;
+            border-left: 4px solid #f48771;
+            border-radius: 4px;
+        }
+        .image-diff-links h3 {
+            margin: 0 0 10px 0;
+            color: #f48771;
+            font-size: 14px;
+        }
+        .image-diff-links a {
+            display: inline-block;
+            margin-right: 15px;
+            padding: 8px 12px;
+            background: #0e639c;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .image-diff-links a:hover {
+            background: #1177bb;
+        }
     </style>
 </head>
 <body>
@@ -83,7 +111,10 @@ app.get('/', (req, res) => {
         <h1>🧪 Sitrec Test Viewer</h1>
         <div id="status" class="status running">
             <span id="statusText">Connecting...</span>
-            <button id="clearBtn" onclick="clearOutput()">Clear</button>
+            <div>
+                <button id="abortBtn" onclick="abortTests()" style="background: #f48771; margin-right: 8px;">Abort</button>
+                <button id="clearBtn" onclick="clearOutput()">Clear</button>
+            </div>
         </div>
         <div id="output"></div>
     </div>
@@ -91,6 +122,7 @@ app.get('/', (req, res) => {
         const output = document.getElementById('output');
         const status = document.getElementById('status');
         const statusText = document.getElementById('statusText');
+        const abortBtn = document.getElementById('abortBtn');
         let autoScroll = true;
 
         output.addEventListener('scroll', () => {
@@ -140,6 +172,11 @@ app.get('/', (req, res) => {
                 statusText.textContent = hasFailures 
                     ? '❌ Tests completed with failures' 
                     : '✅ All tests passed!';
+                abortBtn.disabled = true;
+            } else if (data.type === 'aborted') {
+                status.className = 'status error';
+                statusText.textContent = '🛑 Tests aborted by user';
+                abortBtn.disabled = true;
             } else if (data.type === 'redirect') {
                 statusText.textContent = '✅ Tests passed! Redirecting to deployed site...';
                 setTimeout(() => {
@@ -149,6 +186,17 @@ app.get('/', (req, res) => {
                 status.className = 'status error';
                 statusText.textContent = '❌ Error running tests';
                 output.innerHTML += '<span class="failed">ERROR: ' + data.message + '</span>\\n';
+            } else if (data.type === 'imageDiff') {
+                // Open tabs with the baseline, actual, and diff images
+                window.open(data.expected, '_blank');
+                window.open(data.actual, '_blank');
+                window.open(data.diff, '_blank');
+                
+                output.innerHTML += '<span class="failed">📸 Opening image comparison tabs...</span>\\n';
+                
+                if (autoScroll) {
+                    output.scrollTop = output.scrollHeight;
+                }
             }
         };
         
@@ -166,6 +214,14 @@ app.get('/', (req, res) => {
 
         function clearOutput() {
             output.innerHTML = '';
+        }
+
+        function abortTests() {
+            if (confirm('Are you sure you want to abort the tests?')) {
+                ws.send(JSON.stringify({ type: 'abort' }));
+                statusText.textContent = '⏳ Aborting tests...';
+                abortBtn.disabled = true;
+            }
         }
     </script>
 </body>
@@ -218,6 +274,23 @@ wss.on('connection', (ws) => {
     
     let totalTests = 0;
     let currentTest = 0;
+    let testProcess = null;
+    let isAborting = false;
+    
+    // Handle incoming messages from client
+    ws.on('message', (message) => {
+        try {
+            const data = JSON.parse(message);
+            if (data.type === 'abort' && testProcess && !isAborting) {
+                console.log('\n🛑 Abort requested by user\n');
+                isAborting = true;
+                testProcess.kill('SIGTERM');
+                ws.send(JSON.stringify({ type: 'aborted' }));
+            }
+        } catch (err) {
+            console.error('Error handling message:', err);
+        }
+    });
     
     // Clean quarantine attributes from snapshots before running tests
     exec('find tests_regression -name "*.png" -exec xattr -d com.apple.quarantine {} \\; 2>/dev/null', { cwd: __dirname }, (err) => {
@@ -225,7 +298,7 @@ wss.on('connection', (ws) => {
     });
     
     // Run tests
-    const testProcess = spawn('npx', ['playwright', 'test'], {
+    testProcess = spawn('npx', ['playwright', 'test'], {
         cwd: __dirname,
         shell: true,
         env: { ...process.env, FORCE_COLOR: '0' }
@@ -260,6 +333,42 @@ wss.on('connection', (ws) => {
                 testName: testName
             }));
         }
+        
+        // Detect screenshot mismatch and extract image paths
+        const lines = text.split('\n');
+        let expectedPath = null;
+        let actualPath = null;
+        let diffPath = null;
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            
+            // Parse Playwright output format:
+            // Expected: tests_regression/.../snapshot.png
+            // Received: test-results/.../actual.png
+            // Diff:     test-results/.../diff.png
+            if (line.startsWith('Expected:')) {
+                expectedPath = line.replace('Expected:', '').trim();
+            } else if (line.startsWith('Received:')) {
+                actualPath = line.replace('Received:', '').trim();
+            } else if (line.startsWith('Diff:')) {
+                diffPath = line.replace('Diff:', '').trim();
+                
+                // When we have all three paths, send them to the client
+                if (expectedPath && actualPath && diffPath) {
+                    ws.send(JSON.stringify({
+                        type: 'imageDiff',
+                        expected: `http://localhost:${port}/${expectedPath}`,
+                        actual: `http://localhost:${port}/${actualPath}`,
+                        diff: `http://localhost:${port}/${diffPath}`
+                    }));
+                    console.log(`\n📸 Opening image comparison tabs:\n  Expected: ${expectedPath}\n  Actual: ${actualPath}\n  Diff: ${diffPath}\n`);
+                    expectedPath = null;
+                    actualPath = null;
+                    diffPath = null;
+                }
+            }
+        }
     });
 
     testProcess.stderr.on('data', (data) => {
@@ -269,6 +378,11 @@ wss.on('connection', (ws) => {
     });
 
     testProcess.on('close', (code) => {
+        if (isAborting) {
+            console.log(`\nTests aborted by user\n`);
+            return;
+        }
+        
         console.log(`\nTests completed with code ${code}\n`);
         ws.send(JSON.stringify({ type: 'complete', code }));
         

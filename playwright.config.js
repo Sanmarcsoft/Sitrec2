@@ -18,6 +18,7 @@ export default defineConfig({
     video: 'retain-on-failure',
     headless: true,
     ignoreHTTPSErrors: true,
+    serviceWorkers: 'allow',
   },
 
   projects: [
@@ -30,6 +31,8 @@ export default defineConfig({
             '--use-gl=swiftshader',
             '--ignore-gpu-blocklist',
             '--enable-webgl',
+            '--disk-cache-dir=./playwright-cache',
+            '--disk-cache-size=1073741824',
           ],
         },
       },

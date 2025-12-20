@@ -1,4 +1,5 @@
 import {expect, test} from '@playwright/test';
+import {takeScreenshotOrCompare} from './snapshot-utils.js';
 
 async function waitForFrames(page, count = 10) {
     await page.evaluate(({ frameCount }) => {
@@ -100,9 +101,8 @@ async function setCheckboxValue(page, folderName, checkboxName, value) {
     }
 }
 
-async function takeSnapshot(page, snapshotName) {
-    await expect(page).toHaveScreenshot(`${snapshotName}.png`, {
-        fullPage: true,
+async function takeSnapshot(page, snapshotName, testInfo) {
+    await takeScreenshotOrCompare(page, snapshotName, testInfo, {
         maxDiffPixels: 100,
     });
 }
@@ -163,7 +163,7 @@ test.describe.serial('UI Interaction Tests - Playwright', () => {
         await sharedPage.close();
     });
 
-    test('should adjust Lighting ambient intensity slider to 1.5', async () => {
+    test('should adjust Lighting ambient intensity slider to 1.5', async ({}, testInfo) => {
         test.setTimeout(60000);
         
         await clickMenuTitle(sharedPage, 'Lighting');
@@ -174,14 +174,14 @@ test.describe.serial('UI Interaction Tests - Playwright', () => {
         await sharedPage.waitForTimeout(500);
         await waitForFrames(sharedPage);
 
-        await takeSnapshot(sharedPage, 'lighting-ambient-intensity-1.5-snapshot');
+        await takeSnapshot(sharedPage, 'lighting-ambient-intensity-1.5-snapshot', testInfo);
 
         await setSliderValue(sharedPage, 'Lighting', 'Ambient Intensity', 0.2);
         await sharedPage.waitForTimeout(100);
         await waitForFrames(sharedPage);
     });
 
-    test('should import LA Features CSV file via File menu', async () => {
+    test('should import LA Features CSV file via File menu', async ({}, testInfo) => {
         test.setTimeout(60000);
         
         await clickMenuTitle(sharedPage, 'File');
@@ -223,7 +223,7 @@ test.describe.serial('UI Interaction Tests - Playwright', () => {
         await sharedPage.waitForTimeout(3000);
         await waitForFrames(sharedPage, 50);
 
-        await takeSnapshot(sharedPage, 'import-la-features-csv-snapshot');
+        await takeSnapshot(sharedPage, 'import-la-features-csv-snapshot', testInfo);
     });
 
     test('should produce same result with Ambient Only as setting sun values to zero', async () => {

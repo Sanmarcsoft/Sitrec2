@@ -16,6 +16,7 @@ tests/__image_snapshots__/
 /pkg/
 /rust/target/
 /test-results/
+/playwright-cache/
 /dist-standalone/
 /dist/
 /dist-serverless/

@@ -1530,7 +1530,8 @@ function legacySetup() {
 async function setupFunctions() {
     resetPar();
 
-    Globals.menuBar.infoGUI.title(Sit.name + " " + process.env.BUILD_VERSION_STRING);
+    const title = urlParams.get("regression") ? "Sitrec Regression Test" : Sit.name + " " + process.env.BUILD_VERSION_STRING;
+    Globals.menuBar.infoGUI.title(title);
 
 
     // just setting visibility of the Save/Load menu items

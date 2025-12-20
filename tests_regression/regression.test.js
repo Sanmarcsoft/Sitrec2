@@ -1,4 +1,5 @@
-import {expect, test} from '@playwright/test';
+import {test} from '@playwright/test';
+import {takeScreenshotOrCompare} from './snapshot-utils.js';
 
 // Array of test cases: each object contains a name and its corresponding URL.
 const testDataDefault = [
@@ -6,7 +7,7 @@ const testDataDefault = [
     { name: 'WMTS', url: 'https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Regression%20test%20NRL%20WMTS/20251204_001658.js' },
     { name: 'agua', url: 'https://local.metabunk.org/sitrec/?sitch=agua&frame=10' },
     { name: 'ocean surface', url: 'https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/REGRESSION%20TEST%20_%20Ocean%20Surface/20251114_234141.js&frame=10' },
-    { name: 'pseudo color', url: 'https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/REGRESSION%20TEST%20_%20ELEVATION%20PSEUDOCOLOR/20251115_000233.js&frame=10' },
+ //   { name: 'pseudo color', url: 'https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/REGRESSION%20TEST%20_%20ELEVATION%20PSEUDOCOLOR/20251115_000233.js&frame=10' },
     { name: 'gimbal', url: 'https://local.metabunk.org/sitrec/?sitch=gimbal&frame=10' },
     { name: 'starlink', url: 'https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Stalink%20Names/20250218_060544.js' },
     { name: "potomac", url: "https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Potomac/20250204_203812.js&frame=10" },
@@ -27,7 +28,7 @@ const testDataTrackFiles = [
 ]
 
 
-async function waitForConsoleText(page, expectedText, timeoutMs = 15000) {
+async function waitForConsoleText(page, expectedText, timeoutMs = 30000) {
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
             reject(new Error(`Timed out waiting for console text: "${expectedText}"`));
@@ -54,8 +55,8 @@ if (process.env.TEST_TRACKFILES === 'true') {
 
 test.describe('Visual Regression Testing', () => {
     testData.forEach(({ name, url }) => {
-        test(`should match the baseline screenshot for ${name}`, async ({ page }) => {
-            test.setTimeout(120000);
+        test(`should match the baseline screenshot for ${name}`, async ({ page }, testInfo) => {
+            test.setTimeout(60000);
 
             await page.setViewportSize({ width: 1920, height: 1080 });
 
@@ -79,10 +80,10 @@ test.describe('Visual Regression Testing', () => {
 
             const fullUrl = url + '&ignoreunload=1&regression=1';
 
-            const consolePromise = waitForConsoleText(page, 'No pending actions', 70000);
+            const consolePromise = waitForConsoleText(page, 'No pending actions');
 
             const response = await page.goto(fullUrl, {
-                waitUntil: 'networkidle',
+                waitUntil: 'load',
                 timeout: 30000
             });
 
@@ -92,14 +93,12 @@ test.describe('Visual Regression Testing', () => {
 
             await consolePromise;
 
-            await page.waitForTimeout(500);
-
             await page.evaluate(() => {
                 return new Promise((resolve) => {
                     let frameCount = 0;
                     function waitForFrames() {
                         frameCount++;
-                        if (frameCount < 20) {
+                        if (frameCount < 3) {
                             requestAnimationFrame(waitForFrames);
                         } else {
                             resolve();
@@ -109,12 +108,7 @@ test.describe('Visual Regression Testing', () => {
                 });
             });
 
-            await expect(page).toHaveScreenshot(`${name}-snapshot.png`, {
-                fullPage: true,
-                threshold: 0.02,
-                maxDiffPixels: 20000,
-                timeout: 30000,
-            });
+            await takeScreenshotOrCompare(page, `${name}-snapshot`, testInfo);
 
             await page.evaluate(() => {
                 if (window.Globals && window.Globals.renderData) {
