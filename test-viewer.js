@@ -12,6 +12,7 @@ const __dirname = dirname(__filename);
 const app = express();
 const port = 3456;
 const exitAfterTests = process.argv.includes('--exit') || process.env.TEST_VIEWER_EXIT === 'true';
+const noRedirect = process.argv.includes('--no-redirect');
 
 app.use('/test-results', express.static(__dirname + '/test-results'));
 app.use('/tests_regression', express.static(__dirname + '/tests_regression'));
@@ -389,18 +390,22 @@ wss.on('connection', (ws) => {
         if (exitAfterTests) {
             // In deploy mode: redirect to deployed site if tests passed, then exit
             if (code === 0) {
-                console.log('Tests passed! Redirecting browser to deployed site...\n');
-                setTimeout(() => {
-                    ws.send(JSON.stringify({ 
-                        type: 'redirect', 
-                        url: 'https://www.metabunk.org/sitrec' 
-                    }));
-                }, 500);
+                if (!noRedirect) {
+                    console.log('Tests passed! Redirecting browser to deployed site...\n');
+                    setTimeout(() => {
+                        ws.send(JSON.stringify({ 
+                            type: 'redirect', 
+                            url: 'https://www.metabunk.org/sitrec' 
+                        }));
+                    }, 500);
+                } else {
+                    console.log('Tests passed!\n');
+                }
                 
                 setTimeout(() => {
                     console.log('Closing test viewer...\n');
                     process.exit(0);
-                }, 4000);
+                }, noRedirect ? 2000 : 4000);
             } else {
                 console.log(`Tests failed with code ${code}. Not redirecting.\n`);
                 setTimeout(() => {
