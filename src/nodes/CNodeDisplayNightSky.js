@@ -356,7 +356,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             },
             {
                 key: "labelFlares",
-                name: "Label Flares",
+                name: "Label Flares Only",
                 object: this.satellites,
                 action: () => setRenderOne(true)
             },

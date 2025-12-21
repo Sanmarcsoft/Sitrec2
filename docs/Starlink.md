@@ -140,3 +140,5 @@ Satellite and star visibility vary with lighting conditions, the weather, and th
 You can also adjust the video itself under Effects->Video adjustment, mostly just for brightness in this case, but some of the other options (like the emboss convolution filter) can be helpful in spotting stars and satellites. 
 
 Star names can be turned on with Show/Hide->Celestial->lookView and mainView Star Names. Satellite names can be toggled in the Satellite menu. Note that it is limited to nearby satellites unless you toggle "Show all labels".
+
+To Display _just_ the flaring satellite labels, use the "Label Flares Only" flag in the satellite menu.
