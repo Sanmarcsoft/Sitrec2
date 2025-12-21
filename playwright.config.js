@@ -3,12 +3,12 @@ import {defineConfig, devices} from '@playwright/test';
 export default defineConfig({
   testDir: './tests_regression',
   testMatch: ['**/ui-playwright.test.js', '**/regression.test.js'],
-  timeout: 60000,
-  fullyParallel: false,
+  timeout: 120000,
+  fullyParallel: true,
   forbidOnly: false,
   retries: 0,
-  workers: 1,
-  maxFailures: 1,
+  workers: 4,
+  maxFailures: undefined,
   reporter: 'list',
   
   use: {

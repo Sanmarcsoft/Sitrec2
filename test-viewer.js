@@ -26,33 +26,24 @@ app.get('/', (req, res) => {
     <style>
         body {
             margin: 0;
-            padding: 20px;
+            padding: 10px;
             font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
             background: #1e1e1e;
             color: #d4d4d4;
         }
         #container {
-            max-width: 1400px;
-            margin: 0 auto;
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
         h1 {
             color: #4ec9b0;
-            margin-bottom: 20px;
-        }
-        #output {
-            background: #252526;
-            border: 1px solid #3e3e42;
-            border-radius: 4px;
-            padding: 15px;
-            height: calc(100vh - 150px);
-            overflow-y: auto;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            font-size: 13px;
-            line-height: 1.5;
+            margin: 0 0 10px 0;
+            font-size: 20px;
         }
         .status {
-            margin-bottom: 15px;
+            margin-bottom: 10px;
             padding: 10px;
             background: #2d2d30;
             border-radius: 4px;
@@ -63,6 +54,38 @@ app.get('/', (req, res) => {
         .status.running { border-left: 4px solid #4ec9b0; }
         .status.complete { border-left: 4px solid #6a9955; }
         .status.error { border-left: 4px solid #f48771; }
+        #workers {
+            display: flex;
+            gap: 8px;
+            flex: 1;
+            overflow: hidden;
+        }
+        .worker-column {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #252526;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .worker-header {
+            background: #2d2d30;
+            padding: 8px;
+            font-weight: bold;
+            font-size: 12px;
+            border-bottom: 1px solid #3e3e42;
+            color: #4ec9b0;
+        }
+        .worker-output {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 11px;
+            line-height: 1.4;
+        }
         .passed { color: #6a9955; }
         .failed { color: #f48771; }
         .test-line { color: #4ec9b0; }
@@ -80,36 +103,11 @@ app.get('/', (req, res) => {
             background: #3e3e42;
             cursor: not-allowed;
         }
-        .image-diff-links {
-            margin-top: 10px;
-            padding: 15px;
-            background: #2d2d30;
-            border-left: 4px solid #f48771;
-            border-radius: 4px;
-        }
-        .image-diff-links h3 {
-            margin: 0 0 10px 0;
-            color: #f48771;
-            font-size: 14px;
-        }
-        .image-diff-links a {
-            display: inline-block;
-            margin-right: 15px;
-            padding: 8px 12px;
-            background: #0e639c;
-            color: white;
-            text-decoration: none;
-            border-radius: 4px;
-            font-size: 13px;
-        }
-        .image-diff-links a:hover {
-            background: #1177bb;
-        }
     </style>
 </head>
 <body>
     <div id="container">
-        <h1>🧪 Sitrec Test Viewer</h1>
+        <h1>🧪 Sitrec Test Viewer (4 Workers)</h1>
         <div id="status" class="status running">
             <span id="statusText">Connecting...</span>
             <div>
@@ -117,18 +115,50 @@ app.get('/', (req, res) => {
                 <button id="clearBtn" onclick="clearOutput()">Clear</button>
             </div>
         </div>
-        <div id="output"></div>
+        <div id="workers">
+            <div class="worker-column">
+                <div class="worker-header">Waiting...</div>
+                <div class="worker-output" id="worker-1"></div>
+            </div>
+            <div class="worker-column">
+                <div class="worker-header">Waiting...</div>
+                <div class="worker-output" id="worker-2"></div>
+            </div>
+            <div class="worker-column">
+                <div class="worker-header">Waiting...</div>
+                <div class="worker-output" id="worker-3"></div>
+            </div>
+            <div class="worker-column">
+                <div class="worker-header">Waiting...</div>
+                <div class="worker-output" id="worker-4"></div>
+            </div>
+        </div>
     </div>
     <script>
-        const output = document.getElementById('output');
         const status = document.getElementById('status');
         const statusText = document.getElementById('statusText');
         const abortBtn = document.getElementById('abortBtn');
-        let autoScroll = true;
-
-        output.addEventListener('scroll', () => {
-            const atBottom = output.scrollHeight - output.scrollTop <= output.clientHeight + 50;
-            autoScroll = atBottom;
+        const workers = [
+            document.getElementById('worker-1'),
+            document.getElementById('worker-2'),
+            document.getElementById('worker-3'),
+            document.getElementById('worker-4')
+        ];
+        
+        const workerHeaders = [
+            document.querySelector('.worker-column:nth-child(1) .worker-header'),
+            document.querySelector('.worker-column:nth-child(2) .worker-header'),
+            document.querySelector('.worker-column:nth-child(3) .worker-header'),
+            document.querySelector('.worker-column:nth-child(4) .worker-header')
+        ];
+        
+        const workerAutoScroll = [true, true, true, true];
+        
+        workers.forEach((worker, idx) => {
+            worker.addEventListener('scroll', () => {
+                const atBottom = worker.scrollHeight - worker.scrollTop <= worker.clientHeight + 50;
+                workerAutoScroll[idx] = atBottom;
+            });
         });
 
         const ws = new WebSocket('ws://localhost:${port}');
@@ -141,8 +171,13 @@ app.get('/', (req, res) => {
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
             
-            if (data.type === 'output') {
+            if (data.type === 'workerName') {
+                const workerIdx = data.worker;
+                const testName = data.name;
+                workerHeaders[workerIdx].textContent = testName;
+            } else if (data.type === 'output') {
                 let line = data.text;
+                const workerIdx = data.worker || 0;
                 
                 // Add syntax highlighting
                 if (line.includes('✓')) {
@@ -153,19 +188,15 @@ app.get('/', (req, res) => {
                     line = '<span class="test-line">' + line + '</span>';
                 }
                 
-                output.innerHTML += line + '\\n';
+                workers[workerIdx].innerHTML += line + '\\n';
                 
-                if (autoScroll) {
-                    output.scrollTop = output.scrollHeight;
+                if (workerAutoScroll[workerIdx]) {
+                    workers[workerIdx].scrollTop = workers[workerIdx].scrollHeight;
                 }
             } else if (data.type === 'status') {
                 if (data.total > 0) {
                     const progress = data.current + '/' + data.total;
-                    if (data.testName) {
-                        statusText.textContent = '🧪 Running test ' + progress + ': ' + data.testName;
-                    } else {
-                        statusText.textContent = '🧪 Running ' + data.total + ' tests...';
-                    }
+                    statusText.textContent = '🧪 Running ' + progress + ' tests on 4 workers...';
                 }
             } else if (data.type === 'complete') {
                 const hasFailures = data.code !== 0;
@@ -186,18 +217,11 @@ app.get('/', (req, res) => {
             } else if (data.type === 'error') {
                 status.className = 'status error';
                 statusText.textContent = '❌ Error running tests';
-                output.innerHTML += '<span class="failed">ERROR: ' + data.message + '</span>\\n';
+                workers[0].innerHTML += '<span class="failed">ERROR: ' + data.message + '</span>\\n';
             } else if (data.type === 'imageDiff') {
-                // Open tabs with the baseline, actual, and diff images
                 window.open(data.expected, '_blank');
                 window.open(data.actual, '_blank');
                 window.open(data.diff, '_blank');
-                
-                output.innerHTML += '<span class="failed">📸 Opening image comparison tabs...</span>\\n';
-                
-                if (autoScroll) {
-                    output.scrollTop = output.scrollHeight;
-                }
             }
         };
         
@@ -214,7 +238,7 @@ app.get('/', (req, res) => {
         };
 
         function clearOutput() {
-            output.innerHTML = '';
+            workers.forEach(worker => worker.innerHTML = '');
         }
 
         function abortTests() {
@@ -277,6 +301,10 @@ wss.on('connection', (ws) => {
     let currentTest = 0;
     let testProcess = null;
     let isAborting = false;
+    const testToWorkerMap = new Map();
+    const workerTestNames = new Map();
+    let nextWorker = 0;
+    let lastSeenWorker = 0;
     
     // Handle incoming messages from client
     ws.on('message', (message) => {
@@ -308,68 +336,73 @@ wss.on('connection', (ws) => {
     testProcess.stdout.on('data', (data) => {
         const text = data.toString();
         process.stdout.write(text);
-        ws.send(JSON.stringify({ type: 'output', text }));
         
-        // Parse test count: "Running 14 tests using 1 worker"
+        // Parse test count: "Running 14 tests using 4 workers"
         const countMatch = text.match(/Running (\d+) tests? using/);
         if (countMatch) {
             totalTests = parseInt(countMatch[1]);
             ws.send(JSON.stringify({ 
                 type: 'status', 
                 current: 0, 
-                total: totalTests,
-                testName: null
+                total: totalTests
             }));
+            // Send this to all workers
+            for (let i = 0; i < 4; i++) {
+                ws.send(JSON.stringify({ type: 'output', text, worker: i }));
+            }
+            return;
         }
         
         // Parse test progress: "  ✓  1 [chromium] › ... › test name (time)"
-        const testMatch = text.match(/[✓✗]\s+(\d+)\s+\[chromium\]\s+›.*?›\s+([^›]+?)(?:\s+\([^)]+\))?$/m);
+        // Try to match "for X" pattern first
+        let testMatch = text.match(/[✓✗]\s+(\d+)\s+\[chromium\].*?for\s+(.+?)(?:\s+\(|$)/);
+        if (!testMatch) {
+            // Fallback: match last part after last ›
+            testMatch = text.match(/[✓✗]\s+(\d+)\s+\[chromium\].*?›\s+([^›]+?)(?:\s+\(|$)/);
+        }
+        
         if (testMatch) {
-            currentTest = parseInt(testMatch[1]);
+            const testNum = parseInt(testMatch[1]);
             const testName = testMatch[2].trim();
+            currentTest = testNum;
+            
+            // Assign worker to test if not already assigned
+            if (!testToWorkerMap.has(testNum)) {
+                testToWorkerMap.set(testNum, nextWorker);
+                workerTestNames.set(nextWorker, testName);
+                
+                // Send worker name update
+                ws.send(JSON.stringify({ 
+                    type: 'workerName', 
+                    worker: nextWorker,
+                    name: testName
+                }));
+                
+                nextWorker = (nextWorker + 1) % 4;
+            }
+            
+            lastSeenWorker = testToWorkerMap.get(testNum);
+            
             ws.send(JSON.stringify({ 
                 type: 'status', 
                 current: currentTest, 
-                total: totalTests,
-                testName: testName
+                total: totalTests
             }));
-        }
-        
-        // Detect screenshot mismatch and extract image paths
-        const lines = text.split('\n');
-        let expectedPath = null;
-        let actualPath = null;
-        let diffPath = null;
-        
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
             
-            // Parse Playwright output format:
-            // Expected: tests_regression/.../snapshot.png
-            // Received: test-results/.../actual.png
-            // Diff:     test-results/.../diff.png
-            if (line.startsWith('Expected:')) {
-                expectedPath = line.replace('Expected:', '').trim();
-            } else if (line.startsWith('Received:')) {
-                actualPath = line.replace('Received:', '').trim();
-            } else if (line.startsWith('Diff:')) {
-                diffPath = line.replace('Diff:', '').trim();
-                
-                // When we have all three paths, send them to the client
-                if (expectedPath && actualPath && diffPath) {
-                    ws.send(JSON.stringify({
-                        type: 'imageDiff',
-                        expected: `http://localhost:${port}/${expectedPath}`,
-                        actual: `http://localhost:${port}/${actualPath}`,
-                        diff: `http://localhost:${port}/${diffPath}`
-                    }));
-                    console.log(`\n📸 Opening image comparison tabs:\n  Expected: ${expectedPath}\n  Actual: ${actualPath}\n  Diff: ${diffPath}\n`);
-                    expectedPath = null;
-                    actualPath = null;
-                    diffPath = null;
-                }
-            }
+            ws.send(JSON.stringify({ type: 'output', text, worker: lastSeenWorker }));
+            return;
         }
+        
+        // For summary lines (X passed, X failed), send to all workers
+        if (text.match(/\d+\s+(passed|failed)/)) {
+            for (let i = 0; i < 4; i++) {
+                ws.send(JSON.stringify({ type: 'output', text, worker: i }));
+            }
+            return;
+        }
+        
+        // For other output, send to the last worker that had activity
+        ws.send(JSON.stringify({ type: 'output', text, worker: lastSeenWorker }));
     });
 
     testProcess.stderr.on('data', (data) => {
@@ -381,6 +414,12 @@ wss.on('connection', (ws) => {
     testProcess.on('close', (code) => {
         if (isAborting) {
             console.log(`\nTests aborted by user\n`);
+            if (exitAfterTests) {
+                setTimeout(() => {
+                    console.log('Closing test viewer...\n');
+                    process.exit(1);
+                }, 2000);
+            }
             return;
         }
         
@@ -409,6 +448,7 @@ wss.on('connection', (ws) => {
             } else {
                 console.log(`Tests failed with code ${code}. Not redirecting.\n`);
                 setTimeout(() => {
+                    console.log('Closing test viewer...\n');
                     process.exit(code);
                 }, 2000);
             }
