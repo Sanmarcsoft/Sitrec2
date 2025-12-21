@@ -1,13 +1,14 @@
 import {CNode3DGroup} from "./CNode3DGroup";
 import * as LAYER from "../LayerMasks";
-import {dispose, propagateLayerMaskObject} from "../threeExt";
+import {clampAboveGround, dispose, intersectMSL, propagateLayerMaskObject} from "../threeExt";
 import {LineGeometry} from "three/addons/lines/LineGeometry.js";
 import {wgs84} from "../LLA-ECEF-ENU";
 import {Line2} from "three/addons/lines/Line2.js";
 import {makeMatLine} from "../MatLines";
 import {perpendicularVector} from "../threeUtils";
 import {Globals, guiShowHide, setRenderOne} from "../Globals";
-import {BufferAttribute, BufferGeometry, Mesh, MeshBasicMaterial, Raycaster, Vector3} from "three";
+import {BufferAttribute, BufferGeometry, Mesh, MeshBasicMaterial, Vector3} from "three";
+import {Raycaster} from "three/src/core/Raycaster";
 
 export class CNodeDisplayMoonShadow extends CNode3DGroup {
     constructor(v) {
@@ -152,6 +153,8 @@ export class CNodeDisplayMoonShadow extends CNode3DGroup {
         return moonPos.clone().add(shadowDir.clone().multiplyScalar(t));
     }
 
+
+
     buildSegmentedCone(moonCenter, earthIntersection, perpendicular, otherPerpendicular, isUmbra, material, geometryProp, meshProp, renderOrder, sunMoonDistance) {
         const circleSegments = 32;
         const geometry = new BufferGeometry();
@@ -171,12 +174,51 @@ export class CNodeDisplayMoonShadow extends CNode3DGroup {
             
             const center = moonCenter.clone().add(shadowDir.clone().multiplyScalar(distanceFromMoon));
             
-            for (let i = 0; i < circleSegments; i++) {
-                const theta = (i / circleSegments) * 2 * Math.PI;
-                const point = center.clone();
-                point.add(perpendicular.clone().multiplyScalar(Math.cos(theta) * radius));
-                point.add(otherPerpendicular.clone().multiplyScalar(Math.sin(theta) * radius));
-                vertices.push(point.x, point.y, point.z);
+            if (seg === this.numSegments) {
+                const mslPoints = [];
+                let maxDistance = 0;
+                
+                for (let i = 0; i < circleSegments; i++) {
+                    const theta = (i / circleSegments) * 2 * Math.PI;
+                    let point = center.clone();
+                    point.add(perpendicular.clone().multiplyScalar(Math.cos(theta) * radius));
+                    point.add(otherPerpendicular.clone().multiplyScalar(Math.sin(theta) * radius));
+                    
+                    const rayDir = point.clone().sub(moonCenter).normalize();
+                    const mslPoint = intersectMSL(moonCenter, rayDir);
+                    mslPoints.push(mslPoint);
+                    
+                    if (mslPoint) {
+                        const distance = moonCenter.distanceTo(mslPoint);
+                        maxDistance = Math.max(maxDistance, distance);
+                    }
+                }
+                
+                for (let i = 0; i < circleSegments; i++) {
+                    const theta = (i / circleSegments) * 2 * Math.PI;
+                    let point = center.clone();
+                    point.add(perpendicular.clone().multiplyScalar(Math.cos(theta) * radius));
+                    point.add(otherPerpendicular.clone().multiplyScalar(Math.sin(theta) * radius));
+                    
+                    if (mslPoints[i]) {
+                        point = clampAboveGround(mslPoints[i], 100);
+                    } else {
+                        const rayDir = point.clone().sub(moonCenter).normalize();
+                        point = moonCenter.clone().add(rayDir.multiplyScalar(maxDistance));
+                        point = clampAboveGround(point, 100);
+                    }
+                    
+                    vertices.push(point.x, point.y, point.z);
+                }
+            } else {
+                for (let i = 0; i < circleSegments; i++) {
+                    const theta = (i / circleSegments) * 2 * Math.PI;
+                    let point = center.clone();
+                    point.add(perpendicular.clone().multiplyScalar(Math.cos(theta) * radius));
+                    point.add(otherPerpendicular.clone().multiplyScalar(Math.sin(theta) * radius));
+                    
+                    vertices.push(point.x, point.y, point.z);
+                }
             }
         }
         
@@ -257,38 +299,56 @@ export class CNodeDisplayMoonShadow extends CNode3DGroup {
             const line_points = [];
             for (let i = 0; i < segments; i++) {
                 const theta = i / (segments - 1) * 2 * Math.PI;
-                const point = earthIntersection.clone();
+                let point = earthIntersection.clone();
                 point.add(perpendicular.clone().multiplyScalar(Math.cos(theta) * umbraRadius));
                 point.add(otherPerpendicular.clone().multiplyScalar(Math.sin(theta) * umbraRadius));
-                line_points.push(point.x, point.y, point.z);
+                
+                const rayDir = point.clone().sub(moonCenter).normalize();
+                const mslPoint = intersectMSL(moonCenter, rayDir);
+                
+                if (mslPoint) {
+                    point = clampAboveGround(mslPoint, 100);
+                    line_points.push(point.x, point.y, point.z);
+                }
             }
 
-            const umbraGeometry = new LineGeometry();
-            umbraGeometry.setPositions(line_points);
-            this.umbraGeometry = umbraGeometry;
-            this.umbraLine = new Line2(this.umbraGeometry, this.umbraMaterial);
-            this.umbraLine.computeLineDistances();
-            this.umbraLine.scale.setScalar(1);
-            this.group.add(this.umbraLine);
+            if (line_points.length > 0) {
+                const umbraGeometry = new LineGeometry();
+                umbraGeometry.setPositions(line_points);
+                this.umbraGeometry = umbraGeometry;
+                this.umbraLine = new Line2(this.umbraGeometry, this.umbraMaterial);
+                this.umbraLine.computeLineDistances();
+                this.umbraLine.scale.setScalar(1);
+                this.group.add(this.umbraLine);
+            }
         }
 
         {
             const line_points = [];
             for (let i = 0; i < segments; i++) {
                 const theta = i / (segments - 1) * 2 * Math.PI;
-                const point = earthIntersection.clone();
+                let point = earthIntersection.clone();
                 point.add(perpendicular.clone().multiplyScalar(Math.cos(theta) * penumbraRadius));
                 point.add(otherPerpendicular.clone().multiplyScalar(Math.sin(theta) * penumbraRadius));
-                line_points.push(point.x, point.y, point.z);
+                
+                const rayDir = point.clone().sub(moonCenter).normalize();
+                const mslPoint = intersectMSL(moonCenter, rayDir);
+                
+                if (mslPoint) {
+                    point = clampAboveGround(mslPoint, 100);
+                    line_points.push(point.x, point.y, point.z);
+                }
             }
 
-            const penumbraGeometry = new LineGeometry();
-            penumbraGeometry.setPositions(line_points);
-            this.penumbraGeometry = penumbraGeometry;
-            this.penumbraLine = new Line2(this.penumbraGeometry, this.penumbraMaterial);
-            this.penumbraLine.computeLineDistances();
-            this.penumbraLine.scale.setScalar(1);
-            this.group.add(this.penumbraLine);
+            if (line_points.length > 0) {
+                const penumbraGeometry = new LineGeometry();
+                penumbraGeometry.setPositions(line_points);
+                this.penumbraGeometry = penumbraGeometry;
+                this.penumbraLine = new Line2(this.penumbraGeometry, this.penumbraMaterial);
+                this.penumbraLine.computeLineDistances();
+                this.penumbraLine.scale.setScalar(1);
+                this.group.add(this.penumbraLine);
+            }
         }
 
         propagateLayerMaskObject(this.group);
