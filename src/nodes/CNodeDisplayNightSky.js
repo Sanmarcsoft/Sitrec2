@@ -20,6 +20,7 @@ import {par} from "../par";
 import SpriteText from '../js/three-spritetext';
 import {CNodeDisplayGlobeCircle} from "./CNodeDisplayGlobeCircle";
 import {CNodeDisplayEarthShadow} from "./CNodeDisplayEarthShadow";
+import {CNodeDisplayMoonShadow} from "./CNodeDisplayMoonShadow";
 import {assert} from "../assert.js";
 import {intersectSphere2, V3} from "../threeUtils";
 import {getCelestialDirectionFromRaDec, getJulianDate, getSiderealTime, raDecToAltAz} from "../CelestialMath";
@@ -285,6 +286,15 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             fromSun: this.satellites.fromSun.clone(),
             gui: this.celestialGUI,
             visible: Sit.showEarthShadow,
+        });
+
+        if (Sit.showMoonShadow === undefined)
+            Sit.showMoonShadow = false;
+
+        this.moonShadow = new CNodeDisplayMoonShadow({
+            id: "moonShadow",
+            gui: this.celestialGUI,
+            visible: Sit.showMoonShadow,
         });
 
         this.showFlareRegion = Sit.showFlareRegion;
@@ -1418,8 +1428,23 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             Globals.toSun = this.satellites.toSun.clone()
 
             this.updateFlareRegion(ra, dec, date);
+        }
 
-
+        // Handle Moon-specific calculations for shadow
+        if (planet === "Moon") {
+            const eusDir = getCelestialDirectionFromRaDec(ra, dec, date)
+            
+            Globals.toMoon = eusDir.clone().normalize()
+            Globals.fromMoon = Globals.toMoon.clone().negate()
+            
+            const eusOriginObserver = new Astronomy.Observer(Sit.lat, Sit.lon, 0);
+            const moonFromOrigin = Astronomy.Equator(planet, date, eusOriginObserver, false, true);
+            const moonDistance = moonFromOrigin.dist * 149597870700;
+            const moonRA = (moonFromOrigin.ra) / 24 * 2 * Math.PI;
+            const moonDec = radians(moonFromOrigin.dec);
+            const moonDir = getCelestialDirectionFromRaDec(moonRA, moonDec, date);
+            
+            Globals.moonPos = moonDir.clone().multiplyScalar(moonDistance)
         }
     }
 
