@@ -30,6 +30,7 @@ export class CSatellite {
         this.showSatelliteGround = options.showSatelliteGround ?? false;
         this.showSatelliteNames = false;
         this.showSatelliteNamesMain = false;
+        this.labelFlares = false;
         this.showSatelliteList = "";
 
         // TLE Data

@@ -355,6 +355,12 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                 action: () => this.updateSatelliteNamesVisibility()
             },
             {
+                key: "labelFlares",
+                name: "Label Flares",
+                object: this.satellites,
+                action: () => setRenderOne(true)
+            },
+            {
                 key: "showAllLabels",
                 name: "Show all Labels",
                 object: this,
@@ -1102,8 +1108,10 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                             }
 
                             satData.hasSunArrow = true;
+                            satData.isFlaring = true;
                         } else {
                             this.satellites.removeSatSunArrows(satData);
+                            satData.isFlaring = false;
 
                             // do the scale again to incorporate al
                             // satData.sprite.scale.set(scale, scale, 1);
@@ -1113,7 +1121,10 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
 
                         this.satellites.removeSatSunArrows(satData);
+                        satData.isFlaring = false;
                     }
+                } else {
+                    satData.isFlaring = false;
                 }
 
 
@@ -1166,7 +1177,9 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             if (satData.visible
                 && !satData.invalidPosition
                 && (satData.userFiltered || satData.eus.distanceTo(lookPos) < this.satellites.arrowRange * 1000)
-                && (satData.lastScale > 0 || this.showAllLabels) // if the scale is 0, we don't show the label, unless showAllLabels is true
+                && ( (satData.lastScale > 0 && !this.satellites.labelFlares)  // if the scale is > 0, we show the label if not labelFlares
+                    || this.showAllLabels
+                    || (this.satellites.labelFlares && satData.isFlaring)) // if the scale is 0, we don't show the label, unless showAllLabels is true or labelFlares is enabled and satellite is flaring
             ) {
                 //if (satData.visible) {
                 if (!satData.spriteText) {
