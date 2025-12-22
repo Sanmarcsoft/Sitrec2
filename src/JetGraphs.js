@@ -11,7 +11,7 @@ import {getGlareAngleFromFrame} from "./JetUtils";
 // add a graph of the subtended size of the target
 // as a percentage of its size at the start of the video
 export function AddSizePercentageGraph() {
-    var sizePercentGraphNode = new CNodeCurveEditor({
+    const sizePercentGraphNode = new CNodeCurveEditor({
         id: "sizePercentGraph",
         left: 0.45, top: 0, width: -1, height: .25,
 
@@ -76,9 +76,9 @@ minX: 0, minY: 0, maxY: 120,
 // generic graph that's customizable with a munge function
 function addGenericJetGraph(id, yLabel, mungeInputs, windowParams, editorParams, mungeFunction, frames) {
 
-    var frames = NodeMan.get(mungeInputs.cameraTrack).frames
+    const framesCount = NodeMan.get(mungeInputs.cameraTrack).frames
 
-    var targetDistanceGraphNode = new CNodeCurveEditor({
+    const targetDistanceGraphNode = new CNodeCurveEditor({
         id: id,
 
         ...windowDefaults,
@@ -87,7 +87,7 @@ function addGenericJetGraph(id, yLabel, mungeInputs, windowParams, editorParams,
 
         editorConfig: {
             ...editorConfigDefaults,
-            maxX: frames,
+            maxX: framesCount,
             yLabel: yLabel,
             ...editorParams,
         },
@@ -119,8 +119,8 @@ function addGenericJetGraph(id, yLabel, mungeInputs, windowParams, editorParams,
 export function AddTargetDistanceGraph(mungeInputs, windowParams={}, editorParams={}) {
     mungeInputs ??= defaultMungeInputs
 
-    var mungeFunction = function (f) {
-        let d0 = this.in.targetTrack.p(f)
+    const mungeFunction = function (f) {
+        const d0 = this.in.targetTrack.p(f)
             .sub(this.in.cameraTrack.p(f)).length()
         return NMFromMeters(d0)
     }
@@ -138,11 +138,11 @@ export function AddTailAngleGraph(mungeInputs, windowParams={}, editorParams={})
         wind: "targetWind",
     }
 
-    var mungeFunction = function (f) {
+    const mungeFunction = function (f) {
         if (f === 0) f = 1;
-        var toTarget = this.in.targetTrack.p(f)
+        const toTarget = this.in.targetTrack.p(f)
             .sub(this.in.cameraTrack.p(f))
-        var targetVel = this.in.targetTrack.p(f)
+        const targetVel = this.in.targetTrack.p(f)
             .sub(this.in.targetTrack.p(f - 1))
             .sub(this.in.wind.p(f))
         toTarget.normalize()
@@ -189,7 +189,7 @@ export function AddSpeedGraph(source, caption, minY = 0, maxY = 1000, left = 0.6
         }
     }
 
-    var speedGraphNode = new CNodeCurveEditor({
+    const speedGraphNode = new CNodeCurveEditor({
         id: "speedGraph_"+source,
         left: left, top: top, width: width, height: height,
 
@@ -324,7 +324,7 @@ export function AddSpeedGraph(source, caption, minY = 0, maxY = 1000, left = 0.6
 */
 
     if (Sit.name.startsWith("gimbal") && Sit.name !== "gimbalsr71") {
-        var speedGraphNodeFleet = new CNodeCurveEditor({
+        const speedGraphNodeFleet = new CNodeCurveEditor({
             id: "speedGraphFleet",
             left: 0.60, top: 0.25, width: -1, height: .25,
 
@@ -379,7 +379,7 @@ export function AddSpeedGraph(source, caption, minY = 0, maxY = 1000, left = 0.6
 }
 
 export function AddAltitudeGraph(min, max, source = "LOSTraverseSelect", left  = 0.73, top =0, width = -1, height =.25, yStep=5000, xStep=200, dynamicY = false) {
-    var AltitudeGraphNode = new CNodeCurveEditor({
+    const AltitudeGraphNode = new CNodeCurveEditor({
         id: "altitudeGraph",
         left: left, top: top, width: width, height: height,
 
@@ -450,7 +450,7 @@ export function AddValueGraph(v) {
     const visible = v.visible ?? true;
 
 
-    var GraphNode = new CNodeCurveEditor({
+    const GraphNode = new CNodeCurveEditor({
         id: id,
         name: name,
         left: left, top: top, width: width, height: height,
@@ -512,8 +512,7 @@ export function AddGenericNodeGraph(title, yAxis, nodes, params={}, lines=[]) {
 
     const munges = []
     // make the munge nodes
-    for (var j=0;j<nodes.length;j++) {
-        //export function makeMunge(node, index1, index2, scale=1) {
+    for (let j=0;j<nodes.length;j++) {
         munges.push(makeMunge(nodes[j][2], nodes[j][3], nodes[j][4], nodes[j][1] ))
     }
 
@@ -523,15 +522,15 @@ export function AddGenericNodeGraph(title, yAxis, nodes, params={}, lines=[]) {
     assert (frames > 0,"Generic node graph with zero frames in first munge node "+munges[0].id)
 
 
-    var min = 1000000000000
-    var max = -100000000000
-    var minFrame = 0;
-    var maxFrame = 0;
-    for (var j=0;j<nodes.length;j++) {
-        var node = munges[j]
+    let min = 1000000000000
+    let max = -100000000000
+    let minFrame = 0;
+    let maxFrame = 0;
+    for (let j=0;j<nodes.length;j++) {
+        const node = munges[j]
 
-        for (var i = 0; i < frames; i++) {
-            var value = node.v(i)
+        for (let i = 0; i < frames; i++) {
+            const value = node.v(i)
             if (value < min) {
                 min = value;
                 minFrame = i
@@ -542,12 +541,11 @@ export function AddGenericNodeGraph(title, yAxis, nodes, params={}, lines=[]) {
                 maxFrame = i;
             }
         }
-//        console.log(">>>>>>>>>Node "+j+" min="+min +" max="+max +" minFrame="+minFrame+" maxFrame="+maxFrame)
     }
 
-    var inputs = {}
-    var compareNumber = 1;
-    for (var j=0;j<nodes.length;j++) {
+    const inputs = {}
+    let compareNumber = 1;
+    for (let j=0;j<nodes.length;j++) {
 
         inputs["compare"+compareNumber++] = new CNodeGraphSeries({
                 id: "genericGraph_"+(nodes[j][2].id !== undefined?nodes[j][2].id:nodes[j][2]),
@@ -586,6 +584,6 @@ export function AddGenericNodeGraph(title, yAxis, nodes, params={}, lines=[]) {
 
     Object.assign(defaults, params)
 
-    var GenericGraphNode = new CNodeCurveEditor(defaults)
+    const GenericGraphNode = new CNodeCurveEditor(defaults)
     GenericGraphNode.editor.disable = true;
 }

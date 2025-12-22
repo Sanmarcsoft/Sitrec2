@@ -13,9 +13,8 @@ import {findStep} from "./utils";
 
 
 function remove(arr, item) {
-    var i;
-    for(i = arr.length; i--;) {
-        if(arr[i] === item) {
+    for (let i = arr.length; i--;) {
+        if (arr[i] === item) {
             arr.splice(i, 1);
         }
     }
@@ -35,21 +34,14 @@ function Point(x, y) {
 
 // given an array of X,Y,X,Y,X,Y,... points, sort them into Y ascending order
 function sortPointsY(p) {
-  //  for a simple array of points you can just do this
-  //  p.sort(function(a,b) {return a.y-b.y;});
-  // but we want to sort only on the curve points, not control points
-
-    var change = false;
-    // just an ad-hoc head sort.
-    var len = p.length;
-    var start = 0;
+    let change = false;
+    const len = p.length;
+    let start = 0;
     while (start < p.length-2){
-        var sorted = true;
-        var n = start;
+        let n = start;
         while (n<len) {
             if (p[n].y < p[start].y ) {
-            //    console.log ("swapping "+start+" and "+n)
-                var t = p[n];
+                let t = p[n];
                 p[n] = p[start]
                 p[start] = t;
                 t = p[n+1];
@@ -66,21 +58,14 @@ function sortPointsY(p) {
 
 // given an array of X,Y,X,Y,X,Y,... points, sort them into Y ascending order
 function sortPointsX(p) {
-    //  for a simple array of points you can just do this
-    //  p.sort(function(a,b) {return a.y-b.y;});
-    // but we want to sort only on the curve points, not control points
-
-    var change = false;
-    // just an ad-hoc head sort.
-    var len = p.length;
-    var start = 0;
+    let change = false;
+    const len = p.length;
+    let start = 0;
     while (start < p.length-2){
-        var sorted = true;
-        var n = start;
+        let n = start;
         while (n<len) {
             if (p[n].x < p[start].x ) {
-                //    console.log ("swapping "+start+" and "+n)
-                var t = p[n];
+                let t = p[n];
                 p[n] = p[start]
                 p[start] = t;
                 t = p[n+1];
@@ -99,7 +84,7 @@ function sortPointsX(p) {
 
 // Given two points a and b, and a time t (0 .. 1) calculate the intermediate point that's t along the line a->b
 function tween(a,b,t) {
-    var f = new Point(a.x,a.y);
+    const f = new Point(a.x,a.y);
     f.x += (b.x-a.x)*t;
     f.y += (b.y-a.y)*t;
     return f;
@@ -111,8 +96,8 @@ function tween(a,b,t) {
 // (like for finding t for a particular y value, you don't need all those x values)
 function BezierPoint(ps, t) {
 
-    var segments = Math.floor(ps.length/2) - 1;  // 4 points is one segment, 6 points is two
-    var seg = Math.floor(segments * t);
+    const segments = Math.floor(ps.length/2) - 1;  // 4 points is one segment, 6 points is two
+    let seg = Math.floor(segments * t);
 
     // patch for t === 1.00000000
     // would put us past the last segment, so just stay in it. Math works fine.
@@ -123,30 +108,28 @@ function BezierPoint(ps, t) {
     t = (t - seg/segments)*segments;  // so
     // for point naming, see: http://www.deluge.co/sites/deluge.co/files/benzier.gif
 
- //   console.log ("Seg= "+seg+" t="+t)
-
-    var p0 = ps[seg*2];   // first point
-    var p1 = ps[seg*2+1]; // first control
-    var p2 = ps[seg*2+3]; // second control
-    var p3 = ps[seg*2+2]; // second point
+    const p0 = ps[seg*2];   // first point
+    let p1 = ps[seg*2+1]; // first control
+    const p2 = ps[seg*2+3]; // second control
+    const p3 = ps[seg*2+2]; // second point
 
     if (seg>0) {
         p1 = new Point( 2 * p0.x - p1.x, 2 * p0.y - p1.y);
     }
 
 
-    var p01 = tween(p0,p1,t);
-    var p12 = tween(p1,p2,t);
-    var p23 = tween(p2,p3,t);
-    var p012 = tween(p01,p12,t);
-    var p123 = tween(p12,p23,t);
+    const p01 = tween(p0,p1,t);
+    const p12 = tween(p1,p2,t);
+    const p23 = tween(p2,p3,t);
+    const p012 = tween(p01,p12,t);
+    const p123 = tween(p12,p23,t);
     return tween(p012,p123,t);
 }
 
 
 function BezierXfromY(ps, y) {
 
-    var l = ps.length -2;
+    const l = ps.length -2;
     // check first for y being off the end off the curve
     // assumes the points are sorted in Y-ascending order
     if (y < ps[0].y)
@@ -158,17 +141,14 @@ function BezierXfromY(ps, y) {
     // we now know that there will be a value we can return
 
     // we start in the middle of the curve, if Y is close enough then return x
-    var t;
     // t is the midpoint of a and b
     // we adjust t by adjusting a and b t
-    var a = 0;
-    var b = 1;
-    var x;
-    var maxLoops =100;
+    let a = 0;
+    let b = 1;
+    let maxLoops =100;
     while (true) {
-        var t = (a+b)/2;
-        var p = BezierPoint(ps, t);
-        //console.log("t = "+t+" p=("+p.x+","+p.y+") y="+y)
+        const t = (a+b)/2;
+        const p = BezierPoint(ps, t);
 
         if (maxLoops === 0 || Math.abs(y-p.y) < 0.001) {
             return p.x;
@@ -184,7 +164,7 @@ function BezierXfromY(ps, y) {
 
 function BezierYfromX(ps, x) {
 
-    var l = ps.length -2;
+    const l = ps.length -2;
     // check first for y being off the end off the curve
     // assumes the points are sorted in Y-ascending order
     if (x < ps[0].x)
@@ -196,17 +176,14 @@ function BezierYfromX(ps, x) {
     // we now know that there will be a value we can return
 
     // we start in the middle of the curve, if Y is close enough then return x
-    var t;
     // t is the midpoint of a and b
     // we adjust t by adjusting a and b t
-    var a = 0;
-    var b = 1;
-    var x;
-    var maxLoops =100;
+    let a = 0;
+    let b = 1;
+    let maxLoops =100;
     while (true) {
-        var t = (a+b)/2;
-        var p = BezierPoint(ps, t);
-        //console.log("t = "+t+" p=("+p.x+","+p.y+") y="+y)
+        const t = (a+b)/2;
+        const p = BezierPoint(ps, t);
 
         if (maxLoops === 0 || Math.abs(x-p.x) < 0.00000001) {
             return p.y;
@@ -242,9 +219,9 @@ class MetaBezierCurve {
 
     recalculate() {
         if (this.useRegression) {
-            var data = []
-            var n = 0;
-            for (var i=0;i<this.ps.length;i+=2) {
+            const data = []
+            let n = 0;
+            for (let i=0;i<this.ps.length;i+=2) {
                 data.push([this.ps[i].x,this.ps[i].y])
                 n++
             }
@@ -258,10 +235,10 @@ class MetaBezierCurve {
 
     update() {
 
-        var len = this.ps.length;
+        const len = this.ps.length;
 
         // clamp to three digits of precision
-        for (var i = 0; i < len; i++) {
+        for (let i = 0; i < len; i++) {
             this.ps[i].x = +this.ps[i].x.toFixed(3)
             this.ps[i].y = +this.ps[i].y.toFixed(3)
         }
@@ -282,9 +259,9 @@ class MetaBezierCurve {
             return this.ps[0].x + (y - this.ps[0].y) * this.topGradient;
         }
 
-        var l = this.ps.length;
+        const l = this.ps.length;
         if (y > this.ps[l - 2].y) {
-            var x = this.ps[l - 2].x + (y - this.ps[l - 2].y) * this.topGradient;
+            const x = this.ps[l - 2].x + (y - this.ps[l - 2].y) * this.topGradient;
             return x;
         } else {
             return BezierXfromY(this.ps, y);
@@ -300,9 +277,9 @@ class MetaBezierCurve {
     }
 
     setPointsFromFlatArray(a) {
-        var l = a.length;
+        const l = a.length;
         this.ps = []
-        for (var i = 0; i < l; i += 2) {
+        for (let i = 0; i < l; i += 2) {
             this.ps.push(new Point(a[i], a[i + 1]));
         }
         if (this.sortedY) {
@@ -311,9 +288,9 @@ class MetaBezierCurve {
     }
 
     getProfile() {
-        var profile = []
-        var len = this.ps.length;
-        for (var i = 0; i < len; i++) {
+        const profile = []
+        const len = this.ps.length;
+        for (let i = 0; i < len; i++) {
             profile[i * 2] = this.ps[i].x
             profile[i * 2 + 1] = this.ps[i].y
         }
@@ -364,17 +341,15 @@ class MetaBezierCurveEditor {
         this.yLabel = p.yLabel;
         this.yStep = p.yStep;
 
-        var rangeY = p.maxY - p.minY;
-        var minYStep = Math.floor(rangeY / 20);
+        const rangeY = p.maxY - p.minY;
+        const minYStep = Math.floor(rangeY / 20);
         if (this.yStep < minYStep) {
-//            console.log("Adjusting yStep to " + minYStep)
             this.yStep = minYStep;
         }
 
-        var rangeX = p.maxX - p.minX;
-        var minXStep = Math.floor(rangeX / 10);
+        const rangeX = p.maxX - p.minX;
+        const minXStep = Math.floor(rangeX / 10);
         if (this.xStep < minXStep) {
-//            console.log("Adjusting xStep to " + minXStep)
             this.xStep = minXStep;
         }
 
@@ -580,8 +555,8 @@ class MetaBezierCurveEditor {
 
             this.ctx.fillStyle = color;
             this.ctx.beginPath();
-            var canvasX = this.D2CX(p.x);
-            var canvasY = this.D2CY(p.y);
+            const canvasX = this.D2CX(p.x);
+            const canvasY = this.D2CY(p.y);
             this.ctx.arc(canvasX, canvasY, 5, 0, Math.PI * 2);
             this.ctx.closePath();
             this.ctx.fill();
@@ -608,7 +583,7 @@ class MetaBezierCurveEditor {
 
 
     drawLines(lines) {
-        var ctx = this.ctx;
+        const ctx = this.ctx;
         lines.forEach(line => {
             ctx.beginPath();
             ctx.strokeStyle = line.color;
@@ -683,13 +658,13 @@ class MetaBezierCurveEditor {
             // auto the x step
             // it's something like 200, but we want to make it a power of 10
             // that gives at most 10 steps across the graph
-            var rangeX = this.max.x - this.min.x;
+            const rangeX = this.max.x - this.min.x;
 
             // calculate the number of spaces available
             // for the x axis labels
             // using the width of the graph
             // assume about 50 pixels per label
-            var spacesAvailable = this.g.w / 50;
+            const spacesAvailable = this.g.w / 50;
 
             this.xStep = findStep(rangeX, spacesAvailable);
 //            console.log("Auto X step is " + this.xStep)
@@ -709,7 +684,7 @@ class MetaBezierCurveEditor {
 
         this.curve.update()
 
-        var ctx = this.ctx;
+        const ctx = this.ctx;
 
 
         ctx.fillStyle = "white";
@@ -720,7 +695,7 @@ class MetaBezierCurveEditor {
         ctx.font = "12px Arial";
         // Draw major vertical gridlines
         ctx.textAlign = "center";
-        for (var x = this.min.x; x <= this.max.x; x += this.xStep) {
+        for (let x = this.min.x; x <= this.max.x; x += this.xStep) {
 
             if (!this.noVerticalLines) {
                 ctx.beginPath();
@@ -740,7 +715,7 @@ class MetaBezierCurveEditor {
 
         // Y Axis
         ctx.textAlign = "right";
-        for (var y = this.min.y; y < this.max.y + 1; y += this.yStep) {
+        for (let y = this.min.y; y < this.max.y + 1; y += this.yStep) {
             ctx.beginPath();
             ctx.strokeStyle = "#808080";
             ctx.lineWidth = 1
@@ -748,7 +723,7 @@ class MetaBezierCurveEditor {
             ctx.lineTo(this.D2CX(this.max.x), this.D2CY(y));
             ctx.stroke();
 
-            var y2 = parseFloat(y.toFixed(2))
+            const y2 = parseFloat(y.toFixed(2))
 
             ctx.fillText("" + y2, this.D2CX(this.min.x) - 2, this.D2CY(y) + 6);
 
@@ -770,10 +745,10 @@ class MetaBezierCurveEditor {
         }
 
 
-        var color;
+        let color;
         ctx.lineWidth = 2
-        var bezierColor = "red";
-        var valueColor = "grey"
+        const bezierColor = "red";
+        let valueColor = "grey"
         if (this.curve.override) {
             valueColor = "red"
         }
@@ -783,12 +758,12 @@ class MetaBezierCurveEditor {
             ctx.lineWidth = 0.25
         }
 
-        var len = this.curve.ps.length;
-        var pointsToDraw = len;
+        const len = this.curve.ps.length;
+        let pointsToDraw = len;
         if (this.curve.override) {
             pointsToDraw = 1;
         }
-        for (var i = 0; i < pointsToDraw; i++) {
+        for (let i = 0; i < pointsToDraw; i++) {
             if (i % 2 === 0) {
                 if (!this.curve.override && !this.curve.useRegression) {
                     ctx.beginPath();
@@ -803,24 +778,21 @@ class MetaBezierCurveEditor {
             } else {
                 if (!this.curve.useRegression) {
                     color = "green";
-                    var p1 = this.curve.ps[i];  // control point
+                    const p1 = this.curve.ps[i];  // control point
                     this.drawPoint(p1, color);
-                    var p0 = this.curve.ps[i - 1]  // the data point
-                    //other (virtual) control point
-                   // var pOther = new Point(2 * p0.x - p1.x, 2 * p0.y - p1.y);
-                   // this.drawPoint(pOther, color);
+                    const p0 = this.curve.ps[i - 1]  // the data point
                 }
             }
         }
 
-        var realMinY =  10000000000
-        var realMaxY = -10000000000
+        let realMinY =  10000000000
+        let realMaxY = -10000000000
 
         if (this.curve.ps.length > 0) {
             ctx.strokeStyle = valueColor;
             ctx.beginPath();
-            for (var x = this.min.x; x < this.max.x; x += (this.max.x - this.min.x) / 100) {
-                var y = this.getY(x)
+            for (let x = this.min.x; x < this.max.x; x += (this.max.x - this.min.x) / 100) {
+                const y = this.getY(x)
                 ctx.lineTo(this.D2CX(x), this.D2CY(y));
             }
             ctx.stroke();
@@ -829,8 +801,8 @@ class MetaBezierCurveEditor {
             if (!this.curve.override && !this.curve.useRegression) {
                 ctx.strokeStyle = bezierColor;
                 ctx.beginPath();
-                for (var t = 0; t <= 1; t += 0.05 / this.curve.ps.length) {
-                    var p = BezierPoint(this.curve.ps, t);
+                for (let t = 0; t <= 1; t += 0.05 / this.curve.ps.length) {
+                    const p = BezierPoint(this.curve.ps, t);
                     ctx.lineTo(this.D2CX(p.x), this.D2CY(p.y));
                     if (p.y > realMaxY) realMaxY = p.y
                     if (p.y < realMinY) realMinY = p.y
@@ -840,11 +812,11 @@ class MetaBezierCurveEditor {
             }
         }
 
-        var first, last
+        let first, last
 
         if (this.compareNode) {
 
-            var nodes
+            let nodes
             if (Array.isArray(this.compareNode))
                 nodes = this.compareNode;
             else
@@ -852,8 +824,8 @@ class MetaBezierCurveEditor {
 
 
             nodes.forEach( compareNode => {
-                var oldMinY = this.min.y
-                var oldMaxY = this.max.y
+                const oldMinY = this.min.y
+                const oldMaxY = this.max.y
 
                 if (compareNode.min != undefined) {
                     this.min.y = compareNode.min;
@@ -872,9 +844,9 @@ class MetaBezierCurveEditor {
                 first = compareNode.v(0)
                 last = compareNode.v(this.max.x-1)
 
-                var started = false;
-                for (var x = this.min.x; x < this.max.x; x++) {
-                    var y = compareNode.v(x)
+                let started = false;
+                for (let x = this.min.x; x < this.max.x; x++) {
+                    const y = compareNode.v(x)
 
                     if (y > realMaxY) realMaxY = y
                     if (y < realMinY) realMinY = y
@@ -898,7 +870,7 @@ class MetaBezierCurveEditor {
 
 
             if (this.dynamicY) {
-                var range = this.p.dynamicRange
+                const range = this.p.dynamicRange
                 if (range !== undefined) {
                     let spread = realMaxY - realMinY
                     if (spread < range) {
@@ -980,9 +952,9 @@ class MetaBezierCurveEditor {
 
 
     selectPointAt(x, y) {
-        var len = this.curve.ps.length;
-        for (var i = 0; i < len; i++) {
-            var d = Math.sqrt(Math.pow(this.D2CX(this.curve.ps[i].x) - x, 2) + Math.pow(this.D2CY(this.curve.ps[i].y) - y, 2));
+        const len = this.curve.ps.length;
+        for (let i = 0; i < len; i++) {
+            const d = Math.sqrt(Math.pow(this.D2CX(this.curve.ps[i].x) - x, 2) + Math.pow(this.D2CY(this.curve.ps[i].y) - y, 2));
             if (d <= 10) {
                 // if we've already got a selected point, then only select a new one if it's a control point
                 // this avoids control points being "hidden" by their curve points.
@@ -1063,10 +1035,8 @@ class MetaBezierCurveEditor {
             // only allow dragging a selected point inside the graph area
             if (this.selectedPoint /* && this.insideGraph(e.layerX, e.layerY)*/) {
                 this.moved = true;
-//                var move_x = (this.C2DX(e.layerX) - this.selectedPoint.x);
-//                var move_y = (this.C2DY(e.layerY) - this.selectedPoint.y);
-                var move_x = (this.C2DX(e.layerX) - this.C2DX(this.lastMouseX))/1;
-                var move_y = (this.C2DY(e.layerY) - this.C2DY(this.lastMouseY))/1;
+                let move_x = (this.C2DX(e.layerX) - this.C2DX(this.lastMouseX))/1;
+                let move_y = (this.C2DY(e.layerY) - this.C2DY(this.lastMouseY))/1;
                 if (this.curve.clampFirstY && this.selectedPointIndex == 0) {
 
                     move_y = 0;
@@ -1110,7 +1080,7 @@ class MetaBezierCurveEditor {
                 // If the shift key is down, then continue to move all the nect points (points above this one)
 
                 if (e.shiftKey && (this.selectedPointIndex % 2) == 0) {
-                    var i = this.selectedPointIndex + 2;
+                    let i = this.selectedPointIndex + 2;
                     while (i < this.curve.ps.length) {
                         this.curve.ps[i].x += move_x;
                         this.curve.ps[i].y += move_y;
@@ -1135,13 +1105,13 @@ class MetaBezierCurveEditor {
             }
             this.update();
 
-            var ctx = this.ctx;
+            const ctx = this.ctx;
 
             // highlight the one we are hovering over
-            var len = this.curve.ps.length;
-            for (var i = 0; i < len; i++) {
+            const len = this.curve.ps.length;
+            for (let i = 0; i < len; i++) {
                 if (i%2 == 0 || !this.curve.useRegression) {
-                    var d = Math.sqrt(Math.pow(this.D2CX(this.curve.ps[i].x) - e.layerX, 2) + Math.pow(this.D2CY(this.curve.ps[i].y) - e.layerY, 2));
+                    const d = Math.sqrt(Math.pow(this.D2CX(this.curve.ps[i].x) - e.layerX, 2) + Math.pow(this.D2CY(this.curve.ps[i].y) - e.layerY, 2));
                     if (d <= 10) {
                         ctx.fillStyle = "green";
                         if (i % 2 === 0) {

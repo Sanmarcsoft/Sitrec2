@@ -22,36 +22,36 @@ function CueAz(el,az,jetRoll,jetPitch) {
     // This can be thought of as a position on a unit sphere.
     // El is relative to the horizontal plane, so jetPitch is irrelevant
     // Az is relative to the jet's forward direction in the horizontal plane
-    var AzElHeading = EA2XYZ(el, az, 1)
+    const AzElHeading = EA2XYZ(el, az, 1)
 
     // Create a Plane object, representing the wing plane
     // (a "plane" is a flat 2D surface in 3D space, not an aeroplane)
     // the plane in Hessian normal form, normal unit vector (jetUp)
     // and a distance from the origin (0, as the origin is the ATFLIR camera, i.e. the jet)
-    var jetUp = new Vector3(0, 1, 0) // y=1 is the jet up unit vector with no rotation
+    const jetUp = new Vector3(0, 1, 0) // y=1 is the jet up unit vector with no rotation
     jetUp.applyAxisAngle(V3(0,0,1),-radians(jetRoll)) // apply roll about Z axis (-Z is fwd, so -ve)
     jetUp.applyAxisAngle(V3(1,0,0),radians(jetPitch))  // apply pitch about X axis (right)
-    var wingPlane = new Plane(jetUp,0)
+    const wingPlane = new Plane(jetUp,0)
 
     // project AzElHeading onto wingPlane, giving cueHeading
-    var cueHeading = wingPlane.projectPoint(AzElHeading,new Vector3)
+    const cueHeading = wingPlane.projectPoint(AzElHeading,new Vector3)
 
     // now find the jet's forward vector, which will be in the wing plane
     // same rotations as with the up vector
-    var jetForward = new Vector3(0, 0, -1)
+    const jetForward = new Vector3(0, 0, -1)
     jetForward.applyAxisAngle(V3(0,0,1),-radians(jetRoll))
     jetForward.applyAxisAngle(V3(1,0,0),radians(jetPitch))
 
     // calculate the angle between the jet forward vector
-    var cueAz = degrees(jetForward.angleTo(cueHeading))
+    let cueAz = degrees(jetForward.angleTo(cueHeading))
 
     // angleTo always returns a positive value, so we
     // need to negate it unless cross product is in same direction as jet up
     // the cross product will give a vector either up or down from the plane
     // depending on if cueHeading is left or right of JetForward when looking down
-    var cross = cueHeading.clone().cross(jetForward)
+    const cross = cueHeading.clone().cross(jetForward)
     // then use a dot product which returns positive if two vectors are in the same direction
-    var sign = cross.dot(jetUp)
+    const sign = cross.dot(jetUp)
     if (sign < 0) cueAz = -cueAz
 
     // The return value is plotted in cyan (light blue)
@@ -118,7 +118,7 @@ function XYZJ2PR(v,jetPitch) {
     const z = v.z * cos(jetPitchR) + v.y * sin(jetPitchR)
 
     const pitch = degrees(atan2(Math.sqrt(x*x + y*y),-z))
-    var roll = degrees(atan2(x,y))
+    let roll = degrees(atan2(x,y))
     roll += 180
     if (roll >180) roll -= 360;
     return [pitch, roll]
@@ -226,20 +226,18 @@ export function getLocalWestVector(position, radius=wgs84.RADIUS) {
 // in that direction
 // this actually calculates the distance to the horizon, and then a point that distance along the fwd vector.
 export function calcHorizonPoint(A, fwd, horizonAlt, earthRadius) {
-    // altAboveClouds is the altitude of the A point
-
-    var horizonRadius = earthRadius + horizonAlt
+    const horizonRadius = earthRadius + horizonAlt
 
     // convert points to ECEF (i.e. origin at the center of the earth)
-    var pos = A.clone()
+    const pos = A.clone()
     pos.y += earthRadius
 
-    var altAboveSphere = pos.length() - horizonRadius
-    var distToHorizon = Math.sqrt((horizonRadius + altAboveSphere) * (horizonRadius + altAboveSphere) - horizonRadius * horizonRadius);
-    var fwdHorizontal = fwd.clone()
+    const altAboveSphere = pos.length() - horizonRadius
+    const distToHorizon = Math.sqrt((horizonRadius + altAboveSphere) * (horizonRadius + altAboveSphere) - horizonRadius * horizonRadius);
+    const fwdHorizontal = fwd.clone()
     fwdHorizontal.normalize()
     fwdHorizontal.multiplyScalar(distToHorizon)
-    var horizonPoint = A.clone().add(fwdHorizontal)
+    const horizonPoint = A.clone().add(fwdHorizontal)
 
     return horizonPoint;
 }
@@ -253,22 +251,22 @@ export function calcHorizonPoint(A, fwd, horizonAlt, earthRadius) {
 // find the angle the y basis vector is rotated around the z basis vector
 // from a y-up orientation
 export function extractRollFromMatrix(m) {
-    var xBasis = V3();
-    var yBasis = V3();
-    var zBasis = V3();
+    const xBasis = V3();
+    const yBasis = V3();
+    const zBasis = V3();
     m.extractBasis(xBasis, yBasis, zBasis)
     xBasis.normalize()
     yBasis.normalize()
     zBasis.normalize()
 
     // right is orthogonal to the forward vector and the global up
-    var right = zBasis.clone().cross(V3(0, 1, 0))
+    const right = zBasis.clone().cross(V3(0, 1, 0))
 
     // yUP is the y basis rotated upright
-    var yUp = right.clone().cross(zBasis)
+    const yUp = right.clone().cross(zBasis)
 
     // so calculate how much we rotated it
-    var angle = yUp.angleTo(yBasis)
+    let angle = yUp.angleTo(yBasis)
 
     // flip depending on which side of the plane defined by the right vector
     if (right.dot(yBasis) > 0)

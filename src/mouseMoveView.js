@@ -7,8 +7,8 @@ import {ViewMan} from "./CViewManager";
 import {mouseInViewOnly} from "./ViewUtils";
 import {setRenderOne} from "./Globals";
 
-var mouseDragView
-var mouseDown = false
+let mouseDragView
+let mouseDown = false
 export const DRAG = {
     NONE: 0,
     PAN: 1,
@@ -16,12 +16,12 @@ export const DRAG = {
     ZOOM: 3,
     MOVEHANDLE: 4,
 }
-var dragMode = DRAG.NONE;
-var mouseLastX = 0;
-var mouseLastY = 0;
+let dragMode = DRAG.NONE;
+let mouseLastX = 0;
+let mouseLastY = 0;
 // Current mouse position, REALLY needs encapsulating....
-var mouseX = 0;
-var mouseY = 0;
+let mouseX = 0;
+let mouseY = 0;
 
 
 
@@ -63,7 +63,7 @@ export function onDocumentMouseDown(event) {
         mouseX = (event.clientX);
         mouseY = (event.clientY);
 
-        var vm = ViewMan
+        const vm = ViewMan
 
 //        console.log("Mouse Down, checking exclusive")
 
@@ -163,14 +163,12 @@ export function makeMouseRay(view, mouseX, mouseY) {
     // get position in that view in pixels
     // views are defined from the TOP left of the window
     // so need to adjust (same as in mouseInView)
-    // var viewX = mouseX - view.leftPx
-    // var viewY = mouseY - (window.innerHeight-(view.topPx + view.heightPx));
-    var viewX = mouseX;
-    var viewY = mouseY;
+    const viewX = mouseX;
+    const viewY = mouseY;
 
     // convert to proportion
-    var viewXp = viewX / view.widthPx
-    var viewYp = viewY / view.heightPx
+    const viewXp = viewX / view.widthPx
+    const viewYp = viewY / view.heightPx
 
     //      console.log(`MouseX,Y = ${mouseX},${mouseY}`)
     //      console.log(`ViewXp, Yp = ${viewXp},${viewYp}`)

@@ -1257,7 +1257,7 @@ async function initializeOnce() {
 
     // these area accessed like:
     // guiMenus.main, guiMenus.showhide, guiMenus.tweaks, guiMenus.showhideviews, guiMenus.physics
-    var _gui = addGUIMenu("main", "Sitrec").tooltip("Selecting legacy sitches and tools\nSome legacy sitches have controls here by default");
+    const _gui = addGUIMenu("main", "Sitrec").tooltip("Selecting legacy sitches and tools\nSome legacy sitches have controls here by default");
     addGUIMenu("file", "File").tooltip("File operations like saving,loading, and exporting");
     addGUIMenu("view", "View").tooltip("Miscellaneous view controls\nLike all menus, this menu can be dragged off the menu bar to make it a floating menu");
     addGUIMenu("time", "Time").tooltip("Time and frame controls\nDragging one time slider past the end will affect the above slider\nNote that the time sliders are UTC");
@@ -1296,7 +1296,7 @@ async function initializeOnce() {
     addGUIMenu("satellites", "Satellites").tooltip("Loading and controlling satellites\nThe satellites.\nStarlink, ISS, etc. Controlls for Horizon flares and other satellite effects");
     addGUIMenu("terrain", "Terrain").tooltip("Terrain controls\nThe terrain is the 3D model of the ground. The 'Map' is the 2D image of the ground. The 'Elevation' is the height of the ground above sea level");
     // these four have legacy globals
-    var _guiPhysics = addGUIMenu("physics", "Physics").tooltip("Physics controls\nThe physics of the situation, like wind speed and the physics of the traverse object");
+    const _guiPhysics = addGUIMenu("physics", "Physics").tooltip("Physics controls\nThe physics of the situation, like wind speed and the physics of the traverse object");
 
     // addGUIMenu("missile", "Missile").tooltip("Homing missile parameters\nControls for the missile simulation including mass, thrust, air resistance, and burn time");
 
@@ -1304,9 +1304,9 @@ async function initializeOnce() {
     addGUIMenu("target", "Target").tooltip("Target controls\nPosition and properties of the optional target object");
     addGUIMenu("traverse", "Traverse").tooltip( "Traverse controls\nThe traverse object is the object that traverses the lines of sight - i.e. the UAP we are interested in\nThis menu defined how the traverse object moves and behaves");
 
-    var _guiShowHide = addGUIMenu("showhide", "Show/Hide").tooltip("Showing or hiding views, object and other elements");
-    var _guiShowHideViews = addGUIFolder("showhideviews", "Views", "showhide").tooltip("Show or hide views (windows) like the look view, the video, the main view, and various graphs");
-    var _guiTweaks = addGUIMenu("effects", "Effects" ).tooltip("S pecial effects like blur, pixelation, and color adjustments that are applied to the final image in the look view");
+    const _guiShowHide = addGUIMenu("showhide", "Show/Hide").tooltip("Showing or hiding views, object and other elements");
+    const _guiShowHideViews = addGUIFolder("showhideviews", "Views", "showhide").tooltip("Show or hide views (windows) like the look view, the video, the main view, and various graphs");
+    const _guiTweaks = addGUIMenu("effects", "Effects" ).tooltip("S pecial effects like blur, pixelation, and color adjustments that are applied to the final image in the look view");
     addGUIMenu("lighting", "Lighting").tooltip("The lighting of the scene, like the sun and the ambient light");
     addGUIMenu("contents", "Contents").tooltip("The contents of the scene, mostly used for tracks");
 
@@ -1368,7 +1368,7 @@ async function initializeOnce() {
 
     for (const [key, sitch] of Object.entries(rootSitches)) {
         Globals[""+key+"Button"] = function()  {
-            var url = SITREC_APP+"?sitch=" + sitch
+            const url = SITREC_APP+"?sitch=" + sitch
             newSitch(sitch);
             window.history.pushState({}, null, url);
         }
@@ -1525,7 +1525,7 @@ function initRendering() {
 
 // some sitch specific stuff that needs to be done before the main setup
 function legacySetup() {
-    var _guiJetTweaks;
+    let _guiJetTweaks;
     if (Sit.jetStuff) {
         _guiJetTweaks = guiTweaks.addFolder('Jet Tweaks').close();
     }
@@ -1551,7 +1551,7 @@ function legacySetup() {
     assert(Sit.name.slice().toLowerCase() === Sit.name, "Sit.name ("+Sit.name+") is not all lower case")
 
 
-    var newTitle = "Sitrec "+Sit.name
+    const newTitle = "Sitrec "+Sit.name
 
     if (document.title !== newTitle) {
         document.title = newTitle;
@@ -1611,10 +1611,10 @@ async function setupFunctions() {
 // if we are going to load a starlink file (i.e. id = starLink - note capitalization)
 //  check the flag rhs, which is set to rhs: FileManager.rehostedStarlink,
 //  if it's set, then delete the starLink from Sit.files
-    var urlData
+    let urlData
     if (urlParams.get("data")) {
         urlData = urlParams.get("data")
-        var urlObject = JSURL.parse(urlData)
+        const urlObject = JSURL.parse(urlData)
         if (urlObject.rhs && (Sit.files.starLink !== undefined)) {
             delete Sit.files.starLink
             FileManager.rehostedStarlink = true;
@@ -2081,7 +2081,7 @@ function renderMain(elapsed) {
 
 
     if (Sit.animated) {
-        var lastFrame = par.frame
+        const lastFrame = par.frame
         // upateFrame will update the frame number based on either user
         // input, or the elapsed time since the last frame
         // (unless paused or noLogic is set)
@@ -2343,7 +2343,7 @@ function selectInitialSitch(force) {
 // This allows for variants like FLIR1/Tictac
 // to test for a particular situation, use Sit.name
 // slice
-    var lower = situation.slice().toLowerCase();
+    const lower = situation.slice().toLowerCase();
 
     if (lower === "testall") {
         const url = SITREC_APP + "?testAll=1"
