@@ -1,10 +1,10 @@
-export var targetSphere;
-export var glareSphere;
-export var aSphere;
-export var bSphere; // just for NAR view and dero view for gimbal
-export var glareSprite
-export var vizRadius = 100
-export var ATFLIR;
+export let targetSphere;
+export let glareSphere;
+export let aSphere;
+export let bSphere; // just for NAR view and dero view for gimbal
+export let glareSprite
+export let vizRadius = 100
+export let ATFLIR;
 
 export function setTargetSphere(a) { targetSphere = a;}
 export function setGlareSphere(a) { glareSphere = a;}

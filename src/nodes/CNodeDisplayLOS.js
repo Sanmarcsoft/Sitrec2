@@ -10,7 +10,7 @@ import {LineGeometry} from "three/addons/lines/LineGeometry.js";
 import {Line2} from "three/addons/lines/Line2.js";
 import * as LAYER from "../LayerMasks";
 
-var matLineGreyThin = makeMatLine(0x404040, 0.50);
+const matLineGreyThin = makeMatLine(0x404040, 0.50);
 // CNodeDisplayLOS display the Lines Of Sight
 // inputs.LOS is a per-frame node that returns values of:
 //  .position = Vector3 start of the LOS

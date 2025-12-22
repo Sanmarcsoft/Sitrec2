@@ -4,7 +4,7 @@ export function incrementMainLoopCount() {
 //    console.log("Incrementing mainLoopCount to " + mainLoopCount);
 };
 
-export var Globals = {
+export const Globals = {
     editingTrack: null,  // Reference to the CMetaTrack currently being edited
     editingBuilding: null,  // Reference to the CNodeSynthBuilding currently being edited
     GPUMemoryMonitor: null,  // GPU Memory Monitor instance
@@ -43,51 +43,51 @@ export function setSitchEstablished(bool) {
     Globals.sitchEstablished = bool;
 }
 
-export var Sit;
+export let Sit;
 export function setSit(s) {Sit = s;}
 
-export var NodeMan;
+export let NodeMan;
 export function setNodeMan(n) {NodeMan = n;}
 
-export var NodeFactory;
+export let NodeFactory;
 export function setNodeFactory(n) {NodeFactory = n;}
 
-export var TrackManager;
+export let TrackManager;
 export function setTrackManager(tm) {TrackManager = tm;}
 
 
-export var NullNode;
+export let NullNode;
 export function setNullNode(n) {NullNode = n;}
 
-export var SitchMan;
+export let SitchMan;
 export function setSitchMan(n) {SitchMan = n;}
 
-export var CustomManager;
+export let CustomManager;
 export function setCustomManager(n) {CustomManager = n;}
 
-export var Synth3DManager;
+export let Synth3DManager;
 export function setSynth3DManager(n) {Synth3DManager = n;}
 
-export var UndoManager;
+export let UndoManager;
 export function setUndoManager(n) {UndoManager = n;}
 
-export var gui;
-export var guiTweaks;
-export var guiShowHide;
-export var guiJetTweaks;
-export var guiShowHideViews
-export var guiPhysics;
+export let gui;
+export let guiTweaks;
+export let guiShowHide;
+export let guiJetTweaks;
+export let guiShowHideViews
+export let guiPhysics;
 
-export var infoDiv;
+export let infoDiv;
 export function setInfoDiv(i) {infoDiv=i;}
 
-export var GlobalComposer;
+export let GlobalComposer;
 export function setComposer(i) {GlobalComposer=i;}
 
-export var GlobalURLParams;
+export let GlobalURLParams;
 export function setGlobalURLParams(i) {GlobalURLParams=i;}
 
-export var GlobalDateTimeNode;
+export let GlobalDateTimeNode;
 export function setGlobalDateTimeNode(i) {GlobalDateTimeNode=i;}
 
 export function setNewSitchObject(object){
@@ -133,17 +133,17 @@ export function setRenderOne(value=true) {
 // seem bigger, and hence with a shallower curve
 //export const EarthRadiusMiles = 3963 * 7 / 6
 export const EarthRadiusMiles = 3963.190592  // exact wgs84.RADIUS
-export var Units;
+export let Units;
 export function setUnits(u) {Units = u;}
 
-export var FileManager;
+export let FileManager;
 export function setFileManager(f) {FileManager = f;}
 
-export var keyHeld = {}
-export var keyCodeHeld = {}
+export const keyHeld = {}
+export const keyCodeHeld = {}
 
 // Track if mouse is over a GUI element (to disable keyboard shortcuts)
-export var mouseOverGUI = false;
+export let mouseOverGUI = false;
 export function setMouseOverGUI(value) { mouseOverGUI = value; }
 
 // Helper function to access the debug view

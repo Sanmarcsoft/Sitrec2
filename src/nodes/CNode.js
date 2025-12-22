@@ -22,7 +22,7 @@ import {V3} from "../threeUtils";
 import {isConsole, isLocal} from "../configUtils";
 
 
-var debugNodeNumber = 0;
+let debugNodeNumber = 0;
 
 
 /**

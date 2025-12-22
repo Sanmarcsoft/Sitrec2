@@ -93,4 +93,4 @@ class CViewManager extends CManager {
 
 }
 
-export var ViewMan = new CViewManager()
+export const ViewMan = new CViewManager()

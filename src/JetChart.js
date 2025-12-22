@@ -8,7 +8,8 @@ import {degrees} from "./utils";
 import uPlot from "./js/uPlot/uPlot.mick.esm";
 import {ViewMan} from "./CViewManager";
 import {
-    Frame2Az, Frame2CueAz,
+    Frame2Az,
+    Frame2CueAz,
     getGlareAngleFromFrame,
     jetPitchFromFrame,
     jetRollFromFrame,
@@ -17,7 +18,7 @@ import {
 } from "./JetUtils";
 import {vizRadius} from "./JetStuffVars";
 
-var lastChartData
+let lastChartData
 
 export function UpdateChart() {
     if (theChart !== undefined) {
@@ -35,7 +36,7 @@ export function UpdateChartLine() {
     }
 }
 
-export var theChart;
+export let theChart;
 
 // get the data for the graph
 export function getData() {
@@ -129,7 +130,7 @@ export function updateChartSize() {
         height: view.heightPx
     })
 } // Options for the graph using uPlot.js
-export var opts = {}
+export let opts = {}
 
 export function setupOpts() {
 
@@ -245,7 +246,7 @@ export function setupOpts() {
 }
 
 
-export var chartDiv
+export let chartDiv
 export function setChartDiv(div) {chartDiv = div;}
 
 export function setupGimbalChart() {

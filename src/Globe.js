@@ -39,9 +39,9 @@ export function createSphere(radius, radius1, segments) {
 }
 
 
-export var globeMaterial;
+export let globeMaterial;
 let    nullNightTexture = null; // cache the night texture to avoid reloading it
-export var nightTexture = new Texture(); // just a dummy texture to avoid null checks
+export let nightTexture = new Texture(); // just a dummy texture to avoid null checks
 
 let nightTextureLoaded = false; //
 

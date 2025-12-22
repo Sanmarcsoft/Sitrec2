@@ -25,7 +25,7 @@ function radians(Value) {     return Value * Math.PI / 180;}
 
 function degrees(Value) {    return Value / (Math.PI / 180);}
 
-export var scaleF2M = 0.3048
+export const scaleF2M = 0.3048
 
 export function f2m(f) {return f * scaleF2M}
 export function m2f(m) {return m / scaleF2M}
@@ -549,7 +549,7 @@ export function getTextBBox( ctx, text ) {
     return { left, top, right, bottom, width, height };
 }
 
-export var loadImage = async (src) => {
+export const loadImage = async (src) => {
     return new Promise((resolve, reject) => {
         let img = new Image();
         img.onload = () => resolve(img);

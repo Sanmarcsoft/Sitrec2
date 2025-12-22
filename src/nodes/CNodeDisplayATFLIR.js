@@ -27,17 +27,19 @@ import {
     PodFrame,
     Pointer,
     setBall,
-    setEOSU, setFA18,
+    setEOSU,
+    setFA18,
     setPod,
     setPODBack,
-    setPodFrame, setPointer
+    setPodFrame,
+    setPointer
 } from "./ATFLIRVars";
 import {targetSphere, vizRadius} from "../JetStuffVars";
 
 
-var matLineWhite = makeMatLine(0xffffff);
-var matLineCyan = makeMatLine(0x00ffff,1.5);
-var matLineGreen = makeMatLine(0x00ff00);
+const matLineWhite = makeMatLine(0xffffff);
+const matLineCyan = makeMatLine(0x00ffff,1.5);
+const matLineGreen = makeMatLine(0x00ff00);
 
 
 // Container for the various 3D models that make up the atflir
@@ -71,7 +73,7 @@ export class CNodeDisplayATFLIR extends CNode3DGroup {
             setBall(Pod.getObjectByName('BALL'))
 
             PodFrame.add(Pod)
-            var podScale = 50;
+            const podScale = 50;
             Pod.scale.setScalar(podScale)
 
             PodFrame.rotateX(radians(jetPitchFromFrame()))
@@ -98,7 +100,7 @@ export class CNodeDisplayATFLIR extends CNode3DGroup {
             Globals.parsing --;
             console.log("Loaded & parsed FA-18F model")
             setFA18(gltf2.scene); //.getObjectByName('FA-18F')
-            var podScale = 10;
+            const podScale = 10;
            // FA18.scale.setScalar(podScale);
             FA18.position.z = 0 // 120
             FA18.position.y = 10; // par.jetOffset
@@ -162,11 +164,11 @@ export class CNodeDisplayATFLIR extends CNode3DGroup {
     makeTrackLine() {
         LocalFrame.remove(this.TRACK_line)
         // White track of view point line
-        var el = par.el   // this is somewhat deprecated, as el is not constant for GoFast
+        const el = par.el   // this is somewhat deprecated, as el is not constant for GoFast
         const line_points = [];
         // Kinda Gimbal specific
-        for (var az = -180; az <= 180; az++) {
-            var A = EA2XYZ(el, az, vizRadius)
+        for (let az = -180; az <= 180; az++) {
+            const A = EA2XYZ(el, az, vizRadius)
             line_points.push(A.x, A.y, A.z);
         }
         dispose(this.TrackLineGeometry)
@@ -191,7 +193,7 @@ export class CNodeDisplayATFLIR extends CNode3DGroup {
                 Ball.matrixWorld.elements[5],
                 Ball.matrixWorld.elements[6])
             this.cameraFrustum.group.up.normalize()
-            var worldTarget = V3(0, 0, 0)
+            const worldTarget = V3(0, 0, 0)
             targetSphere.getWorldPosition(worldTarget)
             this.cameraFrustum.group.lookAt(worldTarget)
         }
@@ -228,18 +230,18 @@ export class CNodeDisplayATFLIR extends CNode3DGroup {
 
 }
 
-var PointingLineGeometry
-var POINTING_line
+let PointingLineGeometry
+let POINTING_line
 function makePointingLine() {
-    var oldVisible = false; // stupid way of doing it, because I'm recreatingthe object. Should alter geometry.
+    let oldVisible = false; // stupid way of doing it, because I'm recreatingthe object. Should alter geometry.
     if (POINTING_line != undefined) oldVisible = POINTING_line.visible
     LocalFrame.remove(POINTING_line)
     // Green track of view point line
     const line_points = [];
-    for (var frame = 0; frame < Sit.frames; frame += 2) {
-        var pitch, globalRoll;
+    for (let frame = 0; frame < Sit.frames; frame += 2) {
+        let pitch, globalRoll;
         [pitch, globalRoll] = pitchAndGlobalRollFromFrame(frame)
-        var glarePos = PRJ2XYZ(pitch, getGlareAngleFromFrame(frame) + jetRollFromFrame(frame), jetPitchFromFrame(), vizRadius)
+        const glarePos = PRJ2XYZ(pitch, getGlareAngleFromFrame(frame) + jetRollFromFrame(frame), jetPitchFromFrame(), vizRadius)
         line_points.push(glarePos.x, glarePos.y, glarePos.z);
     }
     dispose(PointingLineGeometry)

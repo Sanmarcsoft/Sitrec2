@@ -1,10 +1,10 @@
-export var Pod;
-export var PODBack;
-export var EOSU;
-export var Ball;
-export var Pointer;
-export var PodFrame;  // group used to store the frame of reference of the pod and the singularity grid
-export var FA18;
+export let Pod;
+export let PODBack;
+export let EOSU;
+export let Ball;
+export let Pointer;
+export let PodFrame;  // group used to store the frame of reference of the pod and the singularity grid
+export let FA18;
 
 export function setPod(x) {Pod = x};
 export function setPODBack(x) {PODBack = x};

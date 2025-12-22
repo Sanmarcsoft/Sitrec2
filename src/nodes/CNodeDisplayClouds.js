@@ -7,7 +7,7 @@ import {CNode3DGroup} from "./CNode3DGroup";
 import {assert} from "../assert.js";
 import {V3} from "../threeUtils";
 
-var rng;
+let rng;
 
 function getRandomInt(min, max) {
     min = Math.ceil(min);

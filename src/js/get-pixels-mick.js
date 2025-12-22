@@ -1,5 +1,5 @@
 "use strict"
-var ndarray = require("ndarray")
+const ndarray = require("ndarray")
 
 // Web Worker code for processing images
 const workerCode = `

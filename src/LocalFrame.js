@@ -5,11 +5,11 @@
 //
 // GlobalScene is the global Three.js GlobalScene
 
-export var LocalFrame;
-export var GlobalScene;
-export var GlobalNightSkyScene;
-export var GlobalDaySkyScene;
-export var GlobalSunSkyScene;
+export let LocalFrame;
+export let GlobalScene;
+export let GlobalNightSkyScene;
+export let GlobalDaySkyScene;
+export let GlobalSunSkyScene;
 
 
 export function setupScene(_scene){

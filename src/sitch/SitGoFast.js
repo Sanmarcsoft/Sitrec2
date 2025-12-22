@@ -38,7 +38,7 @@ import {SITREC_APP} from "../configUtils";
 import {CNodeBackgroundFlowIndicator} from "../nodes/CNodeBackgroundFlowIndicator";
 import {CNodeLOSFromCamera} from "../nodes/CNodeLOSFromCamera";
 
-export var SitGoFast = {
+export const SitGoFast = {
     name: "gofast",
     menuName: "GoFast",
     isTextable: false,
