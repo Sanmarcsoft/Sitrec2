@@ -28,7 +28,7 @@ import {par} from "./par";
 import {drop3, pointOnSphereBelow} from "./SphericalMath"
 import {GlobalScene} from "./LocalFrame";
 import * as LAYER from "./LayerMasks";
-import {LLAToEUS, wgs84} from "./LLA-ECEF-ENU";
+import {ECEFToEUS, EUSToECEF, LLAToEUS, wgs84} from "./LLA-ECEF-ENU";
 import {LineMaterial} from "three/addons/lines/LineMaterial.js";
 import {LineGeometry} from "three/addons/lines/LineGeometry.js";
 import {Line2} from "three/addons/lines/Line2.js";
@@ -603,6 +603,50 @@ export function intersectMSL(point, headingVector) {
     if (intersectSphere2(ray, globe, sphereCollision))
         return sphereCollision;
     return null;
+}
+
+// get intersection of a point/heading ray with the WGS84 ellipsoid
+// More accurate than intersectMSL for high-latitude locations
+export function intersectEllipsoid(pointEUS, headingVectorEUS) {
+    const a = wgs84.RADIUS;
+    const b = wgs84.POLAR_RADIUS;
+    
+    const originECEF = EUSToECEF(pointEUS);
+    const dirEUS = headingVectorEUS.clone().normalize();
+    const endEUS = pointEUS.clone().add(dirEUS);
+    const endECEF = EUSToECEF(endEUS);
+    const dirECEF = endECEF.clone().sub(originECEF).normalize();
+    
+    const ox = originECEF.x, oy = originECEF.y, oz = originECEF.z;
+    const dx = dirECEF.x, dy = dirECEF.y, dz = dirECEF.z;
+    
+    const a2 = a * a, b2 = b * b;
+    
+    const A = (dx * dx + dy * dy) / a2 + (dz * dz) / b2;
+    const B = 2 * ((ox * dx + oy * dy) / a2 + (oz * dz) / b2);
+    const C = (ox * ox + oy * oy) / a2 + (oz * oz) / b2 - 1;
+    
+    const discriminant = B * B - 4 * A * C;
+    
+    if (discriminant < 0) {
+        return null;
+    }
+    
+    const sqrtDisc = Math.sqrt(discriminant);
+    const t1 = (-B - sqrtDisc) / (2 * A);
+    const t2 = (-B + sqrtDisc) / (2 * A);
+    
+    let t;
+    if (t1 > 0) {
+        t = t1;
+    } else if (t2 > 0) {
+        t = t2;
+    } else {
+        return null;
+    }
+    
+    const intersectionECEF = originECEF.clone().add(dirECEF.clone().multiplyScalar(t));
+    return ECEFToEUS(intersectionECEF);
 }
 
 export class CDisplayLine {

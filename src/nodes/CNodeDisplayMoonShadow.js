@@ -1,6 +1,6 @@
 import {CNode3DGroup} from "./CNode3DGroup";
 import * as LAYER from "../LayerMasks";
-import {clampAboveGround, dispose, intersectMSL, propagateLayerMaskObject} from "../threeExt";
+import {clampAboveGround, dispose, intersectEllipsoid, propagateLayerMaskObject} from "../threeExt";
 import {LineGeometry} from "three/addons/lines/LineGeometry.js";
 import {wgs84} from "../LLA-ECEF-ENU";
 import {Line2} from "three/addons/lines/Line2.js";
@@ -154,7 +154,7 @@ export class CNodeDisplayMoonShadow extends CNode3DGroup {
             const rayDir = refPoint.clone().sub(moonCenter).normalize();
             rayDirs.push(rayDir);
             
-            const mslPoint = intersectMSL(moonCenter, rayDir);
+            const mslPoint = intersectEllipsoid(moonCenter, rayDir);
             mslDistances.push(mslPoint ? moonCenter.distanceTo(mslPoint) : Infinity);
         }
         
@@ -271,7 +271,7 @@ export class CNodeDisplayMoonShadow extends CNode3DGroup {
                 point.add(otherPerpendicular.clone().multiplyScalar(Math.sin(theta) * umbraRadius));
                 
                 const rayDir = point.clone().sub(moonCenter).normalize();
-                const mslPoint = intersectMSL(moonCenter, rayDir);
+                const mslPoint = intersectEllipsoid(moonCenter, rayDir);
                 
                 if (mslPoint) {
                     point = clampAboveGround(mslPoint, 100);
@@ -300,7 +300,7 @@ export class CNodeDisplayMoonShadow extends CNode3DGroup {
                 point.add(otherPerpendicular.clone().multiplyScalar(Math.sin(theta) * penumbraRadius));
                 
                 const rayDir = point.clone().sub(moonCenter).normalize();
-                const mslPoint = intersectMSL(moonCenter, rayDir);
+                const mslPoint = intersectEllipsoid(moonCenter, rayDir);
                 
                 if (mslPoint) {
                     point = clampAboveGround(mslPoint, 100);
