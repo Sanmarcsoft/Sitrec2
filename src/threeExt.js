@@ -512,7 +512,7 @@ export function pointObject3DAt(object, _normal) {
 
 export function isVisible(ob) {
     if (ob.visible == false) return false; // if not visible, then that can't be overridden
-    if (ob.parent != null) return isVisible(ob.parent) // visible, but parents can override
+    if (ob.parent !== null) return isVisible(ob.parent) // visible, but parents can override
     return true; // visible all the way up to the root
 }
 

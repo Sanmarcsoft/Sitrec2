@@ -97,7 +97,7 @@ export const SitGoFast = {
 
     targetSizedSphere: { defer: true, size:3, track: "LOSTraverseSelect" },
 
-    include_JetLabels: (gui != null),
+    include_JetLabels: (gui !== null),
 
     lighting: {
         kind: "Lighting",

@@ -106,7 +106,7 @@ const GimbalDefaults = {
 
     },
 
-    include_JetLabels: (gui != null),
+    include_JetLabels: (gui !== null),
 
 
     include_Compasses: true,

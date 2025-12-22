@@ -983,10 +983,10 @@ class MetaBezierCurveEditor {
             // adding and deleteing point is now done with right click
             if (e.button == 2) {
 
-                if (this.selectedPoint != null && this.curve.ps.length > 4) {
+                if (this.selectedPoint !== null && this.curve.ps.length > 4) {
                     // right button removes
                     this.curve.ps.splice(2 * Math.floor(this.selectedPointIndex / 2), 2);
-                    this.selectedPoint != null;
+                    this.selectedPoint = null;
                     this.mouseIsDown = false;
                     this.recalculate()
                     this.onChange();
@@ -1000,7 +1000,7 @@ class MetaBezierCurveEditor {
 //                return false;
 
 
-                if (this.selectedPoint != null) {
+                if (this.selectedPoint !== null) {
                     return;
                 }
 

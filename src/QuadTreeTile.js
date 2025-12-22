@@ -2582,7 +2582,7 @@ export class QuadTreeTile {
         this.updateDebugGeometry();
 
         return new Promise((resolve, reject) => {
-            if (this.textureUrl() != null) {
+            if (this.textureUrl() !== null) {
                 this.buildMaterial().then((material) => {
                     // Dispose of old material if we're replacing parent data
                     if (this.usingParentData && this.mesh.material) {

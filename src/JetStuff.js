@@ -1242,7 +1242,7 @@ export function initJetStuff() {
         camera: podsEyeDeroCameraNode,
         preRenderFunction: function () {
             if (!Ball) return;
-            if (this.camera.parent == null) {
+            if (this.camera.parent === null) {
                 // PROBLEM, MAYBE - the ball has scale.
 
                 Ball.add(this.camera)
@@ -1284,7 +1284,7 @@ export function initJetStuff() {
         this.camera.layers.mask = LAYER.MASK_LOOKRENDER;
 
         if (!Ball) return;
-        if (this.camera.parent == null) {
+        if (this.camera.parent === null) {
             // PROBLEM, MAYBE - the ball has scale.
 
             Ball.add(this.camera)
