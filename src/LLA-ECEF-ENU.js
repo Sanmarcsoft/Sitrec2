@@ -12,15 +12,15 @@ const earthRadiusKM = 6371;
 // This is the distance in KM between two lat/long locations
 // assumes a sphere of average radius
 export function haversineDistanceKM(lat1, lon1, lat2, lon2) {
-    var dLat = (lat2 - lat1) * Math.PI / 180;
-    var dLon = (lon2 - lon1) * Math.PI / 180;
-    var rLat1 = lat1 * Math.PI / 180;
-    var rLat2 = lat2 * Math.PI / 180;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const rLat1 = lat1 * Math.PI / 180;
+    const rLat2 = lat2 * Math.PI / 180;
     const sin_dLat = Math.sin(dLat / 2);
     const sin_dLon = Math.sin(dLon / 2);
-    var a = sin_dLat * sin_dLat +
+    const a = sin_dLat * sin_dLat +
         sin_dLon * sin_dLon * Math.cos(rLat1) * Math.cos(rLat2);
-    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return earthRadiusKM * c;
 }
 
@@ -35,7 +35,7 @@ export function haversineDistanceABKM(a, b) {
 // wgs84 defines the ellipse. It's the standard earth shape used by Google Earth.
 // it's very similar to GRS 80
 // see https://en.wikipedia.org/wiki/World_Geodetic_System
-export var wgs84 = {
+export const wgs84 = {
     RADIUS: 6378137,                            // exact, and same as in GRS 80
     FLATTENING_DENOM: 298.257223563,
     radiusMiles: 3963.190592
@@ -80,7 +80,7 @@ export function project(latitude, longitude, altitude) {
  * Convert Cartesian coordinates (meters) to GPS coordinates (degrees)
  */
 export function unproject(x, y, z) {
-    var gps = ECEFToLLA(x, y, z);
+    const gps = ECEFToLLA(x, y, z);
 
     gps[0] = gps[0] * 180 / Math.PI;
     gps[1] = gps[1] * 180 / Math.PI;
@@ -92,24 +92,24 @@ export function unproject(x, y, z) {
 export function RLLAToECEF(latitude, longitude, altitude) {
 
 
-    var a    = wgs84.RADIUS;
-    var f    = wgs84.FLATTENING;
-    var b    = wgs84.POLAR_RADIUS;
-    var asqr = a*a;
-    var bsqr = b*b;
-    var e = Math.sqrt((asqr-bsqr)/asqr);
-    var eprime = Math.sqrt((asqr-bsqr)/bsqr);
+    const a    = wgs84.RADIUS;
+    const f    = wgs84.FLATTENING;
+    const b    = wgs84.POLAR_RADIUS;
+    const asqr = a*a;
+    const bsqr = b*b;
+    const e = Math.sqrt((asqr-bsqr)/asqr);
+    const eprime = Math.sqrt((asqr-bsqr)/bsqr);
 
     //Auxiliary values first
-    var N = getN(latitude);
-    var ratio = (bsqr / asqr);
+    const N = getN(latitude);
+    const ratio = (bsqr / asqr);
 
     //Now calculate the Cartesian coordinates
-    var X = (N + altitude) * Math.cos(latitude) * Math.cos(longitude);
-    var Y = (N + altitude) * Math.cos(latitude) * Math.sin(longitude);
+    const X = (N + altitude) * Math.cos(latitude) * Math.cos(longitude);
+    const Y = (N + altitude) * Math.cos(latitude) * Math.sin(longitude);
 
     //Sine of latitude looks right here
-    var Z = (ratio * N + altitude) * Math.sin(latitude);
+    const Z = (ratio * N + altitude) * Math.sin(latitude);
 
     return new Vector3(X, Y, Z);
 
@@ -118,19 +118,19 @@ export function RLLAToECEF(latitude, longitude, altitude) {
 
 export function LLAToECEF_Sphere(latitude, longitude, altitude) {
 
-    var a    = wgs84.RADIUS;  // using the standard wgs84.RADIUS
-    var X = (a + altitude) * Math.cos(latitude) * Math.cos(longitude);
-    var Y = (a + altitude) * Math.cos(latitude) * Math.sin(longitude);
-    var Z = (a + altitude) * Math.sin(latitude);
+    const a    = wgs84.RADIUS;  // using the standard wgs84.RADIUS
+    const X = (a + altitude) * Math.cos(latitude) * Math.cos(longitude);
+    const Y = (a + altitude) * Math.cos(latitude) * Math.sin(longitude);
+    const Z = (a + altitude) * Math.sin(latitude);
 
     return [X, Y, Z];
 }
 
 export function RLLAToECEFV_Sphere(latitude, longitude, altitude, radius = wgs84.RADIUS) {
 
-    var X = (radius + altitude) * Math.cos(latitude) * Math.cos(longitude);
-    var Y = (radius + altitude) * Math.cos(latitude) * Math.sin(longitude);
-    var Z = (radius + altitude) * Math.sin(latitude);
+    const X = (radius + altitude) * Math.cos(latitude) * Math.cos(longitude);
+    const Y = (radius + altitude) * Math.cos(latitude) * Math.sin(longitude);
+    const Z = (radius + altitude) * Math.sin(latitude);
 
     return new Vector3(X, Y, Z);
 }
@@ -139,29 +139,29 @@ export function RLLAToECEFV_Sphere(latitude, longitude, altitude, radius = wgs84
 // NOTE: this uses the WGS84 ellipse
 // if using simple maps like map33 that use a sphere, then use the sphere version, next.
 export function ECEFToLLA(X, Y, Z) {
-    var a    = wgs84.RADIUS;
-    var f    = wgs84.FLATTENING;
-    var b    = wgs84.POLAR_RADIUS;
-    var asqr = a*a;
-    var bsqr = b*b;
-    var e = Math.sqrt((asqr-bsqr)/asqr);
-    var eprime = Math.sqrt((asqr-bsqr)/bsqr);
+    const a    = wgs84.RADIUS;
+    const f    = wgs84.FLATTENING;
+    const b    = wgs84.POLAR_RADIUS;
+    const asqr = a*a;
+    const bsqr = b*b;
+    const e = Math.sqrt((asqr-bsqr)/asqr);
+    const eprime = Math.sqrt((asqr-bsqr)/bsqr);
 
     //Auxiliary values first
-    var p = Math.sqrt(X*X + Y*Y);
-    var theta = Math.atan((Z*a)/(p*b));
+    const p = Math.sqrt(X*X + Y*Y);
+    const theta = Math.atan((Z*a)/(p*b));
 
-    var sintheta = Math.sin(theta);
-    var costheta = Math.cos(theta);
+    const sintheta = Math.sin(theta);
+    const costheta = Math.cos(theta);
 
-    var num = Z + eprime * eprime * b * sintheta * sintheta * sintheta;
-    var denom = p - e * e * a * costheta * costheta * costheta;
+    const num = Z + eprime * eprime * b * sintheta * sintheta * sintheta;
+    const denom = p - e * e * a * costheta * costheta * costheta;
 
     //Now calculate LLA
-    var latitude  = Math.atan(num/denom);
-    var longitude = Math.atan(Y/X);
-    var N = getN(latitude);
-    var altitude  = (p / Math.cos(latitude)) - N;
+    const latitude  = Math.atan(num/denom);
+    let longitude = Math.atan(Y/X);
+    const N = getN(latitude);
+    const altitude  = (p / Math.cos(latitude)) - N;
 
     if (X < 0 && Y < 0) {
         longitude = longitude - Math.PI;
@@ -175,12 +175,12 @@ export function ECEFToLLA(X, Y, Z) {
 }
 
 export function ECEFToLLA_Sphere(X, Y, Z) {
-    var R = wgs84.RADIUS; // Radius of the Earth
+    const R = wgs84.RADIUS; // Radius of the Earth
 
     // Calculate LLA
-    var latitude  = Math.atan2(Z, Math.sqrt(X*X + Y*Y));
-    var longitude = Math.atan2(Y, X);
-    var altitude  = Math.sqrt(X*X + Y*Y + Z*Z) - R;
+    const latitude  = Math.atan2(Z, Math.sqrt(X*X + Y*Y));
+    const longitude = Math.atan2(Y, X);
+    const altitude  = Math.sqrt(X*X + Y*Y + Z*Z) - R;
 
     return [latitude, longitude, altitude];
 }
@@ -189,7 +189,7 @@ export function ECEFToLLA_Sphere(X, Y, Z) {
 // same functions, but passing and returning parameters as a Vector3
 // with LL as degrees
 export function ECEFToLLAVD_Sphere(V) {
-    var a = ECEFToLLA_Sphere(V.x,V.y,V.z);
+    const a = ECEFToLLA_Sphere(V.x,V.y,V.z);
     return new Vector3(a[0] * 180 / Math.PI, a[1] * 180 / Math.PI, a[2])
 }
 
@@ -204,19 +204,19 @@ export function EUSToLLA(eus) {
 // same functions, but passing and returning parameters as a Vector3
 // with LL as degrees
 export function ECEFToLLAVD(V) {
-    var a = ECEFToLLA(V.x,V.y,V.z);
+    const a = ECEFToLLA(V.x,V.y,V.z);
     return new Vector3(a[0] * 180 / Math.PI, a[1] * 180 / Math.PI, a[2])
 }
 
 // and with radians
 export function ECEFToLLAV(V) {
-    var a = ECEFToLLA(V.x,V.y,V.z);
+    const a = ECEFToLLA(V.x,V.y,V.z);
     return new Vector3((a[0]),(a[1]),a[2])
 }
 
 
 export function LLAToECEFVD(V) {
-    var a = RLLAToECEF(V.x * Math.PI / 180, V.y * Math.PI / 180, V.z);
+    const a = RLLAToECEF(V.x * Math.PI / 180, V.y * Math.PI / 180, V.z);
     return new Vector3(a[0],a[1],a[2])
 }
 
@@ -224,17 +224,17 @@ export function LLAToECEFVD(V) {
 // N is the radius of curvature at a given latitude
 export function getN(latitude) {
 
-    var a    = wgs84.RADIUS;
-    var f    = wgs84.FLATTENING;
-    var b    = wgs84.POLAR_RADIUS;
-    var asqr = a*a;
-    var bsqr = b*b;
-    var e = Math.sqrt((asqr-bsqr)/asqr);
-    var eprime = Math.sqrt((asqr-bsqr)/bsqr);
+    const a    = wgs84.RADIUS;
+    const f    = wgs84.FLATTENING;
+    const b    = wgs84.POLAR_RADIUS;
+    const asqr = a*a;
+    const bsqr = b*b;
+    const e = Math.sqrt((asqr-bsqr)/asqr);
+    const eprime = Math.sqrt((asqr-bsqr)/bsqr);
 
-    var sinlatitude = Math.sin(latitude);
-    var denom = Math.sqrt(1-e*e*sinlatitude*sinlatitude);
-    var N = a / denom;
+    const sinlatitude = Math.sin(latitude);
+    const denom = Math.sqrt(1-e*e*sinlatitude*sinlatitude);
+    const N = a / denom;
     return N;
 }
 
@@ -263,14 +263,14 @@ export function ECEF2ENU(pos,lat1, lon1, radius, justRotate=false) {
     assert(radius !== undefined, "ECEF2ENU needs explicit radius" )
     // the origin in ECEF coordinates is at the surface with lat1, lon1
 
-    var mECEF2ENU = new Matrix3().set(
+    const mECEF2ENU = new Matrix3().set(
         -Math.sin(lon1), Math.cos(lon1), 0,
         -Math.sin(lat1) * Math.cos(lon1), -Math.sin(lat1) * Math.sin(lon1), Math.cos(lat1),
         Math.cos(lat1) * Math.cos(lon1), Math.cos(lat1) * Math.sin(lon1), Math.sin(lat1)
     );
-    var enu
+    let enu
     if (!justRotate) {
-        var originECEF = RLLAToECEFV_Sphere(lat1, lon1, 0, radius)
+        const originECEF = RLLAToECEFV_Sphere(lat1, lon1, 0, radius)
         enu = pos.clone().sub((originECEF)).applyMatrix3(mECEF2ENU)
     } else {
         enu = pos.clone().applyMatrix3(mECEF2ENU)
@@ -280,7 +280,7 @@ export function ECEF2ENU(pos,lat1, lon1, radius, justRotate=false) {
 }
 
 export function ECEF2EUS(pos,lat1, lon1, radius, justRotate=false) {
-    var enu = ECEF2ENU(pos,lat1, lon1, radius, justRotate)
+    const enu = ECEF2ENU(pos,lat1, lon1, radius, justRotate)
     return new Vector3(enu.x, enu.z, -enu.y)
 }
 
@@ -289,17 +289,17 @@ export function ENU2ECEF(pos, lat1, lon1, radius, justRotate=false) {
     assert(radius !== undefined, "ENU2ECEF needs explicit radius")
     
     // Create the inverse transformation matrix (ENU to ECEF)
-    var mECEF2ENU = new Matrix3().set(
+    const mECEF2ENU = new Matrix3().set(
         -Math.sin(lon1), Math.cos(lon1), 0,
         -Math.sin(lat1) * Math.cos(lon1), -Math.sin(lat1) * Math.sin(lon1), Math.cos(lat1),
         Math.cos(lat1) * Math.cos(lon1), Math.cos(lat1) * Math.sin(lon1), Math.sin(lat1)
     );
     
-    var mENU2ECEF = new Matrix3().copy(mECEF2ENU).invert();
+    const mENU2ECEF = new Matrix3().copy(mECEF2ENU).invert();
     
-    var ecef;
+    let ecef;
     if (!justRotate) {
-        var originECEF = RLLAToECEFV_Sphere(lat1, lon1, 0, radius);
+        const originECEF = RLLAToECEFV_Sphere(lat1, lon1, 0, radius);
         ecef = pos.clone().applyMatrix3(mENU2ECEF).add(originECEF);
     } else {
         ecef = pos.clone().applyMatrix3(mENU2ECEF);
@@ -315,21 +315,21 @@ export function ECEFToEUS(posECEF, radius) {
     const lat1 = Sit.lat * Math.PI / 180;
     const lon1 = Sit.lon * Math.PI / 180;
     
-    var mECEF2ENU = new Matrix3().set(
+    const mECEF2ENU = new Matrix3().set(
         -Math.sin(lon1), Math.cos(lon1), 0,
         -Math.sin(lat1) * Math.cos(lon1), -Math.sin(lat1) * Math.sin(lon1), Math.cos(lat1),
         Math.cos(lat1) * Math.cos(lon1), Math.cos(lat1) * Math.sin(lon1), Math.sin(lat1)
     );
     
     // Get the origin in ECEF
-    var originECEF = RLLAToECEFV_Sphere(lat1, lon1, 0);
+    const originECEF = RLLAToECEFV_Sphere(lat1, lon1, 0);
     
     // Subtract origin and apply rotation to get ENU
-    var enu = posECEF.clone().sub(originECEF).applyMatrix3(mECEF2ENU);
+    const enu = posECEF.clone().sub(originECEF).applyMatrix3(mECEF2ENU);
     
     // Convert from ENU to EUS (reverse of: ENU = (EUS.x, -EUS.z, EUS.y))
     // So: EUS.x = ENU.x, EUS.y = ENU.z, EUS.z = -ENU.y
-    var eus = new Vector3(enu.x, enu.z, -enu.y);
+    const eus = new Vector3(enu.x, enu.z, -enu.y);
     
     return eus;
 }
@@ -354,24 +354,24 @@ export function EUSToECEF(posEUS, radius) {
     const lat1 = Sit.lat * Math.PI / 180
     const lon1 = Sit.lon * Math.PI / 180
 
-    var mECEF2ENU = new Matrix3().set(
+    const mECEF2ENU = new Matrix3().set(
         -Math.sin(lon1), Math.cos(lon1), 0,
         -Math.sin(lat1) * Math.cos(lon1), -Math.sin(lat1) * Math.sin(lon1), Math.cos(lat1),
         Math.cos(lat1) * Math.cos(lon1), Math.cos(lat1) * Math.sin(lon1), Math.sin(lat1)
     );
 
-    var mENU2ECEF = new Matrix3()
+    const mENU2ECEF = new Matrix3()
     mENU2ECEF.copy(mECEF2ENU)
     mENU2ECEF.invert()
 
     // RLLAToECEFV_Sphere converts from spherical coordinates to ECEF
-    var originECEF = RLLAToECEFV_Sphere(lat1, lon1, 0);
+    const originECEF = RLLAToECEFV_Sphere(lat1, lon1, 0);
 
     // Convert from eus to enu
-    var enu = new Vector3(posEUS.x, -posEUS.z, posEUS.y);
+    const enu = new Vector3(posEUS.x, -posEUS.z, posEUS.y);
 
     // Apply the matrix transformation
-    var ecef = enu.applyMatrix3(mENU2ECEF);
+    const ecef = enu.applyMatrix3(mENU2ECEF);
 
     // You might want to add this ECEF coordinate to the origin to get the final ECEF coordinate
     ecef.add(originECEF);
@@ -530,14 +530,14 @@ export function getLST(date, longitude) {
 // BAD
 export function ECEFCelestialToAzEl(ecef, lat, lon) {
     // First convert to ENU, so locally Z is up
-    let enu = ECEF2ENU(ecef, lat, lon, 1, true)
+    const enu = ECEF2ENU(ecef, lat, lon, 1, true)
 
     // elevation is now the angle between the ENU vector and the XY plane
 
     const r = enu.length();
 
-    var el = Math.asin(enu.z/r)
-    var az = Math.atan2(enu.x,enu.y)
+    const el = Math.asin(enu.z/r)
+    const az = Math.atan2(enu.x,enu.y)
 
     return {az,el}
 }

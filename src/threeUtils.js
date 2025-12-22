@@ -1,5 +1,5 @@
 // Utlity functions to make vectors, 2 or 3 size.
-import {Vector2, Vector3, Color} from "three";
+import {Color, Vector2, Vector3} from "three";
 
 
 export function V2(x = 0, y = 0) {
@@ -110,19 +110,19 @@ export function intersectSphere2(ray, sphere, target0, target1) {
 
     const radius = sphere.radius;
 
-    var A = (vx * vx + vy * vy + vz * vz);
-    var B = 2.0 * (px * vx + py * vy + pz * vz - vx * cx - vy * cy - vz * cz);
+    const A = (vx * vx + vy * vy + vz * vz);
+    const B = 2.0 * (px * vx + py * vy + pz * vz - vx * cx - vy * cy - vz * cz);
 
-    var C = px * px - 2 * px * cx + cx * cx + py * py - 2 * py * cy + cy * cy +
+    const C = px * px - 2 * px * cx + cx * cx + py * py - 2 * py * cy + cy * cy +
         pz * pz - 2 * pz * cz + cz * cz - radius * radius;
-    var D = B * B - 4 * A * C;
+    const D = B * B - 4 * A * C;
 
     if (D >= 0) {
-        var t1 = (-B - Math.sqrt(D)) / (2.0 * A);
+        let t1 = (-B - Math.sqrt(D)) / (2.0 * A);
 
-        var t2 = (-B + Math.sqrt(D)) / (2.0 * A);
+        let t2 = (-B + Math.sqrt(D)) / (2.0 * A);
         if (t1 > t2) {
-            var t = t1;
+            const t = t1;
             t1 = t2
             t2 = t;
         }
@@ -173,10 +173,10 @@ export function MV3(x = 0, y = 0, z = 0) {
 // given a vector. find an vector perpendicular to it
 // to do this we take the cross product of the vector an whatever basis vector it is least parallel to
 export function perpendicularVector(N) {
-    var Ax = Math.abs(N.x)
-    var Ay = Math.abs(N.y)
-    var Az = Math.abs(N.z)
-    var P;
+    const Ax = Math.abs(N.x)
+    const Ay = Math.abs(N.y)
+    const Az = Math.abs(N.z)
+    let P;
     if (Ax < Ay)
         P = Ax < Az ? V3(0, -N.z, N.y) : V3(-N.y, N.x, 0);
     else

@@ -343,8 +343,8 @@ export class QuadTreeMapElevation extends QuadTreeMap {
             if (this.lastGeoTile && this.lastGeoTile.elevation && !this.lastGeoTile.elevationLoadFailed && (desiredZoom === this.lastGeoTile.z)) {
                 let zoom = this.lastGeoTile.z;
                 const maxTile = Math.pow(2, zoom);
-                var x = Math.abs(projection.lon2Tile(geoLocation[1], zoom) % maxTile);
-                var y = Math.abs(projection.lat2Tile(geoLocation[0], zoom) % maxTile);
+                const x = Math.abs(projection.lon2Tile(geoLocation[1], zoom) % maxTile);
+                const y = Math.abs(projection.lat2Tile(geoLocation[0], zoom) % maxTile);
                 const xInt = Math.floor(x);
                 const yInt = Math.floor(y);
                 if (xInt === this.lastGeoTile.x && yInt === this.lastGeoTile.y) {
@@ -354,8 +354,8 @@ export class QuadTreeMapElevation extends QuadTreeMap {
             }
             this.lastGeoTile = null; // reset the last tile if it's not the same
             const maxTile = Math.pow(2, desiredZoom);
-            var x = Math.abs(projection.lon2Tile(geoLocation[1], desiredZoom) % maxTile);
-            var y = Math.abs(projection.lat2Tile(geoLocation[0], desiredZoom) % maxTile);
+            const x = Math.abs(projection.lon2Tile(geoLocation[1], desiredZoom) % maxTile);
+            const y = Math.abs(projection.lat2Tile(geoLocation[0], desiredZoom) % maxTile);
             let xInt = Math.floor(x);
             let yInt = Math.floor(y);
             // if we have a tile cache, check if the tile is in the cache
@@ -377,8 +377,8 @@ export class QuadTreeMapElevation extends QuadTreeMap {
                     this.lastGeoTile = tile; // keep track of the last tile found
                     // BUG FIX: Recalculate x,y for the actual zoom level found, not desiredZoom
                     const maxTileAtZoom = Math.pow(2, zoom);
-                    var xFixed = Math.abs(projection.lon2Tile(geoLocation[1], zoom) % maxTileAtZoom);
-                    var yFixed = Math.abs(projection.lat2Tile(geoLocation[0], zoom) % maxTileAtZoom);
+                    const xFixed = Math.abs(projection.lon2Tile(geoLocation[1], zoom) % maxTileAtZoom);
+                    const yFixed = Math.abs(projection.lat2Tile(geoLocation[0], zoom) % maxTileAtZoom);
                     return {x: xFixed, y: yFixed, zoom};
                 }
                 
@@ -396,8 +396,8 @@ export class QuadTreeMapElevation extends QuadTreeMap {
         let zoom = this.maxZoom;
         while (zoom >= 0) {
             const maxTile = Math.pow(2, zoom);
-            var x = Math.abs(projection.lon2Tile(geoLocation[1], zoom) % maxTile);
-            var y = Math.abs(projection.lat2Tile(geoLocation[0], zoom) % maxTile);
+            const x = Math.abs(projection.lon2Tile(geoLocation[1], zoom) % maxTile);
+            const y = Math.abs(projection.lat2Tile(geoLocation[0], zoom) % maxTile);
             const xInt = Math.floor(x);
             const yInt = Math.floor(y);
             // if we have a tile cache, check if the tile is in the cache
@@ -423,8 +423,8 @@ export class QuadTreeMapElevation extends QuadTreeMap {
             if (this.lastGeoTile && this.lastGeoTile.elevation && !this.lastGeoTile.elevationLoadFailed && (desiredZoom === this.lastGeoTile.z)) {
                 let zoom = this.lastGeoTile.z;
                 const maxTile = Math.pow(2, zoom);
-                var x = Math.abs(projection.lon2Tile(geoLocation[1], zoom) % maxTile);
-                var y = Math.abs(projection.lat2Tile(geoLocation[0], zoom) % maxTile);
+                const x = Math.abs(projection.lon2Tile(geoLocation[1], zoom) % maxTile);
+                const y = Math.abs(projection.lat2Tile(geoLocation[0], zoom) % maxTile);
 
                 const xInt = Math.floor(x);
                 const yInt = Math.floor(y);
@@ -435,8 +435,8 @@ export class QuadTreeMapElevation extends QuadTreeMap {
             this.lastGeoTile = null;
 
             const maxTile = Math.pow(2, desiredZoom);
-            var x = Math.abs(projection.lon2Tile(geoLocation[1], desiredZoom) % maxTile);
-            var y = Math.abs(projection.lat2Tile(geoLocation[0], desiredZoom) % maxTile);
+            const x = Math.abs(projection.lon2Tile(geoLocation[1], desiredZoom) % maxTile);
+            const y = Math.abs(projection.lat2Tile(geoLocation[0], desiredZoom) % maxTile);
 
             let xInt = Math.floor(x);
             let yInt = Math.floor(y);
@@ -476,8 +476,8 @@ export class QuadTreeMapElevation extends QuadTreeMap {
         let zoom = this.maxZoom;
         while (zoom >= 0) {
             const maxTile = Math.pow(2, zoom);
-            var x = Math.abs(projection.lon2Tile(geoLocation[1], zoom) % maxTile);
-            var y = Math.abs(projection.lat2Tile(geoLocation[0], zoom) % maxTile);
+            const x = Math.abs(projection.lon2Tile(geoLocation[1], zoom) % maxTile);
+            const y = Math.abs(projection.lat2Tile(geoLocation[0], zoom) % maxTile);
 
             const xInt = Math.floor(x);
             const yInt = Math.floor(y);

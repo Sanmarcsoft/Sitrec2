@@ -96,10 +96,10 @@ import {
 } from "./JetStuffVars";
 
 
-var matLineWhite = makeMatLine(0xffffff);
-var matLineCyan = makeMatLine(0x00ffff,1.5);
-var matLineGreen = makeMatLine(0x00ff00);
-var matLineGreenThin = makeMatLine(0x00c000,1.0);
+const matLineWhite = makeMatLine(0xffffff);
+const matLineCyan = makeMatLine(0x00ffff,1.5);
+const matLineGreen = makeMatLine(0x00ff00);
+const matLineGreenThin = makeMatLine(0x00c000,1.0);
 
 
 
@@ -129,12 +129,12 @@ export function initJetVariables() {
 }
 
 
-var LOS_line;
-var LOS_points;
-var LOS_geometry;
-var LOSX_line;
-var LOSX_points;
-var LOSX_geometry;
+let LOS_line;
+let LOS_points;
+let LOS_geometry;
+let LOSX_line;
+let LOSX_points;
+let LOSX_geometry;
 
 export function updateLOS(scene, targetPos) {
 
@@ -157,11 +157,11 @@ export function updateLOS(scene, targetPos) {
     LOS_line.layers.mask = LAYER.MASK_HELPERS;
     LocalFrame.add(LOS_line)
 
-    var LOSXlen = 10000
+    const LOSXlen = 10000
     LOSX_points = [0, 0, 0, 0, 0, 0]
 
-    var localOrigin = V3(0, 0, 0)
-    var worldLos = targetPos.clone().multiplyScalar(LOSXlen)
+    const localOrigin = V3(0, 0, 0)
+    const worldLos = targetPos.clone().multiplyScalar(LOSXlen)
 
     LocalFrame.localToWorld(localOrigin)
     LocalFrame.localToWorld(worldLos)
@@ -184,9 +184,9 @@ export function updateLOS(scene, targetPos) {
     scene.add(LOSX_line)
 }
 
-var ERROR_circle;
-var ERROR_points;
-var ERROR_geometry;
+let ERROR_circle;
+let ERROR_points;
+let ERROR_geometry;
 
 export function update_ERROR_circle(scence, circleCenter) {
     // to make the circle, we have a vector v, and we want to first rotate it
@@ -194,20 +194,20 @@ export function update_ERROR_circle(scence, circleCenter) {
     // to do this we get a rotation vector p that's perpendicular to v and rotate around that
 
     LocalFrame.remove(ERROR_circle)
-    var p = V3(-circleCenter.z, circleCenter.y, circleCenter.x)
+    const p = V3(-circleCenter.z, circleCenter.y, circleCenter.x)
     p.cross(circleCenter)
 
     p.normalize()  // to use a vector as an axis it needs to be normalized
 
-    var circlePoint = V3(circleCenter.x, circleCenter.y, circleCenter.z)
+    const circlePoint = V3(circleCenter.x, circleCenter.y, circleCenter.z)
     circlePoint.applyAxisAngle(p, radians(5))
     ERROR_points = []
 
-    var circleDirection = circleCenter.clone().normalize()
+    const circleDirection = circleCenter.clone().normalize()
 
     ERROR_points.push(circlePoint.x, circlePoint.y, circlePoint.z)
-    var circleTurn = 5;
-    for (var i = 0; i <= 360; i += circleTurn) {
+    const circleTurn = 5;
+    for (let i = 0; i <= 360; i += circleTurn) {
         circlePoint.applyAxisAngle(circleDirection, radians(circleTurn))
         ERROR_points.push(circlePoint.x, circlePoint.y, circlePoint.z)
     }
@@ -215,7 +215,7 @@ export function update_ERROR_circle(scence, circleCenter) {
     dispose(ERROR_geometry)
     ERROR_geometry = new LineGeometry();
     ERROR_geometry.setPositions(ERROR_points);
-    var oldErrorCircleVisible = true;
+    let oldErrorCircleVisible = true;
     if (ERROR_circle != undefined)
         oldErrorCircleVisible = ERROR_circle.visible
     ERROR_circle = new Line2(ERROR_geometry, matLineGreenThin);
@@ -225,7 +225,7 @@ export function update_ERROR_circle(scence, circleCenter) {
     showHider(ERROR_circle, 'showErrorCircle', oldErrorCircleVisible, 'o')
 }
 
-var debugText = ""; // stick text in here, and it's show instead of keyboard shortcuts
+let debugText = ""; // stick text in here, and it's show instead of keyboard shortcuts
 export function UpdateHUD(text="") {
     /*
      var pitch1, pitch2, startRoll, endRoll;
@@ -246,7 +246,7 @@ export function UpdateHUD(text="") {
          "Roll Range   " + rollRange.toFixed(1) + "°<br>" +
          "Pod Pitch    "    + par.podPitchPhysical.toFixed(1) + "°<br>"
  */
-    var keyInfo = "";
+    let keyInfo = "";
 
     // keyInfo += navigator.userAgent+"<br>"
     // keyInfo += navigator.platform+"<br>"
@@ -324,23 +324,23 @@ export function ChangedPR() {
     EOSU.rotation.z = radians(-par.podRollPhysical)
 
     // INPUT
-    var jetTrack = NodeMan.get("jetTrack")
+    const jetTrack = NodeMan.get("jetTrack")
     // move the jet!!!
     // we also need to be able to move the camera WITH the jet.
-    var jet = jetTrack.p(par.frame);
-    var offset = jet.clone().sub(LocalFrame.position)
+    const jet = jetTrack.p(par.frame);
+    const offset = jet.clone().sub(LocalFrame.position)
     LocalFrame.position.add(offset)
 
 
     // how much has the heading changed
     const oldHeading = par.jetHeading;
     const newHeading = jetTrack.v(par.frame).heading
-    var headingChange = newHeading - oldHeading;
+    let headingChange = newHeading - oldHeading;
     if (headingChange < -180) headingChange += 360;
 
     // rotate the LocalFrame by this
     // TODO: this is a about the Y axis, should it not be local up?
-    var upAxis = V3(0, 1, 0)
+    const upAxis = V3(0, 1, 0)
 
     // rotateOnAxis is in OBJECT space, so it rotates the object
     // about it's own origin
@@ -379,13 +379,13 @@ export function ChangedPR() {
     // A) the view of the lookCam
     // B) the lines of sight
 
-    var _x = V3()
-    var _y = V3()
-    var _z = V3()
+    const _x = V3()
+    const _y = V3()
+    const _z = V3()
     LocalFrame.matrix.extractBasis(_x, _y, _z)  // matrix or matrixWorld? parent is GlobalScene, so
 
     // INPUT
-    var localUp = getLocalUpVector(LocalFrame.position, metersFromMiles(NodeMan.get("radiusMiles").v0))
+    const localUp = getLocalUpVector(LocalFrame.position, metersFromMiles(NodeMan.get("radiusMiles").v0))
 
     _y.copy(localUp)
 
@@ -397,7 +397,7 @@ export function ChangedPR() {
     _x.crossVectors(_y, _z)
     _z.crossVectors(_x, _y)
 
-    var m = new Matrix4()
+    const m = new Matrix4()
     m.makeBasis(_x, _y, _z)
 
     LocalFrame.quaternion.setFromRotationMatrix(m);
@@ -410,21 +410,21 @@ export function ChangedPR() {
 
     par.jetHeading = newHeading;
 
-    var glarePos = PRJ2XYZ(par.podPitchPhysical, par.podRollPhysical + NodeMan.get("bank").v(par.frame), jetPitchFromFrame(), vizRadius)
+    const glarePos = PRJ2XYZ(par.podPitchPhysical, par.podRollPhysical + NodeMan.get("bank").v(par.frame), jetPitchFromFrame(), vizRadius)
 
    glareSphere.position.copy(glarePos);
 
-    var targetPos = PRJ2XYZ(par.podPitchIdeal, par.podRollIdeal + NodeMan.get("bank").v(par.frame), jetPitchFromFrame(), vizRadius)
+    const targetPos = PRJ2XYZ(par.podPitchIdeal, par.podRollIdeal + NodeMan.get("bank").v(par.frame), jetPitchFromFrame(), vizRadius)
     targetSphere.position.copy(targetPos)
 
     updateLOS(GlobalScene, targetPos)
 
-    var aV = EA2XYZ(Frame2El(Sit.aFrame), Frame2Az(Sit.aFrame), vizRadius)
+    const aV = EA2XYZ(Frame2El(Sit.aFrame), Frame2Az(Sit.aFrame), vizRadius)
     aSphere.position.copy(aV)
-    var bV = EA2XYZ(Frame2El(Sit.bFrame), Frame2Az(Sit.bFrame), vizRadius)
+    const bV = EA2XYZ(Frame2El(Sit.bFrame), Frame2Az(Sit.bFrame), vizRadius)
     bSphere.position.copy(bV)
 
-    var circleCenter = glareSphere.position;
+    const circleCenter = glareSphere.position;
 
     update_ERROR_circle(GlobalScene, circleCenter)
 
@@ -445,18 +445,18 @@ export function ChangedPR() {
     // except instead of using a unit sphere
     // we use one of radius vizRadius
     // to get the large arrows in the display.
-    var jetUp = new Vector3(0, 1, 0)
+    const jetUp = new Vector3(0, 1, 0)
     jetUp.applyAxisAngle(V3(0, 0, 1), -radians(NodeMan.get("bank").v(par.frame)))
     jetUp.applyAxisAngle(V3(1, 0, 0), radians(jetPitchFromFrame()))
-    var jetPlane = new Plane(jetUp, 0) // plane in Hessian normal form, normal unit vector and a distance from the origin
+    const jetPlane = new Plane(jetUp, 0) // plane in Hessian normal form, normal unit vector and a distance from the origin
     // take the targetPos (the white dot) and project it onto the jetPlane
-    var cuePos = new Vector3;
+    const cuePos = new Vector3;
     jetPlane.projectPoint(targetPos, cuePos) // project targetPos onto jetPlane, return in cuePos
 //    DebugArrowAB("Projected Cue", targetPos, cuePos, 0x00ffff, false, LocalFrame)
 //    DebugArrowAB("Cue Az", V3(0, 0, 0), cuePos, 0x00ffff, false, LocalFrame)
 
-    var horizonPlane = new Plane(V3(0, 1, 0), 0)
-    var azPos = new Vector3;
+    const horizonPlane = new Plane(V3(0, 1, 0), 0)
+    const azPos = new Vector3;
     horizonPlane.projectPoint(targetPos, azPos) // the same as just setting y to 0
 //    DebugArrowAB("Projected Az", targetPos, azPos, 0xffff00, false, LocalFrame)
 //    DebugArrowAB("Az", V3(0, 0, 0), azPos, 0xffff00, false, LocalFrame)
@@ -465,7 +465,7 @@ export function ChangedPR() {
 
 
 export function UpdatePRFromEA() {
-    var pitch, roll;
+    let pitch, roll;
     [pitch, roll] = EAJP2PR(Frame2El(par.frame), Frame2Az(par.frame), jetPitchFromFrame());
     par.podPitchPhysical = pitch;
     par.podPitchIdeal = pitch;
@@ -481,8 +481,8 @@ export function UpdatePRFromEA() {
 export function UIChangedAz() {
     // we find the correct frame by finding the first one that has a calculated Az that
     // is greater than this az
-    var aZDecreasing = Frame2Az(Sit.frames - 1) < Frame2Az(0)
-    for (var f = 0; f < Sit.frames; f++) {
+    const aZDecreasing = Frame2Az(Sit.frames - 1) < Frame2Az(0)
+    for (let f = 0; f < Sit.frames; f++) {
         if ((aZDecreasing ? Frame2Az(f) <= par.az : Frame2Az(f) >= par.az)) {
             console.log("UIChangedAz: frame " + par.frame + "-> " + f + " from az = " + par.az)
             par.frame = f;
@@ -762,7 +762,7 @@ export function CreateTraverseNodes(idExtra="", los = "JetLOS") {
             id: "targetActualHeading",
             inputs: {initialHeading: "initialHeading", relativeHeading: "targetRelativeHeading"},
             munge: function (f) {
-                var newHeading = this.in.initialHeading.getHeading() + this.in.relativeHeading.v0
+                let newHeading = this.in.initialHeading.getHeading() + this.in.relativeHeading.v0
                 if (newHeading < 0) newHeading += 360;
                 if (newHeading >= 360) newHeading -= 360
                 return newHeading
@@ -881,20 +881,20 @@ export function CreateTraverseNodes(idExtra="", los = "JetLOS") {
 //windowWidth  = window.innerWidth;
 //windowHeight = window.innerHeight;
 
-var lastWindowWidth, lastWindowHeight;
+let lastWindowWidth, lastWindowHeight;
 
 // Detects if the page's window has been resized, and resize things as needed.
 export function updateSize(force) {
 
     if (force || lastWindowWidth != window.innerWidth || lastWindowHeight != window.innerHeight) {
-        var windowWidth = window.innerWidth;
-        var windowHeight = window.innerHeight;
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
         lastWindowHeight = windowHeight;
         lastWindowWidth = windowWidth;
 
         updateMatLineResolution(windowWidth*2, windowHeight*2)
 
-        var scale = window.innerWidth / 1920
+        const scale = window.innerWidth / 1920
 
         ViewMan.updateSize();
 
@@ -917,17 +917,17 @@ export function initViews() {
 
     ViewMan.get("chart").setVisible(par.showChart);
 
-    var labelOriginalVideo = new CNodeViewUI({id: "labelOriginalVideo", overlayView: ViewMan.list.video.data});
+    const labelOriginalVideo = new CNodeViewUI({id: "labelOriginalVideo", overlayView: ViewMan.list.video.data});
     labelOriginalVideo.addText("videolabel", "ORIGINAL VIDEO", 70, 10, 3, "#f0f00080")
     labelOriginalVideo.setVisible(true)
 
     if (1 || !isLocal) {
-        var labelMainView = new CNodeViewUI({id: "labelMainView", overlayView: ViewMan.list.mainView.data});
+        const labelMainView = new CNodeViewUI({id: "labelMainView", overlayView: ViewMan.list.mainView.data});
         labelMainView.addText("videolabel1", "WORK IN PROGRESS", 45, 90, 3, "#f0f00020")
         labelMainView.addText("videolabel2", "RESULTS MAY VARY", 45, 95, 3, "#f0f00020")
         labelMainView.setVisible(true)
     }
-    var farClipLook = metersFromMiles(500)
+    const farClipLook = metersFromMiles(500)
 
 
 
@@ -951,25 +951,25 @@ export function initViews() {
     }
 
 
-    var line_material = new LineBasicMaterial({color: 0xffffff});
-    var line_materialRED = new LineBasicMaterial({color: 0xff8080, linewidth: 5});
+    const line_material = new LineBasicMaterial({color: 0xffffff});
+    const line_materialRED = new LineBasicMaterial({color: 0xff8080, linewidth: 5});
 
     // Now using the Line2, etc from https://github.com/mrdoob/three.js/blob/master/examples/webgl_lines_fat.html
 
-    var pitchStep = 2;
-    var rollStep = 1;
-    var pitchGap = 10
-    var rollGap = 10;
+    const pitchStep = 2;
+    const rollStep = 1;
+    const pitchGap = 10
+    const rollGap = 10;
 
     // an invisible hemisphere, just for collision, with vizRadius
     const positions = [];
-    for (var pitch = 0; pitch < 90; pitch += pitchGap) {
+    for (let pitch = 0; pitch < 90; pitch += pitchGap) {
 
-        for (var roll = 0; roll <= 360; roll += rollGap) {
-            var A = PRJ2XYZ(pitch, roll, 0, vizRadius)
-            var B = PRJ2XYZ(pitch, roll + rollGap, 0, vizRadius)
-            var C = PRJ2XYZ(pitch + pitchGap, roll, 0, vizRadius)
-            var D = PRJ2XYZ(pitch + pitchGap, roll + rollGap, 0, vizRadius)
+        for (let roll = 0; roll <= 360; roll += rollGap) {
+            const A = PRJ2XYZ(pitch, roll, 0, vizRadius)
+            const B = PRJ2XYZ(pitch, roll + rollGap, 0, vizRadius)
+            const C = PRJ2XYZ(pitch + pitchGap, roll, 0, vizRadius)
+            const D = PRJ2XYZ(pitch + pitchGap, roll + rollGap, 0, vizRadius)
 
             // It's a triangle list (not a strip), so need two sets of three verts for a quad.
             positions.push(A.x, A.y, A.z);
@@ -995,7 +995,7 @@ export function initViews() {
     });
 
     if (Sit.name.startsWith("gimbal")) {
-        var dragMesh = new Mesh(geometry, material);
+        const dragMesh = new Mesh(geometry, material);
         dragMesh.visible = false;
         dragMesh.name = "dragMesh"
         PodFrame.add(dragMesh);
@@ -1094,7 +1094,7 @@ export function initJetStuff() {
 
     // note that since we have a very large distance to the far clipping plane
     // but we use a logarithmic depth buffer, so it works out.
-    var farClip = metersFromMiles(2000)
+    const farClip = metersFromMiles(2000)
 
     const mainCam = NodeMan.get("mainCamera").camera;
     mainCam.layers.enable(LAYER.podBack)
@@ -1104,10 +1104,10 @@ export function initJetStuff() {
 
         const displayWindArrows = ViewMan.get("SAPage").buttonBoxed(16);  // wind button
 
-        var windTrackLocal = NodeMan.get("localWind")
-        var windTrackTarget = NodeMan.get("targetWind")
-        var ufoTrack = NodeMan.get("LOSTraverseSelect")
-        var jetTrack = NodeMan.get("jetTrack")
+        const windTrackLocal = NodeMan.get("localWind")
+        const windTrackTarget = NodeMan.get("targetWind")
+        const ufoTrack = NodeMan.get("LOSTraverseSelect")
+        const jetTrack = NodeMan.get("jetTrack")
 
         const vScale = Sit.frames
         const windVelocityScaledLocal = windTrackLocal.v(par.frame).multiplyScalar(vScale)
@@ -1130,16 +1130,16 @@ export function initJetStuff() {
         DebugArrowAB("JET Air V", jetPosition, airVelocityEnd, "#0000ff", displayWindArrows, GlobalScene) // blue = air speed
     }
 
-    var farClipLook = metersFromMiles(500)
+    const farClipLook = metersFromMiles(500)
 
     // viw of the back of the pod with rotating glare on it.
-    var podCamera = new PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, farClipLook);
+    const podCamera = new PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, farClipLook);
     podCamera.position.set(-20, LocalFrame.position.y + 20, -40)
     podCamera.lookAt(new Vector3(0, LocalFrame.position.y, 0));
 
 
     // wrap these other cameras in nodes
-    var podCameraNode = new CNodeCamera({id:"podCamera", camera: podCamera})
+    const podCameraNode = new CNodeCamera({id:"podCamera", camera: podCamera})
 
 // 0 - podhead
     const viewPod = new CNodeView3D({
@@ -1171,7 +1171,7 @@ export function initJetStuff() {
 //
 
     // Pod's eye - what the pod sees, physical angles, and then tweaked to look at target
-    var podsEyeCamera = new PerspectiveCamera(20, window.innerWidth / window.innerHeight, 99, farClipLook);
+    const podsEyeCamera = new PerspectiveCamera(20, window.innerWidth / window.innerHeight, 99, farClipLook);
     podsEyeCamera.lookAt(new Vector3(0, 0, -1));
     podsEyeCamera.layers.disable(LAYER.MAIN)
     podsEyeCamera.layers.disable(LAYER.HELPERS)
@@ -1257,7 +1257,7 @@ export function initJetStuff() {
                 Ball.matrixWorld.elements[5],
                 Ball.matrixWorld.elements[6])
 
-            var worldTarget = V3(0, 0, 0)
+            const worldTarget = V3(0, 0, 0)
             targetSphere.getWorldPosition(worldTarget)
             this.camera.lookAt(worldTarget)
 
@@ -1295,11 +1295,11 @@ export function initJetStuff() {
             Ball.matrixWorld.elements[5],
             Ball.matrixWorld.elements[6])
 
-        var worldTarget = V3(0, 0, 0)
+        const worldTarget = V3(0, 0, 0)
         targetSphere.getWorldPosition(worldTarget)
         this.camera.lookAt(worldTarget)
 
-        var deroNeeded = getDeroFromFrame(par.frame)
+        const deroNeeded = getDeroFromFrame(par.frame)
 
 //                console.log(deroNeeded + " -> " + par.podRollPhysical)
 
@@ -1324,7 +1324,7 @@ export function initJetStuff() {
 }
 
 export function initJetStuffOverlays() {
-    var ui = new CNodeATFLIRUI({
+    let ui = new CNodeATFLIRUI({
         id: "dero",
         jetAltitude: "jetAltitude",
         overlayView: ViewMan.list.podsEyeViewDero.data,

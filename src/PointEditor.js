@@ -196,11 +196,11 @@ export class PointEditor {
         //      editingObject.position.y = 500;
         if (this.snapCamera != undefined) {
             // Snap to a LOS between the snapCamera track and the snapTarget Track
-            var editingFrame = this.frameNumbers[i]
-            var cameraPos = this.snapCamera.p(editingFrame)
-            var targetPos = this.snapTarget.p(editingFrame)
-            var los = new Line3(cameraPos,targetPos)
-            var clamped = V3();
+            const editingFrame = this.frameNumbers[i]
+            const cameraPos = this.snapCamera.p(editingFrame)
+            const targetPos = this.snapTarget.p(editingFrame)
+            const los = new Line3(cameraPos,targetPos)
+            const clamped = V3();
             los.closestPointToPoint(editingObject.position, false, clamped) // false means we can extend the LOS
 
             // note we need to COPY the position, as the object position is shared by both
@@ -512,8 +512,8 @@ export class PointEditor {
 
     getLength(frames) {
         // just add the sum of the linear lengths of the segments. frames is ignored
-        var len = 0;
-        for (var i=0;i<this.numPoints-1;i++) {
+        let len = 0;
+        for (let i=0;i<this.numPoints-1;i++) {
             len += this.positions[i+1].clone().sub(this.positions[i]).length()
         }
         return len
@@ -525,7 +525,7 @@ export class PointEditor {
     // along a curve, but here we can just interpolate between the points
     getPoint(t,point) {
         // first find point A and B such that t is between the
-        var a = Math.floor(t * (this.numPoints-1))
+        let a = Math.floor(t * (this.numPoints-1))
         if (t >= 1.0) a = this.numPoints - 2; // exception for t =1
         const b = a + 1 // b is always just the bext point
         const f = (t * (this.numPoints-1)-a) // fraction within the segment a-b
@@ -540,7 +540,7 @@ export class PointEditor {
 
     // given a frame number, find the matching value for t (i.e how far along the curve
     getPointFrame(f) {
-        var point;
+        let point;
         point = new Vector3()
         // frameNumbers is an array of the frame number that each control point is at
         // it's on greater that the number of segments.
@@ -602,8 +602,8 @@ export class PointEditor {
         }
 
         const numFramesCovered = this.frameNumbers[lastIndex] - this.frameNumbers[0]
-        var segment = 0
-        var t = 0;
+        let segment = 0
+        let t = 0;
         const tPerSegment = 1/lastIndex;
         while (segment<lastIndex
         && (f < this.frameNumbers[segment] || f > this.frameNumbers[segment+1])) {
@@ -662,7 +662,7 @@ export class PointEditor {
             // at this point we know that we have:
             // - at least one point
             // - with a frame number less than
-            var insertPoint = 0;
+            let insertPoint = 0;
             while (!(insertPoint === this.frameNumbers.length - 1)
             && !(this.frameNumbers[insertPoint] <= frame && this.frameNumbers[insertPoint + 1] > frame)) {
                 insertPoint++
