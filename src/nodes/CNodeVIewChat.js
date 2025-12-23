@@ -273,8 +273,12 @@ class CNodeViewChat extends CNodeViewText {
                 headers: { 'Content-Type': 'application/json' },
             });
             const response = await res.json();
+            console.log("Chatbot response:", response);
+            if (response.debug) {
+                this.addDebugMessage(`Server debug: ${JSON.stringify(response.debug)}`);
+            }
             if (response.text) this.addSystemMessage(response.text);
-            if (response.apiCalls) {
+            if (response.apiCalls && response.apiCalls.length > 0) {
                 this.addDebugMessage(`API calls: ${JSON.stringify(response.apiCalls)}`);
                 this.handleAPICalls(response.apiCalls);
             }

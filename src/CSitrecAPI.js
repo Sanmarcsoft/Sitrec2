@@ -542,6 +542,7 @@ class CSitrecAPI {
         }
 
         try {
+            controller.getValue().call(controller.object);
             controller._callOnChange();
             return { success: true, executed: path };
         } catch (e) {
