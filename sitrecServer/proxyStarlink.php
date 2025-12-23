@@ -58,23 +58,24 @@ $nextDay = date('Y-m-d', strtotime($request . ' +2 days'));
 $url = "https://www.space-track.org/basicspacedata/query/class/gp_history/CREATION_DATE/" . $request . "--" . $nextDay . "/orderby/NORAD_CAT_ID,EPOCH/format/3le/OBJECT_NAME/STARLINK~~";
 
 // LEO is Low Earth object, but here filter for payloads only
+// decay_date/null-val filters out decayed objects per Space-Track recommendations
 if ($type == "LEO") {
-    $url = "https://www.space-track.org/basicspacedata/query/class/gp_history/EPOCH/" . $request . "--" . $nextDay . "/MEAN_MOTION/>11.25/ECCENTRICITY/<0.25/OBJECT_TYPE/payload/orderby/NORAD_CAT_ID,EPOCH/format/3le";
+    $url = "https://www.space-track.org/basicspacedata/query/class/gp_history/EPOCH/" . $request . "--" . $nextDay . "/MEAN_MOTION/>11.25/ECCENTRICITY/<0.25/OBJECT_TYPE/payload/decay_date/null-val/orderby/NORAD_CAT_ID,EPOCH/format/3le";
 }
 
 // LEOALL is all the LEO objects, including payloads and debris
 if ($type == "LEOALL") {
-    $url = "https://www.space-track.org/basicspacedata/query/class/gp_history/EPOCH/" . $request . "--" . $nextDay . "/MEAN_MOTION/>11.25/ECCENTRICITY/<0.25/format/3le";
+    $url = "https://www.space-track.org/basicspacedata/query/class/gp_history/EPOCH/" . $request . "--" . $nextDay . "/MEAN_MOTION/>11.25/ECCENTRICITY/<0.25/decay_date/null-val/format/3le";
 }
 
 if ($type == "SLOW") {
     // SLOW is for objects with a mean motion of less than 11.25 (using 11.26 to overlap with LEO a little)
-    $url = "https://www.space-track.org/basicspacedata/query/class/gp_history/EPOCH/" . $request . "--" . $nextDay . "/MEAN_MOTION/<11.26/format/3le";
+    $url = "https://www.space-track.org/basicspacedata/query/class/gp_history/EPOCH/" . $request . "--" . $nextDay . "/MEAN_MOTION/<11.26/decay_date/null-val/format/3le";
 }
 
 // override for ALL query
 if ($type == "ALL") {
-    $url = "https://www.space-track.org/basicspacedata/query/class/gp_history/CREATION_DATE/" . $request . "--" . $nextDay . "/orderby/NORAD_CAT_ID,EPOCH/format/3le";
+    $url = "https://www.space-track.org/basicspacedata/query/class/gp_history/CREATION_DATE/" . $request . "--" . $nextDay . "/decay_date/null-val/orderby/NORAD_CAT_ID,EPOCH/format/3le";
 }
 
 // CUSTOM TLE handling
@@ -171,6 +172,11 @@ if ($type == "CUSTOM") {
     // Space-Track.org data query URL (calculated earlier)
     $dataUrl = $url;
 
+    // Check if credentials are configured
+    if (empty($username) || empty($password)) {
+        die('ERROR: Space-Track credentials not configured. Set SPACEDATA_USERNAME and SPACEDATA_PASSWORD environment variables.');
+    }
+
     // Initialize cURL session
     $ch = curl_init();
 
@@ -185,12 +191,19 @@ if ($type == "CUSTOM") {
 
     // Execute login request
     $response = curl_exec($ch);
+    $curl_error = curl_error($ch);
     $http_status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+    // Check for cURL errors during login
+    if ($response === false) {
+        curl_close($ch);
+        die('ERROR: Space-Track login cURL failed: ' . $curl_error);
+    }
 
     // Check for login errors
     if ($http_status !== 200) {
-        echo $response;
-        die('Login failed. Check your credentials.');
+        curl_close($ch);
+        die('ERROR: Space-Track login failed with HTTP ' . $http_status . '. Username: ' . $username . '. Check credentials.');
     }
 
     // Set cURL options for data query
@@ -202,29 +215,40 @@ if ($type == "CUSTOM") {
 
     // Execute data query request
     $data = curl_exec($ch);
+    $curl_error = curl_error($ch);
     $http_status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
     // Close cURL session
     curl_close($ch);
+
+    // Check for cURL errors during data query
+    if ($data === false) {
+        die('ERROR: Space-Track data query cURL failed: ' . $curl_error . '. URL: ' . $dataUrl);
+    }
 }
 
 
 // Check for data query errors, and zero length data
 if ($data === false || empty($data)) {
-    die('Data query failed or returned no results.');
+    die('ERROR: Space-Track query returned no data. Request: ' . $request . ', Type: ' . ($type ?: 'STARLINK') . ', URL: ' . $url);
 }
 
-// Check for HTTP errors
+// Check for HTTP errors (including 5xx server errors)
 if ($http_status !== 200) {
-    echo $data;
-    die('Data query failed with HTTP status code: ' . $http_status . "<br>" . $data);
+    die('ERROR: Space-Track query failed with HTTP ' . $http_status . '. Request: ' . $request . ', Type: ' . ($type ?: 'STARLINK') . ', Response: ' . substr($data, 0, 500));
+}
+
+// Check if response looks like an HTML error page instead of TLE data
+$trimmedData = trim($data);
+if (stripos($trimmedData, '<!DOCTYPE') === 0 || stripos($trimmedData, '<html') === 0) {
+    die('ERROR: Space-Track returned HTML instead of TLE data (server error). Request: ' . $request . ', Type: ' . ($type ?: 'STARLINK') . ', Response: ' . substr($data, 0, 500));
 }
 
 
 // check that the first line contains "STARLINK" if the default type
 $lines = explode("\n", $data);
 if ($type == "" && strpos($lines[0], "STARLINK") === false) {
-    die('STARLINK is not in the first line of the data.');
+    die('ERROR: Expected STARLINK data but got: ' . substr($lines[0], 0, 100) . '. Request: ' . $request);
 }
 
 if ($caching) {

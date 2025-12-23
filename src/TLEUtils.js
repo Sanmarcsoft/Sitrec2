@@ -202,6 +202,19 @@ export class CTLEData {
         assert(fileData !== undefined, "CTLEData: fileData is undefined");
         assert(typeof fileData === "string", "CTLEData: fileData is not a string");
 
+        // Check for server error messages before trying to parse as TLE
+        const trimmedData = fileData.trim();
+        if (trimmedData.startsWith("ERROR:")) {
+            showError("TLE Loading Error: " + trimmedData);
+            this.satData = [];
+            this.noradIndex = [];
+            this.startDate = new Date("2100");
+            this.endDate = new Date("1950");
+            this.loadError = trimmedData;
+            console.error("CTLEData: Server returned error: " + trimmedData);
+            return;
+        }
+
         // split the stringified fileData into an array of lines
         const lines = fileData.split('\n');
 
@@ -332,6 +345,13 @@ export class CTLEData {
         console.log("CTLEData: loaded " + this.satData.length + " satellites with max " +
             this.noradIndex.length + " NORAD numbers, start date: " + this.startDate.toISOString() +
             ", end date: " + this.endDate.toISOString());
+
+        // Warn if no satellites were loaded (possible parsing error or invalid data)
+        if (this.satData.length === 0) {
+            const preview = fileData.substring(0, 200).replace(/\n/g, ' ');
+            console.warn("CTLEData: No satellites loaded from TLE data. Preview: " + preview);
+            this.loadError = "No satellites loaded from TLE data";
+        }
 
     }
 

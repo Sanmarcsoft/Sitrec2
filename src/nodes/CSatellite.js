@@ -12,6 +12,7 @@ import {DebugArrow, DebugArrowAB, getPointBelow, removeDebugArrow} from "../thre
 import * as LAYER from "../LayerMasks";
 import {assert} from "../assert";
 import {saveAs} from "../js/FileSaver";
+import {showError} from "../showError";
 
 /**
  * CSatellite handles all satellite-related functionality
@@ -1203,9 +1204,11 @@ export class CSatellite {
         // (as we need to change it, but don't want to change the global one)
         let startTime = new Date(GlobalDateTimeNode.dateStart);
 
-        // if the startTime is greater than 48 hours ago, set it to that
+        // gp_history data has ~3-4 day publication delay
+        // If sitch start time is more recent than 5 days ago, clamp to 5 days ago
+        // to ensure we request data that's actually available
         const now = new Date();
-        const someTimeAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+        const someTimeAgo = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000);
         if (startTime > someTimeAgo) {
             startTime = someTimeAgo;
         }
@@ -1243,6 +1246,15 @@ export class CSatellite {
     loadSatellites(url, id) {
         FileManager.loadAsset(url, id).then((data) => {
             const fileInfo = FileManager.list[id];
+
+            // Check if the data contains an error message
+            // If so, remove the file entry so retry is possible
+            if (typeof fileInfo.data === 'string' && fileInfo.data.trim().startsWith("ERROR:")) {
+                console.error("loadSatellites: Server returned error, removing file entry for retry");
+                showError("TLE Loading Error: " + fileInfo.data.trim());
+                FileManager.remove(id);
+                return;
+            }
 
             // give it a proper filename so when it's re-loaded
             // it can be parsed correctly
