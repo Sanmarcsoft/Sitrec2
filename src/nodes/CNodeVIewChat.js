@@ -1,5 +1,5 @@
 import {CNodeViewText} from "./CNodeViewText.js";
-import {GlobalDateTimeNode, guiMenus} from "../Globals";
+import {GlobalDateTimeNode, Globals, guiMenus} from "../Globals";
 import {SITREC_SERVER} from "../configUtils";
 import {sitrecAPI} from "../CSitrecAPI";
 import {parseBoolean} from "../utils";
@@ -259,6 +259,12 @@ class CNodeViewChat extends CNodeViewText {
             // use this to get a time string in the local timezone
             const timeString = GlobalDateTimeNode.timeWithTimeZone(new Date());
 
+            // Parse provider and model from settings (format: "provider:model")
+            const chatModelSetting = Globals.settings.chatModel || "";
+            const [provider, model] = chatModelSetting.includes(':') 
+                ? chatModelSetting.split(':') 
+                : [null, null];
+
             const history = this.chatHistory.slice(-10);
             const body = JSON.stringify({
                 history,
@@ -266,6 +272,8 @@ class CNodeViewChat extends CNodeViewText {
                 sitrecDoc: sitrecAPI.getDocumentation(),
                 menuSummary: sitrecAPI.getMenuSummary(),
                 dateTime: timeString,
+                provider: provider,
+                model: model,
             });
 
             const res = await fetch(SITREC_SERVER + 'chatbot.php', {

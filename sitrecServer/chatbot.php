@@ -2,13 +2,87 @@
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/config_paths.php';
+require_once __DIR__ . '/user.php';
 
-// Load API keys and provider from environment
-$CHATBOT_PROVIDER = getenv("CHATBOT_PROVIDER") ?: "openai";
+// Load API keys from environment
 $OPENAI_API_KEY = getenv("OPENAI_API");
 $ANTHROPIC_API_KEY = getenv("ANTHROPIC_API");
 $GROQ_API_KEY = getenv("GROQ_API");
 $GROK_API_KEY = getenv("GROK_API");
+
+// Model permissions by user group
+// Groups: admin=3, registered=2, verified=9, sitrec=14
+$MODEL_PERMISSIONS = [
+    3 => [ // admin - all models
+        ['provider' => 'openai', 'model' => 'gpt-4o', 'label' => 'GPT-4o'],
+        ['provider' => 'openai', 'model' => 'gpt-4o-mini', 'label' => 'GPT-4o Mini'],
+        ['provider' => 'anthropic', 'model' => 'claude-sonnet-4-20250514', 'label' => 'Claude Sonnet 4'],
+        ['provider' => 'anthropic', 'model' => 'claude-sonnet-4-5-20250929', 'label' => 'Claude Sonnet 4.5'],
+        ['provider' => 'anthropic', 'model' => 'claude-haiku-4-5-20251001', 'label' => 'Claude Haiku 4.5'],
+        ['provider' => 'groq', 'model' => 'llama-3.3-70b-versatile', 'label' => 'Llama 3.3 70B (Groq)'],
+        ['provider' => 'groq', 'model' => 'llama-3.1-8b-instant', 'label' => 'Llama 3.1 8B (Groq)'],
+        ['provider' => 'grok', 'model' => 'grok-2-latest', 'label' => 'Grok 2'],
+    ],
+    14 => [ // sitrec - premium models
+        ['provider' => 'openai', 'model' => 'gpt-4o', 'label' => 'GPT-4o'],
+        ['provider' => 'anthropic', 'model' => 'claude-sonnet-4-20250514', 'label' => 'Claude Sonnet 4'],
+        ['provider' => 'groq', 'model' => 'llama-3.3-70b-versatile', 'label' => 'Llama 3.3 70B (Groq)'],
+    ],
+    9 => [ // verified - mid-tier models
+        ['provider' => 'openai', 'model' => 'gpt-4o-mini', 'label' => 'GPT-4o Mini'],
+        ['provider' => 'groq', 'model' => 'llama-3.3-70b-versatile', 'label' => 'Llama 3.3 70B (Groq)'],
+    ],
+    2 => [ // registered - basic models
+        ['provider' => 'groq', 'model' => 'llama-3.1-8b-instant', 'label' => 'Llama 3.1 8B (Groq)'],
+    ],
+];
+
+// Get available models for a user based on their groups
+function getAvailableModels($userGroups) {
+    global $MODEL_PERMISSIONS, $OPENAI_API_KEY, $ANTHROPIC_API_KEY, $GROQ_API_KEY, $GROK_API_KEY;
+    
+    $models = [];
+    $seen = [];
+    
+    // Collect models from all user groups (higher privilege groups first)
+    $groupOrder = [3, 14, 9, 2]; // admin, sitrec, verified, registered
+    foreach ($groupOrder as $group) {
+        if (in_array($group, $userGroups) && isset($MODEL_PERMISSIONS[$group])) {
+            foreach ($MODEL_PERMISSIONS[$group] as $model) {
+                $key = $model['provider'] . ':' . $model['model'];
+                if (!isset($seen[$key])) {
+                    // Only include if we have the API key for this provider
+                    $hasKey = match($model['provider']) {
+                        'openai' => !empty($OPENAI_API_KEY),
+                        'anthropic' => !empty($ANTHROPIC_API_KEY),
+                        'groq' => !empty($GROQ_API_KEY),
+                        'grok' => !empty($GROK_API_KEY),
+                        default => false
+                    };
+                    if ($hasKey) {
+                        $models[] = $model;
+                        $seen[$key] = true;
+                    }
+                }
+            }
+        }
+    }
+    
+    return $models;
+}
+
+// Handle fetchModels request
+if (isset($_GET['fetchModels'])) {
+    header('Content-Type: application/json');
+    $userInfo = getUserInfo();
+    $models = getAvailableModels($userInfo['user_groups']);
+    echo json_encode([
+        'models' => $models,
+        'userId' => $userInfo['user_id'],
+        'userGroups' => $userInfo['user_groups']
+    ]);
+    exit;
+}
 
 $data = json_decode(file_get_contents('php://input'), true);
 $prompt = $data['prompt'] ?? '';
@@ -16,6 +90,30 @@ $history = $data['history'] ?? [];
 $sitrecDoc = $data['sitrecDoc'] ?? [];
 $menuSummary = $data['menuSummary'] ?? [];
 $date = $data['dateTime'] ?? date('Y-m-d H:i:s');
+$requestedProvider = $data['provider'] ?? null;
+$requestedModel = $data['model'] ?? null;
+
+// Validate requested model against user's permissions
+$userInfo = getUserInfo();
+$availableModels = getAvailableModels($userInfo['user_groups']);
+$selectedProvider = null;
+$selectedModel = null;
+
+if ($requestedProvider && $requestedModel) {
+    foreach ($availableModels as $m) {
+        if ($m['provider'] === $requestedProvider && $m['model'] === $requestedModel) {
+            $selectedProvider = $requestedProvider;
+            $selectedModel = $requestedModel;
+            break;
+        }
+    }
+}
+
+// Fall back to first available model if requested model not allowed
+if (!$selectedProvider && !empty($availableModels)) {
+    $selectedProvider = $availableModels[0]['provider'];
+    $selectedModel = $availableModels[0]['model'];
+}
 
 // Build tools array from sitrecDoc (OpenAI format, will convert for Anthropic)
 function buildToolsFromDoc($sitrecDoc, $menuSummary) {
@@ -231,7 +329,7 @@ EOT;
 $systemPrompt .= $menuDocForPrompt;
 
 // Call OpenAI API
-function callOpenAI($apiKey, $systemPrompt, $history, $tools) {
+function callOpenAI($apiKey, $systemPrompt, $history, $tools, $model = 'gpt-4o') {
     $messages = [["role" => "system", "content" => $systemPrompt]];
     foreach ($history as $msg) {
         $role = $msg['role'] === 'bot' ? 'assistant' : $msg['role'];
@@ -247,7 +345,7 @@ function callOpenAI($apiKey, $systemPrompt, $history, $tools) {
             "Content-Type: application/json"
         ],
         CURLOPT_POSTFIELDS => json_encode([
-            "model" => "gpt-4o",
+            "model" => $model,
             "messages" => $messages,
             "tools" => $tools,
             "tool_choice" => "auto",
@@ -278,6 +376,7 @@ function callOpenAI($apiKey, $systemPrompt, $history, $tools) {
         'apiCalls' => $calls,
         'debug' => [
             'provider' => 'openai',
+            'model' => $model,
             'hasToolCalls' => !empty($message['tool_calls']),
             'toolCallCount' => count($message['tool_calls'] ?? [])
         ]
@@ -291,7 +390,7 @@ function callOpenAI($apiKey, $systemPrompt, $history, $tools) {
 // Claude Opus 4.5	    claude-opus-4-5-20251101	Most intelligent, higher cost
 
 // Call Anthropic (Claude) API
-function callAnthropic($apiKey, $systemPrompt, $history, $tools) {
+function callAnthropic($apiKey, $systemPrompt, $history, $tools, $model = 'claude-sonnet-4-20250514') {
     $messages = [];
     foreach ($history as $msg) {
         $role = $msg['role'] === 'bot' ? 'assistant' : 'user';
@@ -303,14 +402,14 @@ function callAnthropic($apiKey, $systemPrompt, $history, $tools) {
         return [
             'text' => 'Error: No messages to send',
             'apiCalls' => [],
-            'debug' => ['provider' => 'anthropic', 'error' => 'No messages']
+            'debug' => ['provider' => 'anthropic', 'model' => $model, 'error' => 'No messages']
         ];
     }
     
     $anthropicTools = convertToolsForAnthropic($tools);
     
     $requestBody = [
-        "model" => "claude-sonnet-4-20250514",
+        "model" => $model,
         "max_tokens" => 1024,
         "system" => $systemPrompt,
         "messages" => $messages,
@@ -379,6 +478,7 @@ function callAnthropic($apiKey, $systemPrompt, $history, $tools) {
         'apiCalls' => $calls,
         'debug' => [
             'provider' => 'anthropic',
+            'model' => $model,
             'hasToolCalls' => !empty($calls),
             'toolCallCount' => count($calls),
             'stopReason' => $parsed['stop_reason'] ?? null,
@@ -393,7 +493,7 @@ function callAnthropic($apiKey, $systemPrompt, $history, $tools) {
 // mixtral-8x7b-32768 - Good balance
 
 // Call Groq API (OpenAI-compatible)
-function callGroq($apiKey, $systemPrompt, $history, $tools) {
+function callGroq($apiKey, $systemPrompt, $history, $tools, $model = 'llama-3.3-70b-versatile') {
     $messages = [["role" => "system", "content" => $systemPrompt]];
     foreach ($history as $msg) {
         $role = $msg['role'] === 'bot' ? 'assistant' : $msg['role'];
@@ -409,7 +509,7 @@ function callGroq($apiKey, $systemPrompt, $history, $tools) {
             "Content-Type: application/json"
         ],
         CURLOPT_POSTFIELDS => json_encode([
-            "model" => "llama-3.3-70b-versatile",
+            "model" => $model,
             "messages" => $messages,
             "tools" => $tools,
             "tool_choice" => "auto",
@@ -459,7 +559,7 @@ function callGroq($apiKey, $systemPrompt, $history, $tools) {
         'apiCalls' => $calls,
         'debug' => [
             'provider' => 'groq',
-            'model' => 'llama-3.3-70b-versatile',
+            'model' => $model,
             'hasToolCalls' => !empty($message['tool_calls']),
             'toolCallCount' => count($message['tool_calls'] ?? []),
             'httpCode' => $httpCode
@@ -472,7 +572,7 @@ function callGroq($apiKey, $systemPrompt, $history, $tools) {
 // grok-beta - Beta version
 
 // Call xAI Grok API (OpenAI-compatible)
-function callGrok($apiKey, $systemPrompt, $history, $tools) {
+function callGrok($apiKey, $systemPrompt, $history, $tools, $model = 'grok-2-latest') {
     $messages = [["role" => "system", "content" => $systemPrompt]];
     foreach ($history as $msg) {
         $role = $msg['role'] === 'bot' ? 'assistant' : $msg['role'];
@@ -488,7 +588,7 @@ function callGrok($apiKey, $systemPrompt, $history, $tools) {
             "Content-Type: application/json"
         ],
         CURLOPT_POSTFIELDS => json_encode([
-            "model" => "grok-2-latest",
+            "model" => $model,
             "messages" => $messages,
             "tools" => $tools,
             "tool_choice" => "auto",
@@ -538,7 +638,7 @@ function callGrok($apiKey, $systemPrompt, $history, $tools) {
         'apiCalls' => $calls,
         'debug' => [
             'provider' => 'grok',
-            'model' => 'grok-2-latest',
+            'model' => $model,
             'hasToolCalls' => !empty($message['tool_calls']),
             'toolCallCount' => count($message['tool_calls'] ?? []),
             'httpCode' => $httpCode
@@ -546,15 +646,21 @@ function callGrok($apiKey, $systemPrompt, $history, $tools) {
     ];
 }
 
-// Call the appropriate provider (openai, anthropic, groq, or grok)
-if ($CHATBOT_PROVIDER === 'anthropic' && !empty($ANTHROPIC_API_KEY)) {
-    $result = callAnthropic($ANTHROPIC_API_KEY, $systemPrompt, $history, $tools);
-} elseif ($CHATBOT_PROVIDER === 'groq' && !empty($GROQ_API_KEY)) {
-    $result = callGroq($GROQ_API_KEY, $systemPrompt, $history, $tools);
-} elseif ($CHATBOT_PROVIDER === 'grok' && !empty($GROK_API_KEY)) {
-    $result = callGrok($GROK_API_KEY, $systemPrompt, $history, $tools);
+// Call the appropriate provider based on user selection
+if (!$selectedProvider) {
+    $result = [
+        'text' => 'Error: No models available for your account',
+        'apiCalls' => [],
+        'debug' => ['error' => 'No available models']
+    ];
+} elseif ($selectedProvider === 'anthropic') {
+    $result = callAnthropic($ANTHROPIC_API_KEY, $systemPrompt, $history, $tools, $selectedModel);
+} elseif ($selectedProvider === 'groq') {
+    $result = callGroq($GROQ_API_KEY, $systemPrompt, $history, $tools, $selectedModel);
+} elseif ($selectedProvider === 'grok') {
+    $result = callGrok($GROK_API_KEY, $systemPrompt, $history, $tools, $selectedModel);
 } else {
-    $result = callOpenAI($OPENAI_API_KEY, $systemPrompt, $history, $tools);
+    $result = callOpenAI($OPENAI_API_KEY, $systemPrompt, $history, $tools, $selectedModel);
 }
 
 header('Content-Type: application/json');

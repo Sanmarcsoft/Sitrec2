@@ -7,6 +7,10 @@ function getUserID() {
   return getUserIDCustom();
 }
 
+function getUserInfo() {
+  return getUserInfoCustom();
+}
+
 
 // get a short directory unique to the user, OR an empty string if the user is not logged in
 // this is used for the user's directory in the upload folder

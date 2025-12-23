@@ -41,7 +41,7 @@ import {UpdateHUD} from "./JetStuff";
 import {degrees, getDateTimeFilename} from "./utils";
 import {ViewMan} from "./CViewManager";
 import {EventManager} from "./CEventManager";
-import {SITREC_APP} from "./configUtils";
+import {SITREC_APP, SITREC_SERVER} from "./configUtils";
 import {CNodeDisplayTrack} from "./nodes/CNodeDisplayTrack";
 import {DebugArrowAB, elevationAtLL} from "./threeExt";
 import {FeatureManager} from "./CFeatureManager";
@@ -185,6 +185,63 @@ export class CCustomManager {
                 this.saveGlobalSettings(true);
             })
             .listen();
+        
+        // Add AI Model selector dropdown (bound directly to Globals.settings.chatModel)
+        this.availableChatModels = [];
+        this.chatModelController = settingsFolder.add(Globals.settings, "chatModel", {"Loading...": ""})
+            .name("AI Model")
+            .tooltip("Select the AI model for the chat assistant")
+            .onChange(() => {
+                this.saveGlobalSettings(true);
+            });
+        
+        // Fetch available models from server
+        this.fetchAvailableChatModels();
+    }
+    
+    async fetchAvailableChatModels() {
+        try {
+            const res = await fetch(SITREC_SERVER + 'chatbot.php?fetchModels=1');
+            const data = await res.json();
+            this.availableChatModels = data.models || [];
+            this.updateChatModelSelector();
+        } catch (e) {
+            console.error('Failed to fetch chat models:', e);
+            this.availableChatModels = [];
+            this.updateChatModelSelector();
+        }
+    }
+    
+    updateChatModelSelector() {
+        if (!this.chatModelController) return;
+        
+        // Build options object: {label: "provider:model", ...}
+        const options = {};
+        for (const model of this.availableChatModels) {
+            options[model.label] = `${model.provider}:${model.model}`;
+        }
+        
+        if (Object.keys(options).length === 0) {
+            options["No models available"] = "";
+        }
+        
+        // Update the controller with new options
+        this.chatModelController.options(options);
+        
+        // Validate saved setting and select appropriate model
+        const savedModel = Globals.settings.chatModel;
+        const validValues = Object.values(options);
+        
+        if (savedModel && validValues.includes(savedModel)) {
+            // Saved model is valid, use it - just refresh the display
+            this.chatModelController.updateDisplay();
+        } else if (this.availableChatModels.length > 0) {
+            // Saved model invalid or empty, use first available
+            const firstModel = this.availableChatModels[0];
+            Globals.settings.chatModel = `${firstModel.provider}:${firstModel.model}`;
+            this.chatModelController.updateDisplay();
+            this.saveGlobalSettings(true);
+        }
     }
 
     /**

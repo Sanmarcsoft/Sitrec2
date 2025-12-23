@@ -75,6 +75,14 @@ export function sanitizeSettings(settings) {
         }
     }
     
+    if (settings.chatModel !== undefined) {
+        const chatModel = String(settings.chatModel);
+        // Validate format: "provider:model" or empty string
+        if (chatModel === '' || /^[a-zA-Z0-9_-]+:[a-zA-Z0-9._-]+$/.test(chatModel)) {
+            sanitized.chatModel = chatModel;
+        }
+    }
+    
     return sanitized;
 }
 
@@ -261,6 +269,7 @@ export async function initializeSettings() {
             tileSegments: 32, // Tile mesh resolution (16-256)
             videoMaxSize: "720P", // Video frame max size (None, 1080P, 720P, 480P, 360P)
             lastBuildingRotation: 0, // Last building rotation in radians (persists across sessions)
+            chatModel: "", // AI chat model in "provider:model" format (empty = use first available)
         };
     }
     
