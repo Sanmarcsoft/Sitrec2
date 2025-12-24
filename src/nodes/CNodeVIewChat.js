@@ -3,6 +3,7 @@ import {GlobalDateTimeNode, Globals, guiMenus} from "../Globals";
 import {SITREC_SERVER} from "../configUtils";
 import {sitrecAPI} from "../CSitrecAPI";
 import {parseBoolean} from "../utils";
+import {ModelFiles} from "./CNode3DObject";
 
 class CNodeViewChat extends CNodeViewText {
     constructor(v) {
@@ -273,6 +274,7 @@ class CNodeViewChat extends CNodeViewText {
                 prompt: text,
                 sitrecDoc: sitrecAPI.getDocumentation(),
                 menuSummary: sitrecAPI.getMenuSummary(),
+                availableModels: Object.keys(ModelFiles),
                 dateTime: timeString,
                 simDateTime: simDate,
                 provider: provider,

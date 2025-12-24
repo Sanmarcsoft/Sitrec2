@@ -202,6 +202,7 @@ foreach (array_slice($rawHistory, -$maxHistoryMessages) as $msg) {
 
 $sitrecDoc = $data['sitrecDoc'] ?? [];
 $menuSummary = $data['menuSummary'] ?? [];
+$availableModels = $data['availableModels'] ?? [];
 $date = $data['dateTime'] ?? date('Y-m-d H:i:s');
 $simDateTime = $data['simDateTime'] ?? null;
 $requestedProvider = $data['provider'] ?? null;
@@ -785,21 +786,130 @@ function callGrok($apiKey, $systemPrompt, $history, $tools, $model = 'grok-2-lat
     ];
 }
 
-// Call the appropriate provider based on user selection
+// Simulate query-type tool calls on the server side
+// Returns [handled => bool, result => mixed] - if handled, result is the tool response
+function simulateToolCall($fn, $args, $menuSummary, $availableModels) {
+    
+    switch ($fn) {
+        case 'listMenus':
+            return ['handled' => true, 'result' => array_keys($menuSummary)];
+        case 'listMenuControls':
+            $menu = $args['menu'] ?? '';
+            if (isset($menuSummary[$menu])) {
+                return ['handled' => true, 'result' => $menuSummary[$menu]];
+            }
+            return ['handled' => true, 'result' => ['error' => "Menu '$menu' not found"]];
+        case 'listAvailableModels':
+            return ['handled' => true, 'result' => $availableModels];
+        case 'listObjectFolders':
+            // This would need client state - return empty to force client handling
+            return ['handled' => false, 'result' => null];
+        default:
+            // Action tools - need client execution
+            return ['handled' => false, 'result' => null];
+    }
+}
+
+// Tool use loop - allows AI to make multiple tool calls
+function runToolLoop($provider, $apiKey, $systemPrompt, $history, $tools, $model, $menuSummary, $availableModels, $maxIterations = 5) {
+    $allApiCalls = [];  // Action calls to send to client
+    $debugInfo = [];
+    $finalText = '';
+    $currentHistory = $history;
+    
+    for ($iteration = 0; $iteration < $maxIterations; $iteration++) {
+        // Call the appropriate provider
+        if ($provider === 'anthropic') {
+            global $ANTHROPIC_API_KEY;
+            $result = callAnthropic($ANTHROPIC_API_KEY, $systemPrompt, $currentHistory, $tools, $model);
+        } elseif ($provider === 'groq') {
+            global $GROQ_API_KEY;
+            $result = callGroq($GROQ_API_KEY, $systemPrompt, $currentHistory, $tools, $model);
+        } elseif ($provider === 'grok') {
+            global $GROK_API_KEY;
+            $result = callGrok($GROK_API_KEY, $systemPrompt, $currentHistory, $tools, $model);
+        } else {
+            global $OPENAI_API_KEY;
+            $result = callOpenAI($OPENAI_API_KEY, $systemPrompt, $currentHistory, $tools, $model);
+        }
+        
+        $debugInfo['iteration_' . $iteration] = $result['debug'];
+        
+        // Collect any text response
+        if (!empty($result['text'])) {
+            $finalText .= ($finalText ? "\n" : '') . $result['text'];
+        }
+        
+        // No tool calls - we're done
+        if (empty($result['apiCalls'])) {
+            break;
+        }
+        
+        // Process tool calls
+        $handledCalls = [];
+        $pendingActionCalls = [];
+        
+        foreach ($result['apiCalls'] as $call) {
+            $simResult = simulateToolCall($call['fn'], $call['args'], $menuSummary, $availableModels);
+            if ($simResult['handled']) {
+                // Query tool - we can simulate it
+                $handledCalls[] = [
+                    'fn' => $call['fn'],
+                    'args' => $call['args'],
+                    'result' => $simResult['result']
+                ];
+            } else {
+                // Action tool - needs client execution
+                $pendingActionCalls[] = $call;
+            }
+        }
+        
+        // If we have action calls, return them to client (don't continue loop)
+        if (!empty($pendingActionCalls)) {
+            $allApiCalls = array_merge($allApiCalls, $pendingActionCalls);
+            break;
+        }
+        
+        // If we handled query calls, add results to history and continue loop
+        if (!empty($handledCalls)) {
+            // Build a response showing tool results
+            $toolResultsText = '';
+            foreach ($handledCalls as $hc) {
+                $resultJson = json_encode($hc['result']);
+                $toolResultsText .= "Tool {$hc['fn']} returned: $resultJson\n";
+            }
+            
+            // Add assistant's tool call and simulated tool response to history
+            $currentHistory[] = ['role' => 'bot', 'text' => "Calling tools: " . json_encode(array_column($handledCalls, 'fn'))];
+            $currentHistory[] = ['role' => 'user', 'text' => "[Tool Results]\n$toolResultsText"];
+        }
+    }
+    
+    return [
+        'text' => $finalText,
+        'apiCalls' => $allApiCalls,
+        'debug' => array_merge(
+            ['provider' => $provider, 'model' => $model, 'iterations' => $iteration + 1],
+            count($debugInfo) === 1 ? $debugInfo['iteration_0'] : $debugInfo
+        )
+    ];
+}
+
+// Call the appropriate provider with tool loop
 if (!$selectedProvider) {
     $result = [
         'text' => 'Error: No models available for your account',
         'apiCalls' => [],
         'debug' => ['error' => 'No available models']
     ];
-} elseif ($selectedProvider === 'anthropic') {
-    $result = callAnthropic($ANTHROPIC_API_KEY, $systemPrompt, $history, $tools, $selectedModel);
-} elseif ($selectedProvider === 'groq') {
-    $result = callGroq($GROQ_API_KEY, $systemPrompt, $history, $tools, $selectedModel);
-} elseif ($selectedProvider === 'grok') {
-    $result = callGrok($GROK_API_KEY, $systemPrompt, $history, $tools, $selectedModel);
 } else {
-    $result = callOpenAI($OPENAI_API_KEY, $systemPrompt, $history, $tools, $selectedModel);
+    $apiKey = match($selectedProvider) {
+        'anthropic' => $ANTHROPIC_API_KEY,
+        'groq' => $GROQ_API_KEY,
+        'grok' => $GROK_API_KEY,
+        default => $OPENAI_API_KEY
+    };
+    $result = runToolLoop($selectedProvider, $apiKey, $systemPrompt, $history, $tools, $selectedModel, $menuSummary, $availableModels, 5);
 }
 
 header('Content-Type: application/json');

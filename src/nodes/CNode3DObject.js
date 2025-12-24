@@ -601,7 +601,7 @@ export class CNode3DObject extends CNode3DGroup {
             this.menuName = this.menuName.substring(0, 10) + "..." + this.menuName.substring(this.menuName.length - 7);
         }
 
-        this.gui = guiMenus.objects.addFolder("3D Ob: " + this.menuName).close()
+        this.gui = guiMenus.objects.addFolder(this.menuName).close()
         this.common = {}
         this.geometryParams = {};
         this.materialParams = {};

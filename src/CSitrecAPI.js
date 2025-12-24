@@ -3,6 +3,7 @@ import {GlobalDateTimeNode, guiMenus, NodeMan} from "./Globals";
 import {isLocal} from "./configUtils";
 import {showError} from "./showError";
 import GUI from "./js/lil-gui.esm";
+import {ModelFiles} from "./nodes/CNode3DObject";
 
 class CSitrecAPI {
     constructor() {
@@ -361,6 +362,73 @@ class CSitrecAPI {
                 fn: (v) => {
                     return this._executeMenuButton(v.menu, v.path);
                 }
+            },
+
+            listObjectFolders: {
+                doc: "List all 3D object folder names in the objects menu. Use this to find the correct object name when user refers to an object (e.g. 'camera' might match 'cameraObject').",
+                fn: () => {
+                    const gui = guiMenus.objects;
+                    if (!gui) return { error: "Objects menu not found" };
+                    const folders = gui.children
+                        .filter(c => c instanceof GUI)
+                        .map(c => c._title);
+                    return folders;
+                }
+            },
+
+            listAvailableModels: {
+                doc: "List all available 3D model names that can be used with setObjectModel.",
+                fn: () => {
+                    return Object.keys(ModelFiles);
+                }
+            },
+
+            setObjectModel: {
+                doc: "Set the 3D model for an object. Call listAvailableModels first to see available options, then pick the best match for the user's request (e.g. if they ask for 'plane' or 'jet', pick an appropriate aircraft model).",
+                params: {
+                    object: "Object name or partial name (e.g. 'camera' will match 'cameraObject')",
+                    model: "Exact model name from listAvailableModels"
+                },
+                fn: (v) => {
+                    const gui = guiMenus.objects;
+                    if (!gui) return { success: false, error: "Objects menu not found" };
+                    
+                    const objectLower = String(v.object).toLowerCase();
+                    const folders = gui.children.filter(c => c instanceof GUI);
+                    
+                    // Find best matching folder
+                    let folder = folders.find(c => c._title.toLowerCase() === objectLower);
+                    if (!folder) {
+                        folder = folders.find(c => c._title.toLowerCase().includes(objectLower));
+                    }
+                    if (!folder) {
+                        folder = folders.find(c => objectLower.includes(c._title.toLowerCase()));
+                    }
+                    if (!folder) {
+                        const available = folders.map(c => c._title).join(', ');
+                        return { success: false, error: `Object '${v.object}' not found. Available: ${available}` };
+                    }
+                    
+                    // Find best matching model name
+                    const modelLower = String(v.model).toLowerCase();
+                    const modelKeys = Object.keys(ModelFiles);
+                    let modelName = modelKeys.find(m => m.toLowerCase() === modelLower);
+                    if (!modelName) {
+                        modelName = modelKeys.find(m => m.toLowerCase().includes(modelLower));
+                    }
+                    if (!modelName) {
+                        modelName = modelKeys.find(m => modelLower.includes(m.toLowerCase()));
+                    }
+                    if (!modelName) {
+                        return { success: false, error: `Model '${v.model}' not found. Available: ${modelKeys.join(', ')}` };
+                    }
+                    
+                    // Setting Model automatically switches to model mode and triggers rebuild
+                    const modelResult = this._setMenuValue('objects', folder._title + '/Model', modelName);
+                    if (!modelResult.success) return modelResult;
+                    
+                    return { success: true, object: folder._title, model: modelResult.newValue };
+                }
             }
 
         }
@@ -493,6 +561,10 @@ class CSitrecAPI {
                     folder = current.children.find(c => c instanceof GUI && c._title.toLowerCase() === nameLower);
                 }
                 if (!folder) {
+                    // Try partial match (folder name contains search term)
+                    folder = current.children.find(c => c instanceof GUI && c._title.toLowerCase().includes(nameLower));
+                }
+                if (!folder) {
                     const available = current.children.filter(c => c instanceof GUI).map(c => c._title).join(', ');
                     return { success: false, error: `Folder '${name}' not found. Available: ${available}` };
                 }
@@ -513,7 +585,7 @@ class CSitrecAPI {
         try {
             let finalValue = value;
             
-            // For dropdown controllers, try flexible matching on option values
+            // For dropdown controllers, match option values
             if (controller._values && Array.isArray(controller._values)) {
                 const valueLower = String(value).toLowerCase();
                 // Try exact match first
@@ -521,43 +593,13 @@ class CSitrecAPI {
                     // Try case-insensitive match
                     let matched = controller._values.find(v => String(v).toLowerCase() === valueLower);
                     if (!matched) {
-                        // Try partial match (value contains or is contained by option)
-                        matched = controller._values.find(v => 
-                            String(v).toLowerCase().includes(valueLower) || 
-                            valueLower.includes(String(v).toLowerCase())
-                        );
-                    }
-                    if (!matched) {
-                        // Try acronym match: "OpenStreetMap" -> "OSM"
-                        const valueWords = String(value).split(/(?=[A-Z])|\s+/).filter(w => w.length > 0);
-                        const valueAcronym = valueWords.map(w => w[0].toLowerCase()).join('');
-                        matched = controller._values.find(v => String(v).toLowerCase() === valueAcronym);
-                        // Also try reverse: option "OpenStreetMap" matches input "osm"
-                        if (!matched) {
-                            matched = controller._values.find(v => {
-                                const optWords = String(v).split(/(?=[A-Z])|\s+/).filter(w => w.length > 0);
-                                const optAcronym = optWords.map(w => w[0].toLowerCase()).join('');
-                                return optAcronym === valueLower;
-                            });
-                        }
-                    }
-                    if (matched) {
-                        finalValue = matched;
-                    } else {
                         return { success: false, error: `Value '${value}' not found. Options: ${controller._values.join(', ')}` };
                     }
+                    finalValue = matched;
                 }
             }
             
             controller.setValue(finalValue);
-            // Trigger onChange callbacks (e.g., elevation type change)
-            if (controller._onChange) {
-                controller._onChange(finalValue);
-            }
-            // Trigger onFinishChange callbacks (e.g., terrain recalculation)
-            if (controller._onFinishChange) {
-                controller._callOnFinishChange(finalValue);
-            }
             this.invalidateMenuDocCache();
             return { success: true, oldValue: controller.initialValue, newValue: finalValue };
         } catch (e) {
