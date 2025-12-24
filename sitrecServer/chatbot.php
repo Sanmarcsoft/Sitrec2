@@ -90,6 +90,7 @@ $history = $data['history'] ?? [];
 $sitrecDoc = $data['sitrecDoc'] ?? [];
 $menuSummary = $data['menuSummary'] ?? [];
 $date = $data['dateTime'] ?? date('Y-m-d H:i:s');
+$simDateTime = $data['simDateTime'] ?? null;
 $requestedProvider = $data['provider'] ?? null;
 $requestedModel = $data['model'] ?? null;
 
@@ -304,6 +305,8 @@ You should reply in the same language as the user's prompt, unless instructed ot
 
 The user's current real date and time (not the simulation time) is: {$date}. Use the timezone specified here, or any specified in the prompt or location context.
 
+The current SIMULATION date/time is: {$simDateTime}. This is the date the app is showing - satellites are loaded for this date. If this changes between requests, the user may need to reload satellites.
+
 When giving a time, always use the user's local time, unless they specify UTC or another timezone.
 
 When setting a time in conjunction with a location and date, use that location's time
@@ -329,9 +332,11 @@ When the user asks you to DO something (set, change, move, show, hide, point, go
 - If you know the correct function or menu control, call it immediately.
 - If you are unsure or don't know how to do it, tell the user you don't know how to do that instead of guessing. Do not make up function calls or menu paths that you're not confident about.
 
-IMPORTANT: Always execute the requested action, even if you think it was already done or the value is already set. The user may want to ensure the setting is applied. Never refuse to call a function just because you believe the state is already correct.
+CRITICAL RULE - MUST FOLLOW: When the user requests an action (like "load sats"), you MUST call the appropriate function. Do NOT just respond with text like "Loading..." - you must actually invoke the function tool. Even if you see the same request in the history, you MUST call the function again. The conversation history does NOT mean the action persists - each request requires a new function call.
 
 If the user confirms with "yes", "ok", "sure", "do it", etc., EXECUTE the action you proposed by calling the function.
+
+ALWAYS provide a brief text response describing what you did or are doing, even when making function calls. For example: "Loading LEO satellites..." or "Turned on satellite labels in look view." Never return an empty response.
 
 Keep responses brief. Focus on being helpful.
 

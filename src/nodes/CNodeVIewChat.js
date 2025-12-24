@@ -258,6 +258,8 @@ class CNodeViewChat extends CNodeViewText {
 
             // use this to get a time string in the local timezone
             const timeString = GlobalDateTimeNode.timeWithTimeZone(new Date());
+            // Get the simulation date (what satellites are loaded for)
+            const simDate = GlobalDateTimeNode.dateNow ? GlobalDateTimeNode.dateNow.toISOString() : null;
 
             // Parse provider and model from settings (format: "provider:model")
             const chatModelSetting = Globals.settings.chatModel || "";
@@ -272,6 +274,7 @@ class CNodeViewChat extends CNodeViewText {
                 sitrecDoc: sitrecAPI.getDocumentation(),
                 menuSummary: sitrecAPI.getMenuSummary(),
                 dateTime: timeString,
+                simDateTime: simDate,
                 provider: provider,
                 model: model,
             });
@@ -303,6 +306,12 @@ class CNodeViewChat extends CNodeViewText {
         for (const call of calls) {
             const result = sitrecAPI.handleAPICall(call);
             results.push(result);
+            
+            // Show feedback for the action taken
+            if (result.success && result.result === undefined) {
+                // Action executed but no return value - show confirmation
+                this.addSystemMessage(`✓ ${this.formatFunctionName(call.fn)}`);
+            }
         }
         
         // Check if any calls returned data that should be displayed
@@ -325,10 +334,18 @@ class CNodeViewChat extends CNodeViewText {
                 }
                 
                 if (displayValue !== undefined) {
-                    this.addSystemMessage(`${result.fn} returned: ${displayValue}`);
+                    this.addSystemMessage(`${call.fn} returned: ${displayValue}`);
                 }
             }
         }
+    }
+    
+    // Format function name for display (e.g., "satellitesLoadLEO" -> "Satellites Load LEO")
+    formatFunctionName(fn) {
+        return fn
+            .replace(/([A-Z])/g, ' $1')  // Add space before capitals
+            .replace(/^./, s => s.toUpperCase())  // Capitalize first letter
+            .trim();
     }
 
 
