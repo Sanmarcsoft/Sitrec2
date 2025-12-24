@@ -84,9 +84,122 @@ if (isset($_GET['fetchModels'])) {
     exit;
 }
 
+// Rate limiting configuration by user group
+// Groups: admin=3, registered=2, verified=9, sitrec=14
+$RATE_LIMITS = [
+    3 => ['minute' => 1000000, 'hour' => 1000000],  // admin - effectively unlimited
+    14 => ['minute' => 20, 'hour' => 100],          // sitrec - premium
+    9 => ['minute' => 10, 'hour' => 50],            // verified - mid tier
+    2 => ['minute' => 5, 'hour' => 20],             // registered - basic
+];
+$RATE_LIMIT_DIR = sys_get_temp_dir() . '/sitrec_ratelimit/';
+
+function getRateLimitsForUser($userGroups) {
+    global $RATE_LIMITS;
+    $maxMinute = 5;  // default for unknown groups
+    $maxHour = 20;
+    
+    foreach ($userGroups as $group) {
+        if (isset($RATE_LIMITS[$group])) {
+            $maxMinute = max($maxMinute, $RATE_LIMITS[$group]['minute']);
+            $maxHour = max($maxHour, $RATE_LIMITS[$group]['hour']);
+        }
+    }
+    return ['minute' => $maxMinute, 'hour' => $maxHour];
+}
+
+function checkRateLimit($userId, $limitPerMinute, $limitPerHour, $rateDir) {
+    if ($userId <= 0) {
+        return ['allowed' => false, 'error' => 'Authentication required to use the chatbot'];
+    }
+    
+    if (!is_dir($rateDir)) {
+        @mkdir($rateDir, 0755, true);
+    }
+    
+    $file = $rateDir . "user_{$userId}.json";
+    $now = time();
+    
+    $data = file_exists($file) ? json_decode(file_get_contents($file), true) : null;
+    if (!$data || !isset($data['minute']) || !isset($data['hour'])) {
+        $data = [
+            'minute' => ['count' => 0, 'reset' => $now + 60],
+            'hour' => ['count' => 0, 'reset' => $now + 3600]
+        ];
+    }
+    
+    if ($now > $data['minute']['reset']) {
+        $data['minute'] = ['count' => 0, 'reset' => $now + 60];
+    }
+    if ($now > $data['hour']['reset']) {
+        $data['hour'] = ['count' => 0, 'reset' => $now + 3600];
+    }
+    
+    if ($data['minute']['count'] >= $limitPerMinute) {
+        $waitSeconds = $data['minute']['reset'] - $now;
+        return ['allowed' => false, 'error' => "Rate limit exceeded. Please wait {$waitSeconds} seconds."];
+    }
+    
+    if ($data['hour']['count'] >= $limitPerHour) {
+        $waitMinutes = ceil(($data['hour']['reset'] - $now) / 60);
+        $remaining = $limitPerHour - $data['hour']['count'];
+        return ['allowed' => false, 'error' => "Hourly limit ({$limitPerHour}) exceeded. Please wait {$waitMinutes} minutes."];
+    }
+    
+    $data['minute']['count']++;
+    $data['hour']['count']++;
+    file_put_contents($file, json_encode($data), LOCK_EX);
+    
+    $remainingHour = $limitPerHour - $data['hour']['count'];
+    $remainingMinute = $limitPerMinute - $data['minute']['count'];
+    return ['allowed' => true, 'remainingHour' => $remainingHour, 'remainingMinute' => $remainingMinute];
+}
+
 $data = json_decode(file_get_contents('php://input'), true);
+
+// Get user info early for rate limiting
+$userInfo = getUserInfo();
+
+// Get rate limits based on user's groups (uses highest limit from any group)
+$userRateLimits = getRateLimitsForUser($userInfo['user_groups']);
+
+// Check rate limits
+$rateLimitResult = checkRateLimit($userInfo['user_id'], $userRateLimits['minute'], $userRateLimits['hour'], $RATE_LIMIT_DIR);
+if (!$rateLimitResult['allowed']) {
+    header('Content-Type: application/json');
+    http_response_code(429);
+    echo json_encode(['text' => $rateLimitResult['error'], 'apiCalls' => [], 'debug' => ['error' => 'rate_limited']]);
+    exit;
+}
+
+// Validate and sanitize prompt
 $prompt = $data['prompt'] ?? '';
-$history = $data['history'] ?? [];
+$prompt = trim($prompt);
+$maxPromptLength = 4000;
+if (strlen($prompt) > $maxPromptLength) {
+    $prompt = substr($prompt, 0, $maxPromptLength);
+}
+if (empty($prompt)) {
+    header('Content-Type: application/json');
+    echo json_encode(['text' => 'Please enter a message.', 'apiCalls' => [], 'debug' => ['error' => 'empty_prompt']]);
+    exit;
+}
+
+// Validate and sanitize history
+$rawHistory = $data['history'] ?? [];
+$history = [];
+$maxHistoryMessages = 20;
+$maxHistoryMessageLength = 4000;
+foreach (array_slice($rawHistory, -$maxHistoryMessages) as $msg) {
+    if (isset($msg['role']) && in_array($msg['role'], ['user', 'bot']) && 
+        isset($msg['text']) && is_string($msg['text'])) {
+        $history[] = [
+            'role' => $msg['role'],
+            'text' => substr($msg['text'], 0, $maxHistoryMessageLength)
+        ];
+    }
+}
+
 $sitrecDoc = $data['sitrecDoc'] ?? [];
 $menuSummary = $data['menuSummary'] ?? [];
 $date = $data['dateTime'] ?? date('Y-m-d H:i:s');
@@ -94,8 +207,7 @@ $simDateTime = $data['simDateTime'] ?? null;
 $requestedProvider = $data['provider'] ?? null;
 $requestedModel = $data['model'] ?? null;
 
-// Validate requested model against user's permissions
-$userInfo = getUserInfo();
+// User info already retrieved above for rate limiting
 $availableModels = getAvailableModels($userInfo['user_groups']);
 $selectedProvider = null;
 $selectedModel = null;
@@ -359,6 +471,8 @@ function callOpenAI($apiKey, $systemPrompt, $history, $tools, $model = 'gpt-4o')
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST => true,
+        CURLOPT_TIMEOUT => 60,
+        CURLOPT_CONNECTTIMEOUT => 10,
         CURLOPT_HTTPHEADER => [
             "Authorization: Bearer $apiKey",
             "Content-Type: application/json"
@@ -439,6 +553,8 @@ function callAnthropic($apiKey, $systemPrompt, $history, $tools, $model = 'claud
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST => true,
+        CURLOPT_TIMEOUT => 60,
+        CURLOPT_CONNECTTIMEOUT => 10,
         CURLOPT_HTTPHEADER => [
             "x-api-key: $apiKey",
             "anthropic-version: 2023-06-01",
@@ -523,6 +639,8 @@ function callGroq($apiKey, $systemPrompt, $history, $tools, $model = 'llama-3.3-
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST => true,
+        CURLOPT_TIMEOUT => 60,
+        CURLOPT_CONNECTTIMEOUT => 10,
         CURLOPT_HTTPHEADER => [
             "Authorization: Bearer $apiKey",
             "Content-Type: application/json"
@@ -602,6 +720,8 @@ function callGrok($apiKey, $systemPrompt, $history, $tools, $model = 'grok-2-lat
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST => true,
+        CURLOPT_TIMEOUT => 60,
+        CURLOPT_CONNECTTIMEOUT => 10,
         CURLOPT_HTTPHEADER => [
             "Authorization: Bearer $apiKey",
             "Content-Type: application/json"
