@@ -14,12 +14,38 @@ if ($user_id === 0 ) {
     exit("Internal Server Error");
 }
 
+// SECURITY: Rate limiting - max 10 URLs per minute per user
+$rateLimitDir = sys_get_temp_dir() . '/sitrec_shortener_ratelimit/';
+if (!is_dir($rateLimitDir)) {
+    @mkdir($rateLimitDir, 0755, true);
+}
+$rateLimitFile = $rateLimitDir . "user_{$user_id}.json";
+$now = time();
+$rateData = file_exists($rateLimitFile) ? json_decode(file_get_contents($rateLimitFile), true) : null;
+if (!$rateData || $now > ($rateData['reset'] ?? 0)) {
+    $rateData = ['count' => 0, 'reset' => $now + 60];
+}
+if ($rateData['count'] >= 10) {
+    http_response_code(429);
+    exit("Rate limit exceeded. Please wait.");
+}
+$rateData['count']++;
+file_put_contents($rateLimitFile, json_encode($rateData), LOCK_EX);
+
 $queryString = parse_url($_SERVER['REQUEST_URI'], PHP_URL_QUERY);
 parse_str($queryString, $params);
 
 if (isset($params['url'])) {
     $url = $params['url'];
-//
+
+    // SECURITY: Validate URL scheme - only allow http/https
+    $parsedUrl = parse_url($url);
+    if (!$parsedUrl || !isset($parsedUrl['scheme']) || 
+        !in_array(strtolower($parsedUrl['scheme']), ['http', 'https'])) {
+        http_response_code(400);
+        echo "Only http/https URLs are allowed.";
+        exit;
+    }
 
     // Check if the URL contains the string "sitRecServer"
     if (strpos($url, 'sitrecServer') !== false) {
@@ -47,7 +73,9 @@ if (isset($params['url'])) {
 
 
 function createRedirectHtml($url) {
-    return '<html><head><meta http-equiv="refresh" content="0;url=' . $url . '"></head></html>';
+    // SECURITY: Properly escape URL to prevent XSS
+    $safeUrl = htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
+    return '<html><head><meta http-equiv="refresh" content="0;url=' . $safeUrl . '"></head></html>';
 }
 
 function generateRandomCode($length = 6) {

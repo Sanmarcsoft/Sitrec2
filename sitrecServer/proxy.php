@@ -4,6 +4,25 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/config_paths.php';
 require_once __DIR__ . '/curlGetRequest.php';
 
+// SECURITY: Rate limiting by IP - max 30 requests per minute
+$clientIP = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+$rateLimitDir = sys_get_temp_dir() . '/sitrec_proxy_ratelimit/';
+if (!is_dir($rateLimitDir)) {
+    @mkdir($rateLimitDir, 0755, true);
+}
+$rateLimitFile = $rateLimitDir . md5($clientIP) . ".json";
+$now = time();
+$rateData = file_exists($rateLimitFile) ? json_decode(file_get_contents($rateLimitFile), true) : null;
+if (!$rateData || $now > ($rateData['reset'] ?? 0)) {
+    $rateData = ['count' => 0, 'reset' => $now + 60];
+}
+if ($rateData['count'] >= 30) {
+    http_response_code(429);
+    exit("Rate limit exceeded. Please wait.");
+}
+$rateData['count']++;
+file_put_contents($rateLimitFile, json_encode($rateData), LOCK_EX);
+
 // These are no-longer configurable via config.php
 // Instead, set them in shared.env (see example file)
 if (getenv("CURRENT_STARLINK")) {

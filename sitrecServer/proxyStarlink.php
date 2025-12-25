@@ -4,6 +4,25 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/config_paths.php';
 require_once __DIR__ . '/curlGetRequest.php';
 
+// SECURITY: Rate limiting by IP - max 20 requests per minute (Space-Track has strict limits)
+$clientIP = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+$rateLimitDir = sys_get_temp_dir() . '/sitrec_starlink_ratelimit/';
+if (!is_dir($rateLimitDir)) {
+    @mkdir($rateLimitDir, 0755, true);
+}
+$rateLimitFile = $rateLimitDir . md5($clientIP) . ".json";
+$now = time();
+$rateData = file_exists($rateLimitFile) ? json_decode(file_get_contents($rateLimitFile), true) : null;
+if (!$rateData || $now > ($rateData['reset'] ?? 0)) {
+    $rateData = ['count' => 0, 'reset' => $now + 60];
+}
+if ($rateData['count'] >= 20) {
+    http_response_code(429);
+    exit("Rate limit exceeded. Please wait.");
+}
+$rateData['count']++;
+file_put_contents($rateLimitFile, json_encode($rateData), LOCK_EX);
+
 // space-data in config.php should look like this:
 //
 // $spaceDataUsername = 'somthing@example.com';
@@ -180,14 +199,17 @@ if ($type == "CUSTOM") {
     // Initialize cURL session
     $ch = curl_init();
 
+    // SECURITY: Store cookies in temp directory, not web-accessible directory
+    $cookieFile = sys_get_temp_dir() . '/sitrec_spacetrack_cookies.txt';
+    
     // Set cURL options for login
     curl_setopt($ch, CURLOPT_URL, $loginUrl);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query(['identity' => $username, 'password' => $password]));
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HEADER, true);
-    curl_setopt($ch, CURLOPT_COOKIEJAR, 'cookies.txt'); // Save cookies for subsequent requests
-    curl_setopt($ch, CURLOPT_COOKIEFILE, 'cookies.txt'); // Use saved cookies
+    curl_setopt($ch, CURLOPT_COOKIEJAR, $cookieFile); // Save cookies for subsequent requests
+    curl_setopt($ch, CURLOPT_COOKIEFILE, $cookieFile); // Use saved cookies
 
     // Execute login request
     $response = curl_exec($ch);

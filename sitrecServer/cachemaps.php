@@ -13,6 +13,25 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/config_paths.php';
 
+// SECURITY: Rate limiting by IP - max 100 requests per minute
+$clientIP = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+$rateLimitDir = sys_get_temp_dir() . '/sitrec_cachemaps_ratelimit/';
+if (!is_dir($rateLimitDir)) {
+    @mkdir($rateLimitDir, 0755, true);
+}
+$rateLimitFile = $rateLimitDir . md5($clientIP) . ".json";
+$now = time();
+$rateData = file_exists($rateLimitFile) ? json_decode(file_get_contents($rateLimitFile), true) : null;
+if (!$rateData || $now > ($rateData['reset'] ?? 0)) {
+    $rateData = ['count' => 0, 'reset' => $now + 60];
+}
+if ($rateData['count'] >= 100) {
+    http_response_code(429);
+    exit("Rate limit exceeded. Please wait.");
+}
+$rateData['count']++;
+file_put_contents($rateLimitFile, json_encode($rateData), LOCK_EX);
+
 if (!isset($acceptable_domains)) {
     echo "No acceptable domains set in config.php";
     $acceptable_domains = [

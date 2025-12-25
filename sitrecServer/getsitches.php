@@ -255,6 +255,15 @@ if (isset($_GET['get'])) {
 
         if ($_GET['get'] == "versions") {
             $name = $_GET['name'];
+            
+            // SECURITY: Validate name to prevent path traversal
+            if (!preg_match('/^[A-Za-z0-9_\-\.]+$/', $name) || strpos($name, '..') !== false) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Invalid name parameter']);
+                exit();
+            }
+            $name = basename($name); // Extra safety: strip any path components
+            
             $dir .= "/" . $name;
             $versions = array();
             if (!$useAWS) {

@@ -1,6 +1,14 @@
 <?php
+// SECURITY: Require admin access for debug endpoints
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/config_paths.php';
+require_once __DIR__ . '/user.php';
 
-//    print_r($_COOKIE);
+$userInfo = getUserInfo();
+if (!in_array(3, $userInfo['user_groups'])) {
+    http_response_code(403);
+    die('Admin access required');
+}
 
     $fileDir = '../../';  # relative path from this script to the Xenforo root
     require($fileDir . '/src/XF.php');
@@ -8,12 +16,7 @@
     $app = XF::setupApp('XF\Pub\App');
     $app->start();
     print_r (XF::visitor());  # dumps entire object
-//    print("<br>");
     $user=XF::visitor();
-//    print ($user->user_id."<br>"); # = 1 (0 if nobody logged in)
-
- //   if (in_array(18,$user->secondary_group_ids))
- //       print ("Group 18<br>");
 
     print($user->username."<br>");
 

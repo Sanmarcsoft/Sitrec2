@@ -1,5 +1,5 @@
 <?php
-
+// SECURITY: Require admin access for S3 test endpoint
 // Note, invoking getUserID() will initialize XenForo, which means the S2 code
 // will try to use XenForo's version of guzzle, which is currently 6.5.5
 // but the S3 code WAS using 7
@@ -8,6 +8,13 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/config_paths.php';
 require('./user.php');
+
+$userInfo = getUserInfo();
+if (!in_array(3, $userInfo['user_groups'])) {
+    http_response_code(403);
+    die('Admin access required');
+}
+
 $user_id = getUserID();
 
 
