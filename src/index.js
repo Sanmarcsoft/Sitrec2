@@ -1576,7 +1576,7 @@ function legacySetup() {
 async function setupFunctions() {
     resetPar();
 
-    const title = urlParams.get("regression") ? "Sitrec Regression Test" : Sit.name + " " + process.env.BUILD_VERSION_STRING;
+    const title = urlParams.get("regression") ? "Sitrec Regression Test" : process.env.BUILD_VERSION_STRING;
     Globals.menuBar.infoGUI.title(title);
 
 
