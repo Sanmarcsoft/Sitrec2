@@ -4,7 +4,11 @@ Welcome to the serverless version of Sitrec! This is a fully functional build th
 
 ## What is Serverless?
 
-Serverless means no PHP backend server is required. All data storage happens locally in your browser using IndexedDB and LocalStorage. It's perfect for:
+Serverless means no PHP backend server is required. All data storage happens locally in your browser using IndexedDB and LocalStorage.
+
+**Note:** You still need a simple static file server (like the included `standalone-serverless.js`) to serve the files. This is because browsers can't load JavaScript modules directly from the filesystem (`file://` URLs) due to CORS security restrictions. The server does no processing - it just serves static files. For production, you can deploy to any static hosting (S3, GitHub Pages, Netlify) with no server-side code.
+
+It's perfect for:
 
 - ✅ **Offline-first usage** - Works completely without internet
 - ✅ **Demos & testing** - No infrastructure setup needed
