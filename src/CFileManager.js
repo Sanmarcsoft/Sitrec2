@@ -39,12 +39,18 @@ import {createImageFromArrayBuffer} from "./FileUtils";
 import {ModelFiles} from "./nodes/CNode3DObject";
 
 
-// The file manager is a singleton that manages all the files
-// it is a subclass of CManager, which is a simple class that manages a list of objects
-// the FileManager adds the ability to load files from URLs, and to parse them
-// it also adds the ability to rehost files, needed for the Celestrack proxy and for TLEs
-// an KMLs, and other data files that are dragged in.
+/**
+ * The file manager is a singleton that manages all the files.
+ * It is a subclass of CManager, which is a simple class that manages a list of objects.
+ * The FileManager adds the ability to load files from URLs, and to parse them.
+ * It also adds the ability to rehost files, needed for the Celestrack proxy, TLEs,
+ * KMLs, and other data files that are dragged in.
+ */
 export class CFileManager extends CManager {
+    /**
+     * Creates the FileManager instance.
+     * Initializes the raw files array, rehoster, and sets up the GUI if not in console mode.
+     */
     constructor() {
         super()
         this.rawFiles = [];
@@ -104,21 +110,35 @@ export class CFileManager extends CManager {
         }
     }
 
+    /**
+     * Debug: Dumps the root nodes to the console.
+     */
     dumpRoots() {
         console.log("");
         console.log(NodeMan.dumpNodes(true));
     }
 
+    /**
+     * Debug: Dumps all nodes to the console.
+     */
     dumpNodes() {
         console.log("");
         console.log(NodeMan.dumpNodes());
     }
 
+    /**
+     * Debug: Dumps all nodes to the console in reverse order.
+     */
     dumpNodesBackwards() {
         console.log("");
         console.log(NodeMan.dumpNodesBackwards());
     }
 
+    /**
+     * Resets the origin to the current camera position.
+     * Updates Sit.lat and Sit.lon, recalculates the EUS coordinate system,
+     * and reloads the situation to apply changes.
+     */
     resetOrigin() {
         // First, reset the origin to the current camera position
         // This updates Sit.lat and Sit.lon and recalculates the EUS coordinate system
@@ -150,10 +170,10 @@ export class CFileManager extends CManager {
         console.log(`Reset Origin initiated: Sit.lat=${Sit.lat}, Sit.lon=${Sit.lon}`);
     }
 
-
-
-
-
+    /**
+     * Updates the UI based on the current sitch type (Custom or Standard).
+     * Shows/hides Local and Server save folders accordingly.
+     */
     sitchChanged() {
     // update the UI based on the sitch name
         if (Sit.isCustom) {
@@ -176,7 +196,10 @@ export class CFileManager extends CManager {
 
     }
 
-
+    /**
+     * Initiates the server login process.
+     * Updates the UI upon successful login.
+     */
     loginServer() {
         // asyncCheckLogin().then(() => {
         //     if (Globals.userID > 0) {
@@ -192,6 +215,10 @@ export class CFileManager extends CManager {
 
     }
 
+    /**
+     * Adds server-related buttons (Save, Save As, Open, Delete) to the GUI.
+     * Also fetches and populates the list of user's saved sitches from the server.
+     */
     addServerButtons() {
         if ((! parseBoolean(process.env.SAVE_TO_SERVER) && !parseBoolean(process.env.SAVE_TO_S3)) || isServerless)
             return;
@@ -268,13 +295,20 @@ export class CFileManager extends CManager {
 
     }
 
-    // a debugging point
+    /**
+     * Adds a file entry to the manager. Overrides parent for debugging purposes.
+     * @param {string} id - Unique identifier for the file entry
+     * @param {*} data - The parsed file data
+     * @param {ArrayBuffer} original - The original raw file data
+     */
     add(id, data, original) {
-     //   console.log("Adding " + id + " to FileManager")
         super.add(id, data, original);
     }
 
-
+    /**
+     * Resets the application to a new blank "custom" situation.
+     * Reloads the page with ?sitch=custom.
+     */
     newSitch() {
         // we just jump to the "custom" sitch, which is a blank sitch
         // that the user can modify and save
@@ -282,9 +316,11 @@ export class CFileManager extends CManager {
         window.location = SITREC_APP + "?sitch=custom";
     }
 
-
-    // getVersions returns a promise that resolves to an array of versions of a sitch
-    // which it gets from the server via getsitches.php
+    /**
+     * Fetches all saved versions of a sitch from the server.
+     * @param {string} name - The name of the sitch to get versions for
+     * @returns {Promise<Array<{version: string, url: string}>>} Array of version objects with version and url properties
+     */
     getVersions(name) {
         return fetch((SITREC_SERVER + "getsitches.php?get=versions&name="+name), {mode: 'cors'}).then(response => {
             if (response.status !== 200) {
@@ -321,8 +357,11 @@ export class CFileManager extends CManager {
         })
     }
 
-
-    // unimlemented
+    /**
+     * Deletes a saved sitch from the server after user confirmation.
+     * Updates the GUI dropdowns to remove the deleted entry.
+     * @param {string} value - The name of the sitch to delete
+     */
     deleteSitch(value) {
         // get confirmation from the user
         if (!confirm("Are you sure you want to delete " + value + " from the server?")) {
@@ -349,9 +388,11 @@ export class CFileManager extends CManager {
 
     }
 
-
-    // given a name, load the most recent version of that sitch
-    // from the server (user specific)
+    /**
+     * Loads the most recent version of a saved sitch from the server.
+     * Fetches the sitch file, parses it, and initializes a new situation with it.
+     * @param {string} name - The name of the sitch to load
+     */
     loadSavedFile(name) {
         this.loadName = name;
         console.log("Load Local File")
@@ -381,9 +422,10 @@ export class CFileManager extends CManager {
         })
     }
 
-
-    // Returns a promise that resolves to the name of the sitch
-    // input by the user
+    /**
+     * Prompts the user to enter a name for the sitch via a browser dialog.
+     * @returns {Promise<void>} Resolves when user enters a valid name (sets Sit.sitchName), rejects if cancelled
+     */
     inputSitchName() {
         return new Promise((resolve, reject) => {
             let sitchName = prompt("Enter a name for the sitch", Sit.sitchName);
@@ -417,13 +459,11 @@ export class CFileManager extends CManager {
         })
     }
 
-
-    // The "Save" button on the file menu.
-    // if there's no name, then input a name
-    // if there is a name, then use that.
-
-    // this wraps the saveSitch function, so we can call it from the GUI
-    // and don't propogate the error
+    /**
+     * GUI menu handler for the "Save" button.
+     * Wraps saveSitch() and suppresses errors for GUI use.
+     * @returns {Promise<void>}
+     */
     saveSitchFromMenu() {
         return this.saveSitch().then(() => {
             console.log("Sitch saved as " + Sit.sitchName);
@@ -432,7 +472,12 @@ export class CFileManager extends CManager {
         })
     }
 
-    // Returns a promise that resolves when the sitch is saved
+    /**
+     * Saves the current sitch. Prompts for a name if one isn't set.
+     * Updates GUI dropdowns with the new save entry.
+     * @param {boolean} [local=false] - If true, saves locally instead of to server
+     * @returns {Promise<void>} Resolves when save completes
+     */
     saveSitch(local = false) {
         if (Sit.sitchName === undefined) {
             return this.inputSitchName().then(() => {
@@ -457,9 +502,11 @@ export class CFileManager extends CManager {
         }
     }
 
-    // The "Save with Permalink" button on the file menu.
-    // saves the sitch, and then gets the permalink
-    // and displays it in a modal dialog
+    /**
+     * Saves the sitch and generates a shareable permalink.
+     * Displays the permalink in a modal dialog for copying.
+     * @returns {Promise<void>}
+     */
     saveWithPermalink() {
         return this.saveSitch()
             .then(() => {
@@ -470,9 +517,11 @@ export class CFileManager extends CManager {
         });
     }
 
-    // The "Save As" button on the file menu.
-    // just delete the current sitch name, and then call saveSitch,
-    // which will force a new name
+    /**
+     * Saves the sitch with a new name. Clears the current name to force a rename prompt.
+     * Restores the original name if cancelled.
+     * @returns {Promise<void>}
+     */
     saveSitchAs() {
         const lastSitchName = Sit.sitchName;
         Sit.sitchName = undefined;
@@ -488,8 +537,12 @@ export class CFileManager extends CManager {
             });
     }
 
-    // given a name, save a version to that folder, unless local,
-    // in which case we make a "downloadable" file
+    /**
+     * Saves the sitch with a specific name. Serializes and uploads to server or creates local download.
+     * @param {string} sitchName - The name to save the sitch under
+     * @param {boolean} [local=false] - If true, creates a local downloadable file instead of server upload
+     * @returns {Promise<void>} Resolves when save is complete
+     */
     saveSitchNamed(sitchName, local = false) {
 
         // and then save the sitch to the server where it will be versioned by data in a folder named for this sitch, for this user
@@ -513,6 +566,10 @@ export class CFileManager extends CManager {
 
     }
 
+    /**
+     * GUI menu handler to save the sitch locally.
+     * Sets a default name of "Local" if none exists.
+     */
     saveLocal() {
 
         if (Sit.sitchName === undefined) {
@@ -522,13 +579,25 @@ export class CFileManager extends CManager {
         this.saveSitch(true);
     }
 
-    // a file is unhosted if it's flagged as a dynamic link, and has no static URL
+    /**
+     * Checks if a file needs to be rehosted. A file is unhosted if it's a dynamic link without a static URL.
+     * @param {string} id - The file identifier to check
+     * @returns {boolean} True if the file needs rehosting
+     */
     isUnhosted(id) {
         const f = this.list[id];
         assert(f, `Checking unhosted on missing file, id =${id}`);
         return (f.dynamicLink && !f.staticURL);
     }
 
+    /**
+     * Initiates login to Metabunk Xenforo (if not logged in)
+     * Opens login window and sets up focus listener to detect completion.
+     * @param {Function} [callback] - Function to call after successful login
+     * @param {Object} [button] - GUI button to update after login
+     * @param {string} [rename="Permalink"] - New name for the button after login
+     * @param {string} [color="#FFFFFF"] - New color for the button label after login
+     */
     loginAttempt(callback, button, rename = "Permalink", color="#FFFFFF") {
         asyncCheckLogin().then(() => {
 
@@ -570,7 +639,6 @@ export class CFileManager extends CManager {
     }
 
 
-
     /**
      * Create an Export GUI button inside a per-object subfolder, lazily creating folders as needed.
      *
@@ -582,6 +650,7 @@ export class CFileManager extends CManager {
      *
      * Notes:
      * - Reuses existing folders if already created, so repeated calls are idempotent w.r.t. folder creation.
+     * (i.e. multiple calls for the same object and folderName will not create duplicate folders.)
      * - The object is decorated with an exportSubFolder property for later cleanup via removeExportButton().
      *
      * @param {object} object - The target object that owns the export action method.
@@ -638,7 +707,10 @@ export class CFileManager extends CManager {
 
     }
 
-    // remove all export buttons for this object
+    /**
+     * Removes all export buttons and the subfolder for an object from the Export GUI.
+     * @param {Object} object - The object whose export buttons should be removed
+     */
     removeExportButton(object) {
         if (this.exportFolder !== undefined) {
             if (object.exportButtons !== undefined) {
@@ -654,6 +726,12 @@ export class CFileManager extends CManager {
         }
     }
 
+    /**
+     * Opens a local directory using the File System Access API.
+     * Finds and loads a .json or .js sitch file from the directory.
+     * If multiple sitch files exist, prompts user to select one.
+     * @async
+     */
     async openDirectory() {
         try {
             // 1) Prompt for the directory
@@ -711,6 +789,11 @@ export class CFileManager extends CManager {
     }
 
 
+    /**
+     * Checks if the local sitch file has changed since last load and parses it if so.
+     * Used to detect external edits to the sitch file.
+     * @async
+     */
     async checkForNewLocalSitch() {
 
         // load the local sitch and see if it has changed
@@ -731,8 +814,11 @@ export class CFileManager extends CManager {
     }
 
 
-    // load a file from the local system by first putting up a file selector dialog
-    // then running the processFile on the resultant file object
+    /**
+     * Opens a file selector dialog and processes each selected file.
+     * Supports multiple file selection for various file types (video, audio, images, data files).
+     * @param {Function} processFile - Callback function to process each selected File object
+     */
     selectAndLoadLocalFile(processFile) {
         // Create an input element
         const inputElement = document.createElement('input');
@@ -793,7 +879,9 @@ export class CFileManager extends CManager {
     //     })
     // }
 
-    // importFile menu option
+    /**
+     * GUI menu handler for importing files. Opens file selector and processes files via DragDropHandler.
+     */
     importFile() {
         this.selectAndLoadLocalFile( (file) => {
             DragDropHandler.uploadDroppedFile(file)
@@ -801,11 +889,25 @@ export class CFileManager extends CManager {
     }
 
 
-    // general file asset loader, detect file type from extension and add to manager
-    // returns a promise, which you can then await or .then
-    // Track in-progress asset loads to avoid duplicate loading
+    /**
+     * Private map of currently loading promises to prevent duplicate loads.
+     * Keyed by filename.
+     */
     #loadingPromises = new Map();
-    
+
+    /**
+     * Loads and parses an asset file, adding it to the manager.
+     * Handles caching, deduplication of concurrent requests, and URL resolution.
+     * For programmatic loading where the caller handles the result (does NOT call handleParsedFile).
+     * 
+     * Filename prefixes:
+     * - "!" prefix marks as dynamic link (needs rehosting on save)
+     * - "data/" prefix is stripped automatically
+     * 
+     * @param {string} filename - Path, URL, or local filename to load
+     * @param {string} [id] - Unique identifier for storage (defaults to filename)
+     * @returns {Promise<{filename: string, parsed: *, dataType: string}>} Parsed asset data
+     */
     loadAsset(filename, id) {
 
         assert(filename, "Filename is undefined or null");
@@ -1090,19 +1192,29 @@ export class CFileManager extends CManager {
     }
 
 
+    /**
+     * Detects if a file is a TLE (Two/Three-Line Element) file based on extension.
+     * Currently assumes all .txt and .tle files are TLE files. (also .2le and .3le)
+     * (Note this matche $allowed_extensions in sitrecServer/proxy.php)
+     * @param {string} filename - The filename to check
+     * @returns {boolean} True if the file appears to be a TLE file
+     */
     detectTLE(filename) {
         const fileExt = getFileExtension(filename);
-        const isTLE = (fileExt === "txt" || fileExt === "tle");
+        const isTLE = (fileExt === "txt" || fileExt === "tle" || fileExt === "2le" || fileExt === "3le");
         return isTLE;
     }
 
-    // a raw arraybuffer (result) has been loaded
-    // parse the asset
-    // and then handle the parsed file
-    // @param {string} filename - The name of the file
-    // @param {ArrayBuffer} result - The raw file data
-    // @param {string|null} newStaticURL - The static URL for the file, if applicable
-    // return a promise that resolves to the parsed result
+    /**
+     * Entry point for user-loaded files (drag/drop, local folder, import).
+     * Parses the raw buffer, adds to FileManager, and routes to appropriate subsystem via handleParsedFile.
+     * Unlike loadAsset, this DOES call handleParsedFile for automatic routing.
+     * 
+     * @param {string} filename - The name of the file (used as both filename and id)
+     * @param {ArrayBuffer} result - The raw file data
+     * @param {string|null} newStaticURL - Static URL if file was loaded from a permanent location
+     * @returns {Promise<Array<{filename: string, parsed: *, dataType: string}>>} Array of parsed results
+     */
     parseResult(filename, result, newStaticURL) {
         console.log("parseResult: Parsing " + filename)
         return this.parseAsset(filename, filename, result)
@@ -1160,11 +1272,20 @@ export class CFileManager extends CManager {
             })
     }
 
-    // handle the parsed file
-    // this is where we decide what to do with the file
-    // based on the file extension and the data type
-    // @param {string} filename - The name of the file
-    // @param {ArrayBuffer} parsedFile - The parsed file data (from parseResult)
+    /**
+     * Routes a parsed file to the appropriate subsystem based on file type and dataType.
+     * Called by parseResult after parsing. Handles:
+     * - TLE files → NightSkyNode
+     * - Track files (KML, CSV, SRT, KLV, JSON, XML) → TrackManager
+     * - Sitch files → setNewSitchObject (reloads app)
+     * - Az/El/FOV/Heading CSVs → customAzElController, fovSwitch, headingController
+     * - Video/audio → video node
+     * - Images → video node (as single-frame video)
+     * - GLB models → targetObject
+     * 
+     * @param {string} filename - The name of the file
+     * @param {*} parsedFile - The parsed file data (type varies by file format)
+     */
     handleParsedFile(filename, parsedFile) {
         console.log("handleParsedFile: Handling parsed file " + filename)
 
@@ -1441,12 +1562,21 @@ export class CFileManager extends CManager {
         }
     }
 
-    // parse an asset based on its filename and buffer contents
-    // @param {string} filename - The name of the file being parsed.
-    // @param {string} id - The identifier for the asset.
-    // @param {ArrayBuffer} buffer - The binary data of the file (already loaded)
-    // @param {object} [metadata=null] - Optional metadata associated with the asset.
-    // @returns {Promise} A promise that resolves to the parsed asset.
+    /**
+     * Low-level parser that converts a raw ArrayBuffer to typed data based on file extension.
+     * Recursively handles container formats:
+     * - .ts files: Uses TSParser to extract streams, calls parseAsset for each
+     * - .zip/.kmz files: Unzips via JSZip, calls parseAsset for each extracted file
+     * 
+     * Returns parsed data with dataType indicating the format:
+     * - text, tle, csv, kml, xml, json, sitch, video, image, glb, bin, etc.
+     * 
+     * @param {string} filename - The name of the file being parsed
+     * @param {string} id - The identifier for the asset (used for storage)
+     * @param {ArrayBuffer} buffer - The binary data of the file
+     * @param {Object} [metadata=null] - Optional metadata (e.g., FPS from TS parser)
+     * @returns {Promise<{filename: string, parsed: *, dataType: string}|Array>} Parsed asset or array for archives
+     */
     parseAsset(filename, id, buffer, metadata = null) {
         console.log("CFileManager::parseAsset - " + filename + " for id: " + id + " buffer size: " + buffer.byteLength);
 
@@ -1712,9 +1842,12 @@ export class CFileManager extends CManager {
         }
     }
 
-    // derive the file extension, with special handling for dynamic proxy URLs
-    // those return txt files, which are interpreted as TLEs
-    // otherwise just use getFileExtension which get the normal extension
+    /**
+     * Derives the file extension from a filename, with special handling for proxy URLs.
+     * Proxy URLs (proxy.php, proxyStarlink.php) are treated as .txt (TLE files).
+     * @param {string} filename - The filename or URL to extract extension from
+     * @returns {string} The file extension (without dot)
+     */
     deriveExtension(filename) {
         var fileExt;
         if (filename.startsWith(SITREC_SERVER + "proxy.php")) {
@@ -1727,6 +1860,13 @@ export class CFileManager extends CManager {
         return fileExt
     }
 
+    /**
+     * Uploads all dynamic (non-static) files to the server for permanent hosting.
+     * Called before saving a sitch to ensure all local/temporary files have static URLs.
+     * Sets staticURL on each file entry after successful upload.
+     * @param {boolean} [rehostVideo=false] - If true, also rehost the video file
+     * @returns {Promise<void[]>} Resolves when all rehosting is complete
+     */
     rehostDynamicLinks(rehostVideo = false) {
         const rehostPromises = [];
         const todayDateStr = new Date().toISOString().split('T')[0];
@@ -1825,18 +1965,23 @@ export class CFileManager extends CManager {
         return Promise.all(rehostPromises);
     }
 
+    /**
+     * Disposes all file entries and clears the raw files array.
+     * Called when resetting or reloading the application.
+     */
     disposeAll() {
-        // delete all entries in this.rawFiles and this.list
         this.rawFiles = [];
         super.disposeAll()
     }
 
 }
 
-// given a CSV file stored as a 2D array [row][col], attempt to detect what type of file it is
-// this is all down via ad hoc checks of the first row (the header row)
-// returns a string indicating the type
-// known types are: "Airdata", "MISB1", "CUSTOM1", "FR24CSV", "AZIMUTH", "ELEVATION", "HEADING", "FOV", "FEATURES", "Unknown"
+/**
+ * Detects the type of a CSV file based on header row patterns.
+ * @param {Array<Array<string>>} csv - 2D array representation of CSV [row][col]
+ * @returns {string} Type identifier: "Airdata", "MISB1", "CUSTOM1", "CUSTOM_FLL", "FR24CSV", 
+ *                   "AZIMUTH", "ELEVATION", "HEADING", "FOV", "FEATURES", or "Unknown"
+ */
 export function detectCSVType(csv) {
 
     // Airdata is DJI airdata export CSV files from https://airdata.com/
@@ -1915,7 +2060,11 @@ export function detectCSVType(csv) {
 
 
 /**
- * Waits until Globals.parsing becomes zero.
+ * Waits until all file parsing operations are complete (Globals.parsing === 0).
+ * Also processes any queued drag/drop files before waiting.
+ * Polls every 100ms until parsing is complete.
+ * @async
+ * @returns {Promise<void>}
  */
 export async function waitForParsingToComplete() {
     DragDropHandler.checkDropQueue();
