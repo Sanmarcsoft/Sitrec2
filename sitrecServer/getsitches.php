@@ -1,5 +1,14 @@
 <?php
 
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/config_paths.php';
@@ -173,18 +182,32 @@ if (isset($_GET['get'])) {
 
 
         if (!$useAWS) {
-            $files = scandir($dir);
-            $folders = array();
-            foreach ($files as $file) {
-                if (is_dir($dir . '/' . $file) && $file != '.' && $file != '..' && $file != '.DS_Store') {
-                    // get the last modified date of the folder
-                    $lastModified = filemtime($dir . '/' . $file);
-                    $lastDate = date('Y-m-d H:i:s', $lastModified);
-                    $folders[] = [$file, $lastDate];
+            try {
+                if (!is_dir($dir)) {
+                    echo json_encode(array());
+                    exit();
                 }
+                $files = @scandir($dir);
+                if ($files === false) {
+                    echo json_encode(array());
+                    exit();
+                }
+                $folders = array();
+                foreach ($files as $file) {
+                    if (is_dir($dir . '/' . $file) && $file != '.' && $file != '..' && $file != '.DS_Store') {
+                        // get the last modified date of the folder
+                        $lastModified = @filemtime($dir . '/' . $file);
+                        $lastDate = $lastModified ? date('Y-m-d H:i:s', $lastModified) : '1970-01-01 00:00:00';
+                        $folders[] = [$file, $lastDate];
+                    }
+                }
+                echo json_encode($folders);
+                exit();
+            } catch (Exception $e) {
+                http_response_code(503);
+                echo json_encode(['error' => 'Server error: ' . $e->getMessage()]);
+                exit();
             }
-            echo json_encode($folders);
-            exit();
         } else {
             // get the list of files in the S3 bucket
             try {
