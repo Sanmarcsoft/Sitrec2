@@ -70,13 +70,17 @@ describe('CTrackFileSRT', () => {
         });
 
         test('returns false for invalid track index', () => {
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
             const result = trackFile.toMISB(1);
             expect(result).toBe(false);
+            warnSpy.mockRestore();
         });
 
         test('returns false for invalid data', () => {
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
             const invalidTrack = new CTrackFileSRT('not valid');
             expect(invalidTrack.toMISB()).toBe(false);
+            warnSpy.mockRestore();
         });
     });
 
