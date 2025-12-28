@@ -1,5 +1,7 @@
 import {defineConfig, devices} from '@playwright/test';
 
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'https://local.metabunk.org';
+
 export default defineConfig({
   testDir: './tests_regression',
   testMatch: ['**/ui-playwright.test.js', '**/regression.test.js', '**/chatbot-playwright.test.js'],
@@ -12,7 +14,7 @@ export default defineConfig({
   reporter: 'list',
   
   use: {
-    baseURL: 'https://local.metabunk.org/sitrec',
+    baseURL: baseURL + '/sitrec',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

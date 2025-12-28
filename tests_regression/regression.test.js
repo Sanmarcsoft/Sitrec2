@@ -2,30 +2,31 @@ import {test} from '@playwright/test';
 import {takeScreenshotOrCompare} from './snapshot-utils.js';
 
 // Array of test cases: each object contains a name and its corresponding URL.
+// URLs are relative to baseURL configured in playwright.config.js
 const testDataDefault = [
-    { name: "testquick", url: "https://local.metabunk.org/sitrec/?sitch=testquick", waitFor: "All tests complete"},
-    { name: 'default', url: 'https://local.metabunk.org/sitrec/?frame=10' },
-    { name: 'WMTS', url: 'https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Regression%20test%20NRL%20WMTS/20251204_001658.js' },
-    { name: 'agua', url: 'https://local.metabunk.org/sitrec/?sitch=agua&frame=10' },
-    { name: 'ocean surface', url: 'https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/REGRESSION%20TEST%20_%20Ocean%20Surface/20251114_234141.js&frame=10' },
- //   { name: 'pseudo color', url: 'https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/REGRESSION%20TEST%20_%20ELEVATION%20PSEUDOCOLOR/20251115_000233.js&frame=10' },
-    { name: 'gimbal', url: 'https://local.metabunk.org/sitrec/?sitch=gimbal&frame=10' },
-    { name: 'starlink', url: 'https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Stalink%20Names/20250218_060544.js' },
-    { name: "potomac", url: "https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Potomac/20250204_203812.js&frame=10" },
-    { name: "orion", url: "https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Orion%20in%20Both%20views%20for%20Label%20Check/20251127_200130.js&frame=10" },
-    { name: "bledsoe", url: "https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/15857/BledsoeZoom/20250623_153507.js&frame=10" },
-    { name: "mosul", url: "https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Mosul%20Orb/20250707_055311.js&frame=62"},
+    { name: "testquick", url: "/?sitch=testquick", waitFor: "All tests complete"},
+    { name: 'default', url: '/?frame=10' },
+    { name: 'WMTS', url: '/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Regression%20test%20NRL%20WMTS/20251204_001658.js' },
+    { name: 'agua', url: '/?sitch=agua&frame=10' },
+    { name: 'ocean surface', url: '/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/REGRESSION%20TEST%20_%20Ocean%20Surface/20251114_234141.js&frame=10' },
+ //   { name: 'pseudo color', url: '/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/REGRESSION%20TEST%20_%20ELEVATION%20PSEUDOCOLOR/20251115_000233.js&frame=10' },
+    { name: 'gimbal', url: '/?sitch=gimbal&frame=10' },
+    { name: 'starlink', url: '/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Stalink%20Names/20250218_060544.js' },
+    { name: "potomac", url: "/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Potomac/20250204_203812.js&frame=10" },
+    { name: "orion", url: "/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Orion%20in%20Both%20views%20for%20Label%20Check/20251127_200130.js&frame=10" },
+    { name: "bledsoe", url: "/?custom=https://sitrec.s3.us-west-2.amazonaws.com/15857/BledsoeZoom/20250623_153507.js&frame=10" },
+    { name: "mosul", url: "/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Mosul%20Orb/20250707_055311.js&frame=62"},
     // Add more objects as needed.
 ];
 
 
 // unit tests for trackfile related rendering
 const testDataTrackFiles = [
-    { name: "multi-CSV", url: "https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/REGRESSION%20_%20MULTI%20TRACK%20CSV%20AIRCRAFT/20251030_044434.js&frame=620"},
+    { name: "multi-CSV", url: "/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/REGRESSION%20_%20MULTI%20TRACK%20CSV%20AIRCRAFT/20251030_044434.js&frame=620"},
 
     // we include mosul here as it has some building loaded from a KML file
     // so we need to ensure
-    { name: "mosul", url: "https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Mosul%20Orb/20250707_055311.js&frame=62"},
+    { name: "mosul", url: "/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Mosul%20Orb/20250707_055311.js&frame=62"},
 ]
 
 
