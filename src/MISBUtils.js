@@ -1,7 +1,7 @@
 // Re-export MISB and MISBFields from the dependency-free MISBFields.js
 // The constants are now in MISBFields.js for cleaner imports in tests
 export {MISB, MISBFields} from "./MISBFields";
-import {MISB} from "./MISBFields";
+import {MISB, MISBFields} from "./MISBFields";
 import * as st0601 from './js/misb.js-main/src/st0601.mjs'
 import * as st0903 from './js/misb.js-main/src/st0903.mjs'
 import * as st0104 from './js/misb.js-main/src/st0104.mjs'
