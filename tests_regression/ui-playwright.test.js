@@ -137,7 +137,7 @@ test.describe.serial('UI Interaction Tests - Playwright', () => {
             console.log(`[WORKER-${workerIndex}] PAGE CONSOLE [${msg.type()}]: ${msg.text()}`);
         });
         
-        await sharedPage.goto('/?ignoreunload=1&regression=1');
+        await sharedPage.goto('?ignoreunload=1&regression=1');
         
         await sharedPage.waitForFunction(() => {
             return document.querySelector('.lil-gui') !== null;
