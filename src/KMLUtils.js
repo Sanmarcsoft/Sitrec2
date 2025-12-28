@@ -1,10 +1,11 @@
 import {CTrackFile} from "./TrackFiles/CTrackFile";
 import {CTrackFileKML} from "./TrackFiles/CTrackFileKML";
-import {CTrackFileXML} from "./TrackFiles/CTrackFileXML";
+import {CTrackFileSTANAG} from "./TrackFiles/CTrackFileSTANAG";
 import {CTrackFileSRT, SRT} from "./TrackFiles/CTrackFileSRT";
+import {CTrackFileJSON} from "./TrackFiles/CTrackFileJSON";
 import {parseXml} from "./parseXml";
 
-export {CTrackFile, CTrackFileKML, CTrackFileXML, CTrackFileSRT, SRT, parseXml};
+export {CTrackFile, CTrackFileKML, CTrackFileSTANAG, CTrackFileSRT, CTrackFileJSON, SRT, parseXml};
 
 export function parseSRT(data) {
     const srtFile = new CTrackFileSRT(data);
@@ -90,22 +91,25 @@ export function KMLToMISB(kml, trackIndex = 0) {
 ///////////////////////////////////////////////////
 // XML like STANAG
 
-export function doesXMLContainTrack(xml) {
+export function doesSTANAGContainTrack(xml) {
     let trackFile;
-    if (xml instanceof CTrackFileXML) {
+    if (xml instanceof CTrackFileSTANAG) {
         trackFile = xml;
     } else {
-        trackFile = new CTrackFileXML(xml);
+        trackFile = new CTrackFileSTANAG(xml);
     }
     return trackFile.doesContainTrack();
 }
 
-export function XMLToMISB(xml, trackIndex = 0) {
+export function STANAGToMISB(xml, trackIndex = 0) {
     let trackFile;
-    if (xml instanceof CTrackFileXML) {
+    if (xml instanceof CTrackFileSTANAG) {
         trackFile = xml;
     } else {
-        trackFile = new CTrackFileXML(xml);
+        trackFile = new CTrackFileSTANAG(xml);
     }
     return trackFile.toMISB(trackIndex);
 }
+
+export const doesXMLContainTrack = doesSTANAGContainTrack;
+export const XMLToMISB = STANAGToMISB;

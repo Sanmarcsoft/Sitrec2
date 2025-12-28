@@ -11,7 +11,7 @@ import {
 } from "./utils";
 import {fileSystemFetch} from "./fileSystemFetch";
 import JSZip from "jszip";
-import {CTrackFile, CTrackFileKML, CTrackFileSRT, CTrackFileXML, parseXml} from "./KMLUtils";
+import {CTrackFile, CTrackFileJSON, CTrackFileKML, CTrackFileSRT, CTrackFileSTANAG, parseXml} from "./KMLUtils";
 import {CRehoster} from "./CRehoster";
 import {CManager} from "./CManager";
 import {CustomManager, Globals, guiMenus, NodeMan, setNewSitchObject, setRenderOne, Sit, TrackManager} from "./Globals";
@@ -37,6 +37,13 @@ import {isAudioOnlyFormat} from "./AudioFormats";
 import {extractFeaturesFromFile, isFeaturesCSV} from "./ParseFeaturesCSV";
 import {createImageFromArrayBuffer} from "./FileUtils";
 import {ModelFiles} from "./nodes/CNode3DObject";
+
+const trackFileClasses = [
+    CTrackFileKML,
+    CTrackFileSTANAG,
+    CTrackFileSRT,
+    CTrackFileJSON,
+];
 
 
 /**
@@ -289,8 +296,7 @@ export class CFileManager extends CManager {
                 .tooltip("Delete a saved sitch from your personal folder on the server");
 
         }).catch(error => {
-            console.error("Error fetching user files from server:", error);
-            showError("Failed to fetch user files from server: " + error.message);
+            console.warn("Could not fetch user files from server (non-critical):", error.message);
         })
 
     }
@@ -1732,15 +1738,18 @@ export class CFileManager extends CManager {
                     break;
                 case "kml":
                 case "ksv":
-                    const kmlParsed = parseXml(decoder.decode(buffer));
-                    parsed = new CTrackFileKML(kmlParsed);
-                    dataType = "klm";
-                    break;
-                case "xml": // generic XML files (e.g. STANAG)
+                case "xml": {
                     const xmlParsed = parseXml(decoder.decode(buffer));
-                    parsed = new CTrackFileXML(xmlParsed);
-                    dataType = "xlm";
+                    parsed = this.detectTrackFile(filename, xmlParsed);
+                    if (parsed) {
+                        dataType = "trackfile";
+                    } else {
+                        console.warn("No trackfile handler found for XML/KML file: " + filename);
+                        dataType = "unknown";
+                        parsed = xmlParsed;
+                    }
                     break;
+                }
                 case "glb":             // 3D models in glTF binary format
                     dataType = "glb";
                     parsed = buffer;
@@ -1753,18 +1762,34 @@ export class CFileManager extends CManager {
                     dataType = "sitch";
                     parsed = buffer;
                     break;
-                case "srt": // SRT is a subtitle file, but is used by DJI drones to store per-frame coordinates.
-                    dataType = "srt";
-                    parsed = new CTrackFileSRT(decoder.decode(buffer));
-                    break;
-                case "json": //
-                    dataType = "json";
-                    parsed = JSON.parse(decoder.decode(buffer))
-                    if (parsed.isASitchFile) {
-                        dataType = "sitch";
-                        parsed = buffer;
+                case "srt": { // SRT is a subtitle file, but is used by DJI drones to store per-frame coordinates.
+                    const srtText = decoder.decode(buffer);
+                    parsed = this.detectTrackFile(filename, srtText);
+                    if (parsed) {
+                        dataType = "trackfile";
+                    } else {
+                        console.warn("No trackfile handler found for SRT file: " + filename);
+                        dataType = "unknown";
+                        parsed = srtText;
                     }
                     break;
+                }
+                case "json": {
+                    const jsonParsed = JSON.parse(decoder.decode(buffer))
+                    if (jsonParsed.isASitchFile) {
+                        dataType = "sitch";
+                        parsed = buffer;
+                    } else {
+                        parsed = this.detectTrackFile(filename, jsonParsed);
+                        if (parsed) {
+                            dataType = "trackfile";
+                        } else {
+                            dataType = "json";
+                            parsed = jsonParsed;
+                        }
+                    }
+                    break;
+                }
                 case "h264":
                     // Raw H.264 elementary stream from TS file
                     // These need special handling as they lack MP4 container structure
@@ -1832,6 +1857,23 @@ export class CFileManager extends CManager {
             // otherwise just return the results wrapped in a resolved promise
             return Promise.resolve({filename: filename, parsed: parsed, dataType: dataType});
         }
+    }
+
+    /**
+     * Detects which CTrackFile subclass can handle the given data.
+     * Iterates through registered trackFileClasses and returns an instance of the first
+     * class that can handle the data, or null if none can.
+     * @param {string} filename - The filename being parsed
+     * @param {*} data - The parsed data (object for XML/KML/JSON, string for SRT)
+     * @returns {CTrackFile|null} An instance of the matching CTrackFile subclass, or null
+     */
+    detectTrackFile(filename, data) {
+        for (const TrackFileClass of trackFileClasses) {
+            if (TrackFileClass.canHandle(filename, data)) {
+                return new TrackFileClass(data);
+            }
+        }
+        return null;
     }
 
     /**

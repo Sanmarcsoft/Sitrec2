@@ -2,6 +2,30 @@ import {CTrackFile} from "./CTrackFile";
 import {CGeoJSON} from "../geoJSONUtils";
 
 export class CTrackFileJSON extends CTrackFile {
+    static canHandle(filename, data) {
+        if (!data || typeof data !== 'object') {
+            return false;
+        }
+        try {
+            if (data.type !== "FeatureCollection" || !data.features || data.features.length === 0) {
+                return false;
+            }
+            const firstFeature = data.features[0];
+            if (!firstFeature || !firstFeature.geometry || !firstFeature.properties) {
+                return false;
+            }
+            if (firstFeature.geometry.type !== "Point") {
+                return false;
+            }
+            if (!firstFeature.properties.thresherId && !firstFeature.properties.dtg) {
+                return false;
+            }
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
     constructor(data) {
         super(data);
         this.geoJSON = new CGeoJSON();

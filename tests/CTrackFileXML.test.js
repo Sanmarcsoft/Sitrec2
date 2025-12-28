@@ -3,13 +3,13 @@
  */
 import fs from 'fs';
 import path from 'path';
-import {CTrackFileXML} from '../src/TrackFiles/CTrackFileXML';
+import {CTrackFileSTANAG} from '../src/TrackFiles/CTrackFileSTANAG';
 import {parseXml} from '../src/parseXml';
 import {MISB} from '../src/MISBFields';
 
 const testXMLPath = path.join(__dirname, '../data/test/elevated_track.xml');
 
-describe('CTrackFileXML', () => {
+describe('CTrackFileSTANAG', () => {
     let xmlData;
     let parsedXml;
     let trackFile;
@@ -17,7 +17,29 @@ describe('CTrackFileXML', () => {
     beforeAll(() => {
         xmlData = fs.readFileSync(testXMLPath, 'utf-8');
         parsedXml = parseXml(xmlData);
-        trackFile = new CTrackFileXML(parsedXml);
+        trackFile = new CTrackFileSTANAG(parsedXml);
+    });
+
+    describe('canHandle', () => {
+        test('returns true for valid STANAG XML data', () => {
+            expect(CTrackFileSTANAG.canHandle('test.xml', parsedXml)).toBe(true);
+        });
+
+        test('returns false for empty object', () => {
+            expect(CTrackFileSTANAG.canHandle('test.xml', {})).toBe(false);
+        });
+
+        test('returns false for null data', () => {
+            expect(CTrackFileSTANAG.canHandle('test.xml', null)).toBe(false);
+        });
+
+        test('returns false for string data', () => {
+            expect(CTrackFileSTANAG.canHandle('test.xml', 'not an object')).toBe(false);
+        });
+
+        test('returns false for KML data', () => {
+            expect(CTrackFileSTANAG.canHandle('test.kml', {kml: {}})).toBe(false);
+        });
     });
 
     describe('doesContainTrack', () => {
@@ -26,22 +48,22 @@ describe('CTrackFileXML', () => {
         });
 
         test('returns false for empty object', () => {
-            const emptyTrack = new CTrackFileXML({});
+            const emptyTrack = new CTrackFileSTANAG({});
             expect(emptyTrack.doesContainTrack()).toBe(false);
         });
 
         test('returns false for invalid data', () => {
-            const invalidTrack = new CTrackFileXML({nitsRoot: {}});
+            const invalidTrack = new CTrackFileSTANAG({nitsRoot: {}});
             expect(invalidTrack.doesContainTrack()).toBe(false);
         });
 
         test('returns false for null data', () => {
-            const nullTrack = new CTrackFileXML(null);
+            const nullTrack = new CTrackFileSTANAG(null);
             expect(nullTrack.doesContainTrack()).toBe(false);
         });
 
         test('returns false for string data', () => {
-            const stringTrack = new CTrackFileXML('not an object');
+            const stringTrack = new CTrackFileSTANAG('not an object');
             expect(stringTrack.doesContainTrack()).toBe(false);
         });
     });
@@ -95,7 +117,7 @@ describe('CTrackFileXML', () => {
 
         test('returns false for invalid data', () => {
             const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-            const invalidTrack = new CTrackFileXML({});
+            const invalidTrack = new CTrackFileSTANAG({});
             expect(invalidTrack.toMISB()).toBe(false);
             warnSpy.mockRestore();
         });
@@ -107,7 +129,7 @@ describe('CTrackFileXML', () => {
         });
 
         test('returns default name when no filename provided', () => {
-            expect(trackFile.getShortName()).toBe('XML Track');
+            expect(trackFile.getShortName()).toBe('STANAG Track');
         });
     });
 

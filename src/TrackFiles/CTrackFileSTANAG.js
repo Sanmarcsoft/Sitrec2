@@ -2,7 +2,18 @@ import {CTrackFile} from "./CTrackFile";
 import {MISB, MISBFields} from "../MISBFields";
 import {timeStrToEpoch} from "../DateTimeUtils";
 
-export class CTrackFileXML extends CTrackFile {
+export class CTrackFileSTANAG extends CTrackFile {
+    static canHandle(filename, data) {
+        if (!data || typeof data !== 'object') {
+            return false;
+        }
+        try {
+            return !!(data.nitsRoot?.message?.track);
+        } catch (e) {
+            return false;
+        }
+    }
+
     doesContainTrack() {
         if (!this.data || typeof this.data !== 'object') {
             return false;
@@ -20,24 +31,24 @@ export class CTrackFileXML extends CTrackFile {
 
     toMISB(trackIndex = 0) {
         if (trackIndex !== 0) {
-            console.warn("XMLToMISB: XML files only contain a single track, index " + trackIndex + " is invalid");
+            console.warn("STANAGToMISB: STANAG XML files only contain a single track, index " + trackIndex + " is invalid");
             return false;
         }
 
         if (!this.data || typeof this.data !== 'object') {
-            console.warn("XMLToMISB: No valid XML data");
+            console.warn("STANAGToMISB: No valid STANAG data");
             return false;
         }
 
         try {
             if (!this.doesContainTrack()) {
-                console.warn("XMLToMISB: No track in XML file");
+                console.warn("STANAGToMISB: No track in STANAG file");
                 return false;
             }
 
             const message = this.data.nitsRoot?.message;
             if (!message || !message.baseTime || !message.track) {
-                console.warn("XMLToMISB: Invalid XML structure");
+                console.warn("STANAGToMISB: Invalid STANAG XML structure");
                 return false;
             }
 
@@ -47,7 +58,7 @@ export class CTrackFileXML extends CTrackFile {
             const trackPoints = track.segment?.tp;
 
             if (!trackPoints) {
-                console.warn("XMLToMISB: No track points found");
+                console.warn("STANAGToMISB: No track points found");
                 return false;
             }
 
@@ -60,13 +71,13 @@ export class CTrackFileXML extends CTrackFile {
                 const posStr = tp.dynamics?.pos?.["#text"];
 
                 if (!posStr) {
-                    console.warn("XMLToMISB: Track point " + i + " missing position data");
+                    console.warn("STANAGToMISB: Track point " + i + " missing position data");
                     continue;
                 }
 
                 const coords = posStr.trim().split(/\s+/);
                 if (coords.length < 3) {
-                    console.warn("XMLToMISB: Track point " + i + " has invalid position format");
+                    console.warn("STANAGToMISB: Track point " + i + " has invalid position format");
                     continue;
                 }
 
@@ -84,13 +95,13 @@ export class CTrackFileXML extends CTrackFile {
             }
 
             if (misb.length === 0) {
-                console.warn("XMLToMISB: No valid track points found");
+                console.warn("STANAGToMISB: No valid track points found");
                 return false;
             }
 
             return misb;
         } catch (e) {
-            console.warn("XMLToMISB: Error parsing XML data: " + e.message);
+            console.warn("STANAGToMISB: Error parsing STANAG data: " + e.message);
             return false;
         }
     }
@@ -99,7 +110,7 @@ export class CTrackFileXML extends CTrackFile {
         if (trackFileName) {
             return trackFileName.replace(/\.[^/.]+$/, "");
         }
-        return "XML Track";
+        return "STANAG Track";
     }
 
     hasMoreTracks(trackIndex = 0) {

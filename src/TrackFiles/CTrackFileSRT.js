@@ -122,6 +122,18 @@ function parseSRT1(lines) {
 }
 
 export class CTrackFileSRT extends CTrackFile {
+    static canHandle(filename, data) {
+        if (!data || typeof data !== 'string') {
+            return false;
+        }
+        try {
+            const misb = parseSRT(data);
+            return misb && misb.length > 0;
+        } catch (e) {
+            return false;
+        }
+    }
+
     doesContainTrack() {
         if (!this.data || typeof this.data !== 'string') {
             return false;

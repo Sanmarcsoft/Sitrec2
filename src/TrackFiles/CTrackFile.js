@@ -3,6 +3,10 @@ export class CTrackFile {
         this.data = data;
     }
 
+    static canHandle(filename, data) {
+        throw new Error("static canHandle must be implemented by subclass");
+    }
+
     doesContainTrack() {
         throw new Error("doesContainTrack must be implemented by subclass");
     }

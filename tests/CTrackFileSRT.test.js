@@ -14,6 +14,28 @@ describe('CTrackFileSRT', () => {
         trackFile = new CTrackFileSRT(srtData);
     });
 
+    describe('canHandle', () => {
+        test('returns true for valid SRT data', () => {
+            expect(CTrackFileSRT.canHandle('test.srt', srtData)).toBe(true);
+        });
+
+        test('returns false for empty string', () => {
+            expect(CTrackFileSRT.canHandle('test.srt', '')).toBe(false);
+        });
+
+        test('returns false for null data', () => {
+            expect(CTrackFileSRT.canHandle('test.srt', null)).toBe(false);
+        });
+
+        test('returns false for object data', () => {
+            expect(CTrackFileSRT.canHandle('test.srt', {})).toBe(false);
+        });
+
+        test('returns false for invalid SRT string', () => {
+            expect(CTrackFileSRT.canHandle('test.srt', 'not valid srt data')).toBe(false);
+        });
+    });
+
     describe('doesContainTrack', () => {
         test('returns true for valid SRT data', () => {
             expect(trackFile.doesContainTrack()).toBe(true);

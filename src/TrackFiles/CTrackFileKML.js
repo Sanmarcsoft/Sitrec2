@@ -9,6 +9,17 @@ import * as LAYERS from "../LayerMasks";
 import {FeatureManager} from "../CFeatureManager";
 
 export class CTrackFileKML extends CTrackFile {
+    static canHandle(filename, data) {
+        if (!data || typeof data !== 'object') {
+            return false;
+        }
+        try {
+            return !!data.kml;
+        } catch (e) {
+            return false;
+        }
+    }
+
     doesContainTrack() {
         const valid = this.getKMLTrackWhenCoord(this.data, 0);
         return valid;
