@@ -118,7 +118,7 @@ test.describe.serial('Chatbot Tests', () => {
             console.log(`[WORKER-${workerIndex}] PAGE CONSOLE [${msg.type()}]: ${msg.text()}`);
         });
         
-        await sharedPage.goto('/?ignoreunload=1&regression=1&mapType=Local&elevationType=Local');
+        await sharedPage.goto('?ignoreunload=1&regression=1&mapType=Local&elevationType=Local');
         
         await sharedPage.waitForFunction(() => {
             return document.querySelector('.lil-gui') !== null;
