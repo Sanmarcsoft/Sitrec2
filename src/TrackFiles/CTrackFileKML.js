@@ -1,5 +1,5 @@
 import {CTrackFile} from "./CTrackFile";
-import {MISB, MISBFields} from "../MISBUtils";
+import {MISB, MISBFields} from "../MISBFields";
 import {CustomManager, NodeMan, Sit} from "../Globals";
 import {timeStrToEpoch} from "../DateTimeUtils";
 import {assert} from "../assert.js";
