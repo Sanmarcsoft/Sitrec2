@@ -1,4 +1,186 @@
-import {parseISODate} from "../src/ParseUtils";
+import {
+    addMillisecondsToDate,
+    extractLLA,
+    findColumn,
+    parseISODate,
+    parseUTCDate,
+    splitOnCommas
+} from "../src/ParseUtils";
+
+describe('splitOnCommas', () => {
+    test('splits simple comma-separated values', () => {
+        expect(splitOnCommas('a, b, c')).toEqual(['a', 'b', 'c']);
+    });
+
+    test('handles values without spaces', () => {
+        expect(splitOnCommas('a,b,c')).toEqual(['a', 'b', 'c']);
+    });
+
+    test('preserves commas inside parentheses', () => {
+        expect(splitOnCommas('func(a, b), c')).toEqual(['func(a, b)', 'c']);
+    });
+
+    test('handles nested parentheses', () => {
+        expect(splitOnCommas('outer(inner(a, b), c), d')).toEqual(['outer(inner(a, b), c)', 'd']);
+    });
+
+    test('strips trailing "m" for meters', () => {
+        expect(splitOnCommas('100m, 200m')).toEqual(['100', '200']);
+    });
+
+    test('handles empty string', () => {
+        expect(splitOnCommas('')).toEqual(['']);
+    });
+
+    test('handles single value', () => {
+        expect(splitOnCommas('single')).toEqual(['single']);
+    });
+});
+
+describe('extractLLA', () => {
+    test('extracts LLA from parenthesized format', () => {
+        const result = extractLLA('(-121.1689, 38.7225, 21)');
+        expect(result.longitude).toBeCloseTo(-121.1689, 4);
+        expect(result.latitude).toBeCloseTo(38.7225, 4);
+        expect(result.altitude).toBeCloseTo(21, 4);
+    });
+
+    test('extracts LLA with positive coordinates', () => {
+        const result = extractLLA('(45.5, 122.6, 100)');
+        expect(result.longitude).toBeCloseTo(45.5, 4);
+        expect(result.latitude).toBeCloseTo(122.6, 4);
+        expect(result.altitude).toBeCloseTo(100, 4);
+    });
+
+    test('handles integer values', () => {
+        const result = extractLLA('(10, 20, 30)');
+        expect(result.longitude).toBe(10);
+        expect(result.latitude).toBe(20);
+        expect(result.altitude).toBe(30);
+    });
+
+    test('returns null for invalid format', () => {
+        expect(extractLLA('invalid')).toBeNull();
+        expect(extractLLA('(1, 2)')).toBeNull();
+        expect(extractLLA('')).toBeNull();
+    });
+
+    test('handles various decimal precisions', () => {
+        const result = extractLLA('(-122.123456, 37.987654, 0.5)');
+        expect(result.longitude).toBeCloseTo(-122.123456, 6);
+        expect(result.latitude).toBeCloseTo(37.987654, 6);
+        expect(result.altitude).toBeCloseTo(0.5, 1);
+    });
+});
+
+describe('findColumn', () => {
+    const csv = [
+        ['timestamp', 'latitude', 'longitude', 'altitude'],
+        ['2024-01-01', '45.0', '-122.0', '100']
+    ];
+
+    test('finds column by exact match', () => {
+        expect(findColumn(csv, 'latitude', true)).toBe(1);
+        expect(findColumn(csv, 'longitude', true)).toBe(2);
+    });
+
+    test('finds column by prefix match', () => {
+        expect(findColumn(csv, 'lat')).toBe(1);
+        expect(findColumn(csv, 'lon')).toBe(2);
+        expect(findColumn(csv, 'alt')).toBe(3);
+    });
+
+    test('is case insensitive', () => {
+        expect(findColumn(csv, 'LATITUDE', true)).toBe(1);
+        expect(findColumn(csv, 'Latitude', true)).toBe(1);
+        expect(findColumn(csv, 'LAT')).toBe(1);
+    });
+
+    test('returns -1 for not found', () => {
+        expect(findColumn(csv, 'nonexistent')).toBe(-1);
+        expect(findColumn(csv, 'lat', true)).toBe(-1);
+    });
+
+    test('accepts array of search terms', () => {
+        expect(findColumn(csv, ['time', 'timestamp'])).toBe(0);
+        expect(findColumn(csv, ['lat', 'latitude'])).toBe(1);
+    });
+
+    test('returns first match from array', () => {
+        expect(findColumn(csv, ['nonexistent', 'timestamp'])).toBe(0);
+    });
+
+    test('throws on invalid csv input', () => {
+        expect(() => findColumn(null, 'test')).toThrow();
+        expect(() => findColumn([], 'test')).toThrow();
+        expect(() => findColumn('not array', 'test')).toThrow();
+    });
+
+    test('handles columns with leading whitespace', () => {
+        const csvWithSpaces = [['  latitude', 'longitude']];
+        expect(findColumn(csvWithSpaces, 'latitude')).toBe(0);
+    });
+});
+
+describe('parseUTCDate', () => {
+    test('parses YYYY-MM-DD HH:MM:SS format', () => {
+        const date = parseUTCDate('2024-01-15 14:30:45');
+        expect(date.getUTCFullYear()).toBe(2024);
+        expect(date.getUTCMonth()).toBe(0);
+        expect(date.getUTCDate()).toBe(15);
+        expect(date.getUTCHours()).toBe(14);
+        expect(date.getUTCMinutes()).toBe(30);
+        expect(date.getUTCSeconds()).toBe(45);
+    });
+
+    test('handles midnight', () => {
+        const date = parseUTCDate('2024-06-01 00:00:00');
+        expect(date.getUTCHours()).toBe(0);
+        expect(date.getUTCMinutes()).toBe(0);
+        expect(date.getUTCSeconds()).toBe(0);
+    });
+
+    test('handles end of day', () => {
+        const date = parseUTCDate('2024-12-31 23:59:59');
+        expect(date.getUTCHours()).toBe(23);
+        expect(date.getUTCMinutes()).toBe(59);
+        expect(date.getUTCSeconds()).toBe(59);
+    });
+});
+
+describe('addMillisecondsToDate', () => {
+    test('adds positive milliseconds', () => {
+        const date = new Date('2024-01-01T00:00:00Z');
+        const result = addMillisecondsToDate(date, 1000);
+        expect(result.getTime()).toBe(date.getTime() + 1000);
+    });
+
+    test('adds negative milliseconds', () => {
+        const date = new Date('2024-01-01T00:00:00Z');
+        const result = addMillisecondsToDate(date, -1000);
+        expect(result.getTime()).toBe(date.getTime() - 1000);
+    });
+
+    test('handles large millisecond values', () => {
+        const date = new Date('2024-01-01T00:00:00Z');
+        const oneDay = 24 * 60 * 60 * 1000;
+        const result = addMillisecondsToDate(date, oneDay);
+        expect(result.getUTCDate()).toBe(2);
+    });
+
+    test('does not modify original date', () => {
+        const date = new Date('2024-01-01T00:00:00Z');
+        const originalTime = date.getTime();
+        addMillisecondsToDate(date, 1000);
+        expect(date.getTime()).toBe(originalTime);
+    });
+
+    test('handles zero milliseconds', () => {
+        const date = new Date('2024-01-01T00:00:00Z');
+        const result = addMillisecondsToDate(date, 0);
+        expect(result.getTime()).toBe(date.getTime());
+    });
+});
 
 describe('parseISODate', () => {
     describe('ISO 8601 with explicit timezone', () => {
