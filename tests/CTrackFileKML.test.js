@@ -40,6 +40,8 @@ describe('CTrackFileKML', () => {
     let rugeleyData, rugeleyParsed, rugeleyTrackFile;
 
     beforeAll(() => {
+        jest.spyOn(console, 'log').mockImplementation(() => {});
+        jest.spyOn(console, 'warn').mockImplementation(() => {});
         adsbxData = fs.readFileSync(testADSBXPath, 'utf-8');
         adsbxParsed = parseXml(adsbxData);
         adsbxTrackFile = new CTrackFileKML(adsbxParsed);
@@ -55,6 +57,10 @@ describe('CTrackFileKML', () => {
         rugeleyData = fs.readFileSync(testRugeleyPath, 'utf-8');
         rugeleyParsed = parseXml(rugeleyData);
         rugeleyTrackFile = new CTrackFileKML(rugeleyParsed);
+    });
+
+    afterAll(() => {
+        jest.restoreAllMocks();
     });
 
     describe('canHandle', () => {
