@@ -1868,10 +1868,11 @@ export class CFileManager extends CManager {
      * @returns {CTrackFile|null} An instance of the matching CTrackFile subclass, or null
      */
     detectTrackFile(filename, data) {
-        for (const TrackFileClass of trackFileClasses) {
-            if (TrackFileClass.canHandle(filename, data)) {
-                return new TrackFileClass(data);
-            }
+        const matchingClasses = trackFileClasses.filter(TrackFileClass => TrackFileClass.canHandle(filename, data));
+        assert(matchingClasses.length <= 1, 
+            `Multiple trackfile handlers matched for ${filename}: ${matchingClasses.map(c => c.name).join(', ')}`);
+        if (matchingClasses.length === 1) {
+            return new matchingClasses[0](data);
         }
         return null;
     }
