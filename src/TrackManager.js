@@ -147,67 +147,6 @@ class CMetaTrack {
 
 
 
-/**
- * Get information about tracks in a complex MISB CSV
- * @param {Array} complexMisb - Full MISB array with potentially multiple tracks
- * @returns {Object} - Object with trackIDArray and count
- */
-function getCSVTrackInfo(complexMisb) {
-    // Count the number of unique values in the TrackID column
-    // This is a full MISB array with the PlatformCallSign standing in for TrackID
-    // (they both have the same column index)
-    const trackIDs = new Set();
-    const trackIDCol = MISB.TrackID;
-    for (let i = 0; i < complexMisb.length; i++) {
-        const trackID = complexMisb[i][trackIDCol];
-        if (trackID !== null && trackID !== undefined) {
-            trackIDs.add(trackID);
-        }
-    }
-
-    const trackIDArray = Array.from(trackIDs);
-    // if empty, then just patch it as if it has one entry
-    if (trackIDArray.length === 0) {
-        console.warn("getCSVTrackInfo: No TrackIDs found, assuming single track");
-        trackIDArray.push("dummyTrackID");
-    }
-
-    return {
-        trackIDArray: trackIDArray,
-        count: trackIDArray.length
-    };
-}
-
-/**
- * Extract a single track from a complex MISB CSV by index
- * @param {Array} complexMisb - Full MISB array with potentially multiple tracks
- * @param {number} index - Index of the track to extract
- * @returns {Array|null} - Extracted MISB array for the specified track, or null if index out of range
- */
-function extractIndexedMisbCSV(complexMisb, index) {
-    console.log("extractIndexedMisbCSV: extracting index ", index, " from complex MISB CSV with length ", complexMisb.length);
-    
-    const trackInfo = getCSVTrackInfo(complexMisb);
-    const trackIDArray = trackInfo.trackIDArray;
-
-    if (index >= trackIDArray.length) {
-        console.warn("extractIndexedMisbCSV: index ", index, " out of range, only ", trackIDArray.length, " unique TrackIDs");
-        return null;
-    }
-
-    if (trackIDArray.length === 1) {
-        console.log("extractIndexedMisbCSV: only one TrackID present, returning full MISB");
-        return complexMisb;
-    }
-
-    // now create a new MISB array with only the entries (rows) matching the selected TrackID
-    const selectedTrackID = trackIDArray[index];
-    const extractedMisb = complexMisb.filter(row => row[MISB.TrackID] === selectedTrackID);
-    console.log("extractIndexedMisbCSV: extracted MISB length ", extractedMisb.length);
-    return extractedMisb;
-}
-
-
 class CTrackManager extends CManager {
 
     constructor() {
@@ -231,19 +170,12 @@ class CTrackManager extends CManager {
         let misb = null;
         const trackFile = FileManager.get(sourceFile);
 
-        // Use polymorphic toMISB() for all CTrackFile types (KML, XML, SRT, etc.)
         if (trackFile instanceof CTrackFile) {
             misb = trackFile.toMISB(trackIndex);
         } else if (ext === "json") {
             const geo = new CGeoJSON();
             geo.json = trackFile;
             misb = geo.toMISB(trackIndex);
-        } else if (ext === "klv") {
-            // KLV files are stored as raw MISB arrays
-            misb = trackFile;
-        } else if (ext === "csv") {
-            const complexMisb = trackFile;
-            misb = extractIndexedMisbCSV(complexMisb, trackIndex)
         } else {
             assert(0, "Unknown file type: " + fileInfo.filename);
         }
@@ -374,9 +306,7 @@ class CTrackManager extends CManager {
 
                 const trackDataID = "TrackData_" + shortName;
                 const trackID = "Track_" + shortName;
-                //let hasAngles = false;
                 let hasFOV = false;
-                let hasCenter = false;
                 console.log("Creating track with trackID", shortName, "in addTracks")
 
 
@@ -415,7 +345,8 @@ class CTrackManager extends CManager {
                     // and call it to sync the time. Note we do this BEFORE we create the actual tracks
                     // to ensure we have the correct start time, and hence we can get good track positions for use
                     // with determining the initial terrain
-                    if (!Globals.sitchEstablished) {
+                    // Only sync for the primary track (index 0), not for supplementary tracks like center tracks
+                    if (!Globals.sitchEstablished && trackIndex === 0) {
                         GlobalDateTimeNode.syncStartTimeTrack();
                     }
 
@@ -476,49 +407,15 @@ class CTrackManager extends CManager {
 
                     trackOb.trackColor = trackColor;
 
-                    // This track will include FOV and angles
-                    // but if there's a center track, we make a separate track for that
-                    // in data it looks like
-                    // targetTrack: {
-                    //     kind: "TrackFromMISB",
-                    //         misb: "cameraTrackData",
-                    //         columns: ["FrameCenterLatitude", "FrameCenterLongitude", "FrameCenterElevation"]
-                    // },
-
-
-                    let centerID = null;
-                    if (misb[0][MISB.FrameCenterLatitude] !== undefined && misb[0][MISB.FrameCenterLatitude] !== null) {
-                        hasCenter = true;
-
-                        const centerDataID = "CenterData_" + shortName;
-                        centerID = "Center_" + shortName;
-                        // const centerTrack = new CNodeTrackFromMISB({
-                        //     id: centerTrackID,
-                        //     misb: trackDataNode,
-                        //     columns: ["FrameCenterLatitude", "FrameCenterLongitude", "FrameCenterElevation"],
-                        //     exportable: true,
-                        // })
-
-                        this.makeTrackFromDataFile(trackFileName, centerDataID, centerID,
-                            ["FrameCenterLatitude", "FrameCenterLongitude", "FrameCenterElevation"]);
-
-                        trackOb.centerDataNode = NodeMan.get(centerDataID);
-                        trackOb.centerNode = NodeMan.get(centerID);
-
-
-                    }
-
-
-                    let hasAngles = this.updateDropTargets(trackNumber, shortName, trackID, centerID, trackDataID, trackNode, hasFOV, trackOb);
+                    let hasAngles = this.updateDropTargets(trackNumber, shortName, trackID, trackDataID, trackNode, hasFOV, trackOb);
 
                     this.makeMotionTrack(trackOb, shortName, trackColor, dropColor, trackID);
-                    this.makeAnyCenterTrack(centerID, trackOb, shortName);
 
 
-                    this.centerOnTrack(shortName, trackNumber, trackOb, hasCenter, hasAngles);
+                    this.centerOnTrack(shortName, trackNumber, trackOb, hasAngles, trackIndex);
 
-                    // if there's more than one track loaded, or there's a center track, then flag to set setSitchEstablished(true) after the track is processed
-                    if (trackNumber > 0 || hasCenter) {
+                    // if there's more than one track loaded, flag to set setSitchEstablished(true) after the track is processed
+                    if (trackNumber > 0) {
                         settingSitchEstablished = true;
                     }
 
@@ -650,46 +547,7 @@ class CTrackManager extends CManager {
         })
     }
 
-    makeAnyCenterTrack(centerID, trackOb, shortName) {
-        if (centerID !== null) {
-
-            trackOb.displayCenterDataNode = new CNodeDisplayTrack({
-                id: "CenterDisplayData_" + shortName,
-                track: "CenterData_" + shortName,
-                color: new CNodeConstant({
-                    id: "colorCenterData_" + shortName,
-                    value: new Color(0, 1, 0),
-                    pruneIfUnused: true
-                }),
-                width: 0.5,
-                //  toGround: 1, // spacing for lines to ground
-                ignoreAB: true,
-                layers: LAYER.MASK_HELPERS,
-                skipGUI: true,
-
-
-            })
-
-            trackOb.displayCenterNode = new CNodeDisplayTrack({
-                id: "CenterDisplay_" + shortName,
-                track: centerID,
-                dataTrackDisplay: "CenterDisplayData_" + shortName,
-                color: new CNodeConstant({
-                    id: "colorCenter_" + shortName,
-                    value: new Color(1, 1, 0),
-                    pruneIfUnused: true
-                }),
-                width: 3,
-                //  toGround: 1, // spacing for lines to ground
-                ignoreAB: true,
-                layers: LAYER.MASK_HELPERS,
-
-            })
-
-        }
-    }
-
-    centerOnTrack(shortName, trackNumber, trackOb, hasCenter, hasAngles) {
+    centerOnTrack(shortName, trackNumber, trackOb, hasAngles, trackIndex = 0) {
 //        console.log("Considering setup options for track: ", shortName, " number ", trackNumber)
 //        console.log("Sit.centerOnLoadedTracks: ", Sit.centerOnLoadedTracks, " Globals.dontAutoZoom: ", Globals.dontAutoZoom, " Globals.sitchEstablished: ", Globals.sitchEstablished)
 
@@ -745,8 +603,9 @@ class CTrackManager extends CManager {
 
 
             // If this is not the first track, then find the time of the closest intersection.
+            // Skip for supplementary tracks (trackIndex > 0) like center tracks from the same file.
             const track0 = TrackManager.getByIndex(0);
-            if (track0 !== trackOb) {
+            if (track0 !== trackOb && trackIndex === 0) {
                 let time = closestIntersectionTime(track0.trackDataNode, trackOb.trackDataNode);
 //                console.log("Closest intersection time: ", time);
 
@@ -803,19 +662,15 @@ class CTrackManager extends CManager {
 
 
 
-                // if it's a simple track with no center track and no angles (i.e. not MISB)
+                // if it's a simple track with no angles (i.e. not MISB)
                 // then switch to "Use Angles" for the camera heading
                 // which will use the PTZ control as no angles track will be loaded yet
 
-                if (!hasCenter && !hasAngles) {
-
-                    // first simple track, so just use angles
-                    // which will point the camera in a fixed direction
+                if (!hasAngles) {
                     const headingSwitch = NodeMan.get("CameraLOSController", true);
                     if (headingSwitch) {
                         headingSwitch.selectOption("Use Angles");
                     }
-
                 }
 
 
@@ -824,7 +679,7 @@ class CTrackManager extends CManager {
         }
     }
 
-    updateDropTargets(trackNumber, shortName, trackID, centerID, trackDataID, trackNode, hasFOV, trackOb) {
+    updateDropTargets(trackNumber, shortName, trackID, trackDataID, trackNode, hasFOV, trackOb) {
         let hasAngles = false;
         if (Sit.dropTargets !== undefined && Sit.dropTargets["track"] !== undefined) {
             const dropTargets = Sit.dropTargets["track"]
@@ -882,17 +737,6 @@ class CTrackManager extends CManager {
                                 }
                             }
                         }
-                        // if there's a center point track, make that as well
-                        if (centerID !== null) {
-                            const menuTextCenter = "Center " + shortName;
-                            switchNode.removeOption(menuTextCenter)
-                            switchNode.addOption(menuTextCenter, NodeMan.get(centerID))
-                            // if it's being added to targetTrackSwitch then select it
-                            if (switchNode.id === "targetTrackSwitch" && !Globals.sitchEstablished) {
-                                switchNode.selectOption(menuTextCenter)
-                            }
-                        }
-
                     }
 
 
@@ -1060,7 +904,7 @@ class CTrackManager extends CManager {
         }
 
         const ext = getFileExtension(trackFileName);
-        if ( !found && ext === "json") {
+        if (!found && ext === "json") {
             const geo = new CGeoJSON();
             geo.json = file;
             shortName = geo.shortTrackIDForIndex(trackIndex);
@@ -1071,99 +915,21 @@ class CTrackManager extends CManager {
             }
         }
 
-        // Handle complex CSV files with multiple tracks
-        if (ext === "csv") {
-            const complexMisb = FileManager.get(trackFileName);
-            
-            if (complexMisb && complexMisb.length > 0) {
-                // Get track information
-                const trackInfo = getCSVTrackInfo(complexMisb);
-                const numTracks = trackInfo.count;
-                const trackIDArray = trackInfo.trackIDArray;
-                
-                console.log(`CSV file contains ${numTracks} unique track(s)`);
-                
-                // Check if there are more tracks after this one
-                if (trackIndex < numTracks - 1) {
-                    moreTracks = true;
-                }
-                
-                // If we have multiple tracks or explicit index, extract the specific track
-                if (numTracks > 1 || trackIndex > 0) {
-                    if (trackIndex < numTracks) {
-                        const trackID = trackIDArray[trackIndex];
-                        // Filter to get rows for this track to check for tail number
-                        const trackRows = complexMisb.filter(row => row[MISB.TrackID] === trackID);
-                        
-                        if (trackRows.length > 0) {
-                            // Try to use tail number as short name
-                            const tailNumber = trackRows[0][MISB.PlatformTailNumber];
-                            if (tailNumber !== null && tailNumber !== undefined && tailNumber !== "") {
-                                shortName = tailNumber;
-                                console.log(`Using tail number as short name: ${shortName}`);
-                            } else {
-                                // Use the trackID as short name
-                                shortName = trackID;
-                                console.log(`Using trackID as short name: ${shortName}`);
-                            }
-                            found = true;
-                        }
-                    } else {
-                        console.warn(`CSV trackIndex ${trackIndex} out of range (${numTracks} tracks available)`);
-                    }
-                }
-                // If single track, continue to default handling below
-            }
-        }
-
         if (!found) {
             const match = trackFileName.match(/FlightAware_([A-Z0-9]+)_/);
             if (match !== null) {
                 shortName = match[1];
             } else {
-                // check for something like N121DZ-track-EGM96.kml
-                const match = trackFileName.match(/([A-Z0-9]+)-track-/);
-                if (match !== null) {
-                    shortName = match[1];
+                const match2 = trackFileName.match(/([A-Z0-9]+)-track-/);
+                if (match2 !== null) {
+                    shortName = match2[1];
                 } else {
-                    // check if this has MISB data, and if so, use the platform tail
-                    // if (misb[0][MISB.PlatformTailNumber] !== undefined) {
-                    //     shortName = misb[0][MISB.PlatformTailNumber];
-                    // }
-                    // get the file from the file manager
-
-                    // is it a raw MISB file (CSV or KLV)? Note: SRT now uses CTrackFile interface
-                    if (ext === "csv" || ext === "klv") {
-                        const misb = FileManager.get(trackFileName)
-
-                        assert(misb, `Misb file ${trackFileName} not found when expected in findShortName`)
-
-                        assert(misb[0] !== undefined, `Misb file ${trackFileName} does not contain data when expected in findShortName`)
-
-                        if (misb[0][MISB.PlatformTailNumber] !== null) {
-                            shortName = misb[0][MISB.PlatformTailNumber];
-                        } else {
-                            // MISB, but can't find a tail number, so just use the filename without the extension
-                            shortName = trackFileName.replace(/\.[^/.]+$/, "");
-                        }
-
+                    const match3 = trackFileName.match(/([A-Z0-9]+)-[0-9a-f]+\.kml/);
+                    if (match3 !== null) {
+                        shortName = match3[1];
                     } else {
-                        // some KLM files are like
-                        // DL4113-3376e834.kml
-                        // so we just want the DL4113 part
-                        // but we need to check first to see if it:
-                        // alphanum hexnum.kml
-                        const match = trackFileName.match(/([A-Z0-9]+)-[0-9a-f]+\.kml/);
-                        if (match !== null) {
-                            shortName = match[1];
-                        } else {
-                            // not a misb file, but no filename format found
-                            // just use the filename without the extension
-                            shortName = trackFileName.replace(/\.[^/.]+$/, "");
-                        }
-
+                        shortName = trackFileName.replace(/\.[^/.]+$/, "");
                     }
-
                 }
             }
         }

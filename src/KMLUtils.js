@@ -3,9 +3,10 @@ import {CTrackFileKML} from "./TrackFiles/CTrackFileKML";
 import {CTrackFileSTANAG} from "./TrackFiles/CTrackFileSTANAG";
 import {CTrackFileSRT, SRT} from "./TrackFiles/CTrackFileSRT";
 import {CTrackFileJSON} from "./TrackFiles/CTrackFileJSON";
+import {CTrackFileMISB} from "./TrackFiles/CTrackFileMISB";
 import {parseXml} from "./parseXml";
 
-export {CTrackFile, CTrackFileKML, CTrackFileSTANAG, CTrackFileSRT, CTrackFileJSON, SRT, parseXml};
+export {CTrackFile, CTrackFileKML, CTrackFileSTANAG, CTrackFileSRT, CTrackFileJSON, CTrackFileMISB, SRT, parseXml};
 
 export function parseSRT(data) {
     const srtFile = new CTrackFileSRT(data);

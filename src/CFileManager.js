@@ -11,7 +11,15 @@ import {
 } from "./utils";
 import {fileSystemFetch} from "./fileSystemFetch";
 import JSZip from "jszip";
-import {CTrackFile, CTrackFileJSON, CTrackFileKML, CTrackFileSRT, CTrackFileSTANAG, parseXml} from "./KMLUtils";
+import {
+    CTrackFile,
+    CTrackFileJSON,
+    CTrackFileKML,
+    CTrackFileMISB,
+    CTrackFileSRT,
+    CTrackFileSTANAG,
+    parseXml
+} from "./KMLUtils";
 import {CRehoster} from "./CRehoster";
 import {CManager} from "./CManager";
 import {CustomManager, Globals, guiMenus, NodeMan, setNewSitchObject, setRenderOne, Sit, TrackManager} from "./Globals";
@@ -43,6 +51,7 @@ const trackFileClasses = [
     CTrackFileSTANAG,
     CTrackFileSRT,
     CTrackFileJSON,
+    CTrackFileMISB,
 ];
 
 
@@ -1674,10 +1683,12 @@ export class CFileManager extends CManager {
                     parsed = decoder.decode(buffer);
                     dataType = "dat";
                     break;
-                case "klv":
-                    parsed = parseKLVFile(buffer);
-                    dataType = "klv";
+                case "klv": {
+                    const klvMisb = parseKLVFile(buffer);
+                    parsed = new CTrackFileMISB(klvMisb);
+                    dataType = "trackfile";
                     break;
+                }
                 case "jpg":
                 case "jpeg":
                     prom = createImageFromArrayBuffer(buffer, 'image/jpeg')
@@ -1704,7 +1715,7 @@ export class CFileManager extends CManager {
                     dataType = "image";
                     prom = createImageFromArrayBuffer(buffer, 'image/heic')
                     break
-                case "csv":
+                case "csv": {
                     const buffer2 = cleanCSVText(buffer)
                     var text = decoder.decode(buffer);
 
@@ -1713,29 +1724,45 @@ export class CFileManager extends CManager {
                     if (dataType === "Unknown") {
                         parsed.shift(); // remove the header, legacy file type handled in specific code
                     } else if (dataType === "Airdata") {
-                        parsed = parseAirdataCSV(parsed);
+                        const airdataMisb = parseAirdataCSV(parsed);
+                        parsed = new CTrackFileMISB(airdataMisb);
+                        dataType = "trackfile";
                     } else if (dataType === "MISB1") {
-                        parsed = parseMISB1CSV(parsed);
-                    } else if (dataType === "CUSTOM1") {
-                        parsed = parseCustom1CSV(parsed);
-                    } else if (dataType === "CUSTOM_FLL") {
-                        parsed = parseCustomFLLCSV(parsed);
-                    } else if (dataType === "FR24CSV")
-                        parsed = parseFR24CSV(parsed);
-
-                    // most of them will resolve to a MISB type array
-                    // so strip duplicate times from those
-                    // skipping the ones that are not time based
-                    if (dataType !== "FEATURES" && dataType !== "AZIMUTH" && dataType !== "ELEVATION" && dataType !== "HEADING" && dataType !== "FOV") {
-                        // if it's a custom file, then strip out any duplicate times
-                        // we are being a bit more robust here, as some legacy files have duplicate times
-                        // For example Aguadilla. That's probably an issue only with "Unknown" files
-                        if (Sit.isCustom && dataType !== "Unknown") {
-                            parsed = stripDuplicateTimes(parsed);
+                        const csvMisb = parseMISB1CSV(parsed);
+                        if (Sit.isCustom) {
+                            parsed = new CTrackFileMISB(stripDuplicateTimes(csvMisb));
+                        } else {
+                            parsed = new CTrackFileMISB(csvMisb);
                         }
+                        dataType = "trackfile";
+                    } else if (dataType === "CUSTOM1") {
+                        const custom1Misb = parseCustom1CSV(parsed);
+                        if (Sit.isCustom) {
+                            parsed = new CTrackFileMISB(stripDuplicateTimes(custom1Misb));
+                        } else {
+                            parsed = new CTrackFileMISB(custom1Misb);
+                        }
+                        dataType = "trackfile";
+                    } else if (dataType === "CUSTOM_FLL") {
+                        const customFllMisb = parseCustomFLLCSV(parsed);
+                        if (Sit.isCustom) {
+                            parsed = new CTrackFileMISB(stripDuplicateTimes(customFllMisb));
+                        } else {
+                            parsed = new CTrackFileMISB(customFllMisb);
+                        }
+                        dataType = "trackfile";
+                    } else if (dataType === "FR24CSV") {
+                        const fr24Misb = parseFR24CSV(parsed);
+                        if (Sit.isCustom) {
+                            parsed = new CTrackFileMISB(stripDuplicateTimes(fr24Misb));
+                        } else {
+                            parsed = new CTrackFileMISB(fr24Misb);
+                        }
+                        dataType = "trackfile";
                     }
 
                     break;
+                }
                 case "kml":
                 case "ksv":
                 case "xml": {
