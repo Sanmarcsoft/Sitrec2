@@ -14,6 +14,7 @@ if (!in_array(3, $userInfo['user_groups']) && $userId !== 99999999) {
 
 $AI_RATE_LIMIT_DIR = sys_get_temp_dir() . '/sitrec_ratelimit/';
 $TILE_USAGE_DIR = sys_get_temp_dir() . '/sitrec_tile_usage/';
+$AI_LOG_FILE = sys_get_temp_dir() . '/sitrec_ai_requests.json';
 
 function loadAIUsageData($dir) {
     $data = [];
@@ -69,6 +70,12 @@ function loadTileUsageData($dir) {
     }
     usort($data, fn($a, $b) => array_sum($b['daily']) <=> array_sum($a['daily']));
     return $data;
+}
+
+function loadAIRequestLogs($file, $limit = 50) {
+    if (!file_exists($file)) return [];
+    $logs = json_decode(file_get_contents($file), true) ?: [];
+    return array_reverse(array_slice($logs, -$limit));
 }
 
 function getUserNames($userIds) {
@@ -217,11 +224,13 @@ foreach ($tileUsage as $u) {
 
 $diskSpace = getDiskSpace();
 $s3Usage = getS3Usage();
+$aiRequestLogs = loadAIRequestLogs($AI_LOG_FILE, 50);
 
 $allUserIds = array_unique(array_merge(
     array_column($aiUsage, 'user_id'),
     array_column($tileUsage, 'user_id'),
-    array_keys($s3Usage['users'] ?? [])
+    array_keys($s3Usage['users'] ?? []),
+    array_column($aiRequestLogs, 'user_id')
 ));
 $userNames = getUserNames($allUserIds);
 
@@ -343,6 +352,25 @@ $userNames = getUserNames($allUserIds);
         tr:hover { background: rgba(255,255,255,0.02); }
         .user-id { color: #8892b0; font-size: 0.85em; }
         .highlight { color: #64ffda; font-weight: 600; }
+        .prompt-text {
+            max-width: 600px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: 0.9em;
+        }
+        .prompt-text:hover {
+            white-space: normal;
+            word-break: break-word;
+        }
+        .model-tag {
+            font-size: 0.75em;
+            color: #8892b0;
+            background: rgba(255,255,255,0.05);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        .log-table { max-height: 600px; overflow-y: auto; }
         .disk-item {
             margin-bottom: 16px;
         }
@@ -547,6 +575,31 @@ $userNames = getUserNames($allUserIds);
                 </div>
                 <?php endforeach; ?>
                 <?php endif; ?>
+            </div>
+        </div>
+        
+        <div class="grid">
+            <div class="card full-width">
+                <h2>Recent AI Requests (Last 50)</h2>
+                <div class="log-table">
+                    <table>
+                        <tr><th>Time</th><th>User</th><th>Model</th><th>Prompt</th></tr>
+                        <?php foreach ($aiRequestLogs as $log): ?>
+                        <tr>
+                            <td><?= date('Y-m-d H:i:s', $log['timestamp']) ?></td>
+                            <td>
+                                <?= htmlspecialchars($userNames[$log['user_id']] ?? 'User') ?>
+                                <span class="user-id">#<?= htmlspecialchars($log['user_id']) ?></span>
+                            </td>
+                            <td><span class="model-tag"><?= htmlspecialchars($log['model'] ?? 'default') ?></span></td>
+                            <td><div class="prompt-text"><?= htmlspecialchars($log['prompt']) ?></div></td>
+                        </tr>
+                        <?php endforeach; ?>
+                        <?php if (empty($aiRequestLogs)): ?>
+                        <tr><td colspan="4">No AI requests logged</td></tr>
+                        <?php endif; ?>
+                    </table>
+                </div>
             </div>
         </div>
         

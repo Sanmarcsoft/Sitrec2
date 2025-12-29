@@ -95,6 +95,30 @@ $RATE_LIMITS = [
     2 => ['minute' => 5, 'hour' => 20],             // registered - basic
 ];
 $RATE_LIMIT_DIR = sys_get_temp_dir() . '/sitrec_ratelimit/';
+$AI_LOG_FILE = sys_get_temp_dir() . '/sitrec_ai_requests.json';
+
+function logAIRequest($userId, $prompt, $model = null) {
+    global $AI_LOG_FILE;
+    
+    $logs = [];
+    if (file_exists($AI_LOG_FILE)) {
+        $content = file_get_contents($AI_LOG_FILE);
+        $logs = json_decode($content, true) ?: [];
+    }
+    
+    $logs[] = [
+        'timestamp' => time(),
+        'user_id' => $userId,
+        'prompt' => substr($prompt, 0, 500),
+        'model' => $model,
+    ];
+    
+    if (count($logs) > 500) {
+        $logs = array_slice($logs, -500);
+    }
+    
+    file_put_contents($AI_LOG_FILE, json_encode($logs), LOCK_EX);
+}
 
 function getRateLimitsForUser($userGroups) {
     global $RATE_LIMITS;
@@ -163,7 +187,7 @@ $data = json_decode(file_get_contents('php://input'), true);
 $userInfo = getUserInfo();
 
 // Check rate limits only if stats tracking is enabled
-if (getenv('SITREC_TRACK_STATS') === 'true') {
+if (getenv('SITREC_TRACK_STATS')) {
     $userRateLimits = getRateLimitsForUser($userInfo['user_groups']);
     $rateLimitResult = checkRateLimit($userInfo['user_id'], $userRateLimits['minute'], $userRateLimits['hour'], $RATE_LIMIT_DIR);
     if (!$rateLimitResult['allowed']) {
@@ -259,6 +283,11 @@ $date = $data['dateTime'] ?? date('Y-m-d H:i:s');
 $simDateTime = $data['simDateTime'] ?? null;
 $requestedProvider = $data['provider'] ?? null;
 $requestedModel = $data['model'] ?? null;
+
+// Log AI request
+if (getenv('SITREC_TRACK_STATS')) {
+    logAIRequest($userInfo['user_id'], $prompt, $requestedModel);
+}
 
 // User info already retrieved above for rate limiting
 $aiModels = getAvailableModels($userInfo['user_groups']);

@@ -1,4 +1,5 @@
 import {isServerless, SITREC_SERVER} from "./configUtils";
+import {parseBoolean} from "./utils";
 
 const SERVICE_PATTERNS = {
     mapbox: /api\.mapbox\.com/i,
@@ -25,7 +26,7 @@ class TileUsageTrackerClass {
 
     async init() {
         if (this.initialized || isServerless) return;
-        if (process.env.SITREC_TRACK_STATS !== 'true') return;
+        if (!parseBoolean(process.env.SITREC_TRACK_STATS)) return;
         
         try {
             await this.fetchLimits();

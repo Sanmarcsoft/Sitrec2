@@ -6,7 +6,7 @@ require_once __DIR__ . '/user.php';
 
 header('Content-Type: application/json');
 
-if (getenv('SITREC_TRACK_STATS') !== 'true') {
+if (!getenv('SITREC_TRACK_STATS')) {
     echo json_encode(['disabled' => true, 'message' => 'Stats tracking disabled']);
     exit;
 }
