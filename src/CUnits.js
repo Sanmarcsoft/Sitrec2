@@ -5,7 +5,7 @@
 // 2. Imperial / Statute
 // 3. Nautical
 
-import {guiPhysics, guiTweaks, NodeMan} from "./Globals";
+import {guiPhysics, NodeMan} from "./Globals";
 import {assert} from "./assert.js";
 
 export class CUnits {
@@ -267,5 +267,3 @@ export class CUnits {
 
 
 }
-
-//export const Units = new CUnits("metric");

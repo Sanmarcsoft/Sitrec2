@@ -365,7 +365,6 @@ export function initKeyboard() {
                 break;
 
             case 'KeyU' :
-//                if (gui._hidden) gui.show(); else gui.hide();
                 Globals.menuBar.toggleVisiblity();
                 break;
             case 'KeyF':
@@ -377,19 +376,11 @@ export function initKeyboard() {
                     closeFullscreen()
                 }
                 break;
-            // case 'KeyL':
-            //     opts.legend.live = !opts.legend.live;
-            //     break;
-            // case 'Backquote':            // gimbal legacy preset editing, not used in this version
-            //     if (isLocal) {
-            //         DumpPreset()
-            //     }
 
             // single step
             case 'Comma':
                 par.frame = Math.floor(par.frame-1);
                 if (par.frame < 0) par.frame = 0;
-             //   UIChangedFrame();
                 par.paused = true;
                 setRenderOne(2);
                 break;
@@ -399,7 +390,6 @@ export function initKeyboard() {
                 if (par.frame > Sit.frames - 1) par.frame = Sit.frames - 1;
                 par.paused = true;
                 setRenderOne(2);
-              //  UIChangedFrame();
                 break;
 
 
@@ -407,7 +397,6 @@ export function initKeyboard() {
 
         // now see if keycode is in the gui togglers array
         let guiController = toggles[key]
-//        console.log("toggles[key] = " + guiController)
         if (guiController !== undefined) {
             guiController.setValue(!guiController.getValue())
         }

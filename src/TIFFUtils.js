@@ -1,5 +1,3 @@
-
-
 // Convert a TIFF image to an array of elevation values
 // image is a TIFF image loaded by GeoTIFF
 // the data is in an ArrayBufferSource with contains an arrayBuffer
@@ -34,13 +32,7 @@ export function convertTIFFToElevationArray(image) {
             const tileOffset = tileOffsets[tileIndex];
             const tileByteCount = tileByteCounts[tileIndex];
 
-//            console.log("tileOffset = " + tileOffset + " tileByteCount = " + tileByteCount);
-
             if (tileByteCount !== 0) {
-                // read the tile data from the buffer
-                //const tileBuffer = buffer.slice(tileOffset, tileOffset + tileByteCount);
-                //const tileData = new DataView(tileBuffer);
-
                 // iterate over the tile data by row and column
                 for (let x = 0; x < tileWidth; x += 1) {
                     for (let y = 0; y < tileHeight; y += 1) {

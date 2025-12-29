@@ -20,43 +20,6 @@ import * as LAYER from "./LayerMasks";
 import {CNodePositionXYZ} from "./nodes/CNodePositionLLA";
 import {CNodeMeasureAltitude, setupMeasurementUI} from "./nodes/CNodeLabels3D";
 
-// base class for curve editors
-// has a list of positions that are the control points
-
-class CurvePoint {
-    constructor(position, frame) {
-
-    }
-
-}
-
-// TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
-// TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
-// TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
-// TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
-// note there's two classes that need the data extracting from them
-// and remember the point array is tied to the point editor object
-// maybe should update it by copying? then re-update on moves
-// the PointEditorData does not currently change the positions
-// so that should work
-// OR we can leave it as references
-// either way we have to handle:
-// 1 - initial setup
-// 2 - movin6 points
-// 3 - adding and removing points
-// 4 - data acess and calculations
-// Seems like all of 4 should be seperated out into a pure data model
-// and the mirroring should work..
-// export class PointEditorData {
-//     constructor(initialPoints) {
-//
-
-//     }
-//
-//
-//
-// }
-
 export class PointEditor {
     constructor(_scene, _camera, _renderer, controls, onChange, initialPoints, isLLA=false) {
 
@@ -351,37 +314,7 @@ export class PointEditor {
 
         this.onDownPosition.x = event.clientX;
         this.onDownPosition.y = event.clientY;
-        this.onDownButton = event.button; // Track which button was pressed
-
-        // // Right click on point to delete it
-        // if (event.button === 2) {
-        //     if (!this.setupRaycasterForEvent(event)) {
-        //         return; // Not in main view or view doesn't exist
-        //     }
-        //
-        //     const object = this.getIntersectedControlPoint();
-        //     if (object) {
-        //         // Detach transform control if we're deleting the object it's attached to
-        //         if (object === this.transformControl.object) {
-        //             this.transformControl.detach();
-        //         }
-        //
-        //         // Find and remove the control point
-        //         const index = this.splineHelperObjects.findIndex(ob => ob === object);
-        //         assert(index !== -1, "Can't find object to destroy!!");
-        //
-        //         this.scene.remove(object);
-        //
-        //         // Remove from all tracking arrays
-        //         this.frameNumbers.splice(index, 1);
-        //         this.positions.splice(index, 1);
-        //         this.splineHelperObjects.splice(index, 1);
-        //
-        //         this.updatePointEditorGraphics();
-        //         this.numPoints--;
-        //         this.dirty = true;
-        //     }
-        // }
+        this.onDownButton = event.button;
     }
 
     onPointerUp(event) {

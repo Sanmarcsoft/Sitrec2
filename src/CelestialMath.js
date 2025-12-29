@@ -78,7 +78,6 @@ export function raDecToAltAz(ra, dec, lat, lon, jd_ut) {
     }
 
     const el = a;
-//    return [az,a, localSiderealTime,H];
     return {az, el};
 }
 

@@ -19,16 +19,6 @@ export function trackVelocity(source, f, debugN=0) {
     if (f > Sit.frames - 2) f = Sit.frames - 2; // hand out of range
     if (f < 0) f = 0
 
-    // const A = source.p(f)
-    // const B = source.p(f + 1)
-    // const up = getLocalUpVector(A)
-    // const A1 = A.clone().add(up.clone().multiplyScalar(10))
-    // const B1 = B.clone().add(up.clone().multiplyScalar(10))
-    // DebugArrowAB(source.id+"velocitySampleA"+debugN, A1, A, 0xFF00FF)
-    // DebugArrowAB(source.id+"velocitySampleB"+debugN, B1, B, 0xFFFF00)
-    // DebugArrowAB(source.id+"velocity"+debugN, A1, B1, 0x00FFFF)
-
-
     const fwd = source.p(f + 1).sub(source.p(f))
     return fwd
 }
