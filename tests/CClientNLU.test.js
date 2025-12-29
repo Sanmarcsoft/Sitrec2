@@ -80,6 +80,51 @@ describe('CClientNLU parsing', () => {
         });
     });
 
+    describe('typo correction', () => {
+        test('corrects "est fov 5" to "set fov 5"', () => {
+            const result = clientNLU.parse('est fov 5');
+            expect(result.intent).toBe('SET_VALUE');
+            expect(result.correctedText).toBe('set fov 5');
+            expect(result.confidence).toBeLessThan(0.95);
+        });
+
+        test('corrects "ste fov 5" to "set fov 5"', () => {
+            const result = clientNLU.parse('ste fov 5');
+            expect(result.intent).toBe('SET_VALUE');
+            expect(result.correctedText).toBe('set fov 5');
+        });
+
+        test('corrects "shwo labels" to "show labels"', () => {
+            const result = clientNLU.parse('shwo labels');
+            expect(result.intent).toBe('TOGGLE_ON');
+            expect(result.correctedText).toBe('show labels');
+        });
+
+        test('corrects "hdie grid" to "hide grid"', () => {
+            const result = clientNLU.parse('hdie grid');
+            expect(result.intent).toBe('TOGGLE_OFF');
+            expect(result.correctedText).toBe('hide grid');
+        });
+
+        test('corrects "paly" to "play"', () => {
+            const result = clientNLU.parse('paly');
+            expect(result.intent).toBe('PLAY');
+            expect(result.correctedText).toBe('play');
+        });
+
+        test('corrects "zooom in" to "zoom in"', () => {
+            const result = clientNLU.parse('zooom in');
+            expect(result.intent).toBe('ZOOM_IN');
+            expect(result.correctedText).toBe('zoom in');
+        });
+
+        test('no correction for exact match', () => {
+            const result = clientNLU.parse('set fov 5');
+            expect(result.intent).toBe('SET_VALUE');
+            expect(result.correctedText).toBeUndefined();
+        });
+    });
+
     describe('TOGGLE patterns', () => {
         test('parses "turn off stars"', () => {
             const result = clientNLU.parse('turn off stars');

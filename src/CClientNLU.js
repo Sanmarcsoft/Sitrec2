@@ -27,6 +27,59 @@ const ALIASES = {
 const BOOLEAN_TRUE = ["on", "true", "yes", "show", "enable", "enabled", "visible", "1"];
 const BOOLEAN_FALSE = ["off", "false", "no", "hide", "disable", "disabled", "invisible", "hidden", "0"];
 
+const COMMAND_KEYWORDS = ["set", "show", "hide", "enable", "disable", "turn", "load", "get", "fetch",
+    "zoom", "play", "pause", "stop", "start", "resume", "go", "move", "point", "look", "frame",
+    "make", "change", "calculate", "evaluate", "what", "ambient"];
+
+function levenshtein(a, b) {
+    if (a.length === 0) return b.length;
+    if (b.length === 0) return a.length;
+    const matrix = [];
+    for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            matrix[i][j] = b[i-1] === a[j-1]
+                ? matrix[i-1][j-1]
+                : Math.min(matrix[i-1][j-1] + 1, matrix[i][j-1] + 1, matrix[i-1][j] + 1);
+        }
+    }
+    return matrix[b.length][a.length];
+}
+
+function isTransposition(a, b) {
+    if (a.length !== b.length) return false;
+    let diffs = [];
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) diffs.push(i);
+    }
+    if (diffs.length === 2 && diffs[1] === diffs[0] + 1) {
+        return a[diffs[0]] === b[diffs[1]] && a[diffs[1]] === b[diffs[0]];
+    }
+    return false;
+}
+
+function fuzzyMatchKeyword(word) {
+    const lower = word.toLowerCase();
+    if (COMMAND_KEYWORDS.includes(lower)) return null;
+    for (const kw of COMMAND_KEYWORDS) {
+        if (lower.length >= 3 && kw.length >= 3) {
+            if (isTransposition(lower, kw)) {
+                return kw;
+            }
+            const dist = levenshtein(lower, kw);
+            const sameFirstChar = lower[0] === kw[0];
+            if (sameFirstChar && dist === 1) {
+                return kw;
+            }
+            if (lower === kw.slice(1) && dist === 1) {
+                return kw;
+            }
+        }
+    }
+    return null;
+}
+
 class CClientNLU {
     constructor() {
         this.patterns = this._buildPatterns();
@@ -320,27 +373,58 @@ class CClientNLU {
         return null;
     }
 
-    parse(text) {
-        const trimmed = text.trim();
+    _correctTypos(text) {
+        const words = text.split(/\s+/);
+        if (words.length === 0) return text;
+        const correctedFirst = fuzzyMatchKeyword(words[0]);
+        if (correctedFirst) {
+            words[0] = correctedFirst;
+        }
+        if (words.length > 1 && words[0].toLowerCase() === "turn") {
+            const correctedSecond = fuzzyMatchKeyword(words[1]);
+            if (correctedSecond) {
+                words[1] = correctedSecond;
+            }
+        }
+        return words.join(' ');
+    }
+
+    _tryMatch(text) {
         for (const pattern of this.patterns) {
             let match = null;
             let testResult = null;
             if (pattern.regex) {
-                match = trimmed.match(pattern.regex);
+                match = text.match(pattern.regex);
             } else if (pattern.test) {
-                testResult = pattern.test(trimmed);
+                testResult = pattern.test(text);
                 match = testResult ? true : null;
             }
             if (match) {
                 const extracted = pattern.extract(match, testResult);
                 if (extracted) {
-                    return {
-                        ...extracted,
-                        confidence: pattern.confidence,
-                        patternName: pattern.name,
-                        originalText: trimmed
-                    };
+                    return {...extracted, confidence: pattern.confidence, patternName: pattern.name};
                 }
+            }
+        }
+        return null;
+    }
+
+    parse(text) {
+        const trimmed = text.trim();
+        const result = this._tryMatch(trimmed);
+        if (result) {
+            return {...result, originalText: trimmed};
+        }
+        const corrected = this._correctTypos(trimmed);
+        if (corrected !== trimmed) {
+            const correctedResult = this._tryMatch(corrected);
+            if (correctedResult) {
+                return {
+                    ...correctedResult,
+                    confidence: correctedResult.confidence * 0.9,
+                    originalText: trimmed,
+                    correctedText: corrected
+                };
             }
         }
         return {intent: null, slots: {}, confidence: 0, originalText: trimmed};
