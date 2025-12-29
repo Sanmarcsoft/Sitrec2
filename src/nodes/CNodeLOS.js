@@ -10,7 +10,7 @@
 
 import {CNodeTrack} from "./CNodeTrack";
 import {GlobalDateTimeNode, NodeMan, Sit} from "../Globals";
-import {saveAs} from "../js/FileSaver";
+import {saveAs} from "file-saver";
 import {Matrix3, Vector3} from "three";
 import {ECEF2ENU, ECEFToEUS, ENU2ECEF, EUSToECEF, EUSToLLA, wgs84} from "../LLA-ECEF-ENU";
 import {extractFOV} from "./CNodeControllerVarious";

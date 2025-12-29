@@ -7,6 +7,7 @@ import {CatmullRomCurve3} from "three";
 import {V3} from "../threeUtils";
 import {assert} from "../assert";
 import {CNodeTrack} from "./CNodeTrack";
+import {saveAs} from "file-saver";
 
 export class CNodeSmoothedPositionTrack extends CNodeTrack {
     constructor(v) {

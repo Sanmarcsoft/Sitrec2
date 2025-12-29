@@ -11,7 +11,7 @@ import {degrees} from "../utils";
 import {DebugArrow, DebugArrowAB, getPointBelow, removeDebugArrow} from "../threeExt";
 import * as LAYER from "../LayerMasks";
 import {assert} from "../assert";
-import {saveAs} from "../js/FileSaver";
+import {saveAs} from "file-saver";
 import {showError} from "../showError";
 
 /**

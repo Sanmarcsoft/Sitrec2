@@ -1,6 +1,6 @@
 import {NodeMan} from "../Globals";
 import {CNode} from "./CNode";
-import regression from '../js/regression'
+import regression from 'regression'
 import {assert} from "../assert.js";
 
 export class CNodeMunge extends CNode {

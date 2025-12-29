@@ -63,7 +63,7 @@ import {CNodeManager} from "./nodes/CNodeManager";
 import {CSitchFactory} from "./CSitchFactory";
 import {CNodeDateTime} from "./nodes/CNodeDateTime";
 import {addAlignedGlobe} from "./Globe";
-import JSURL from "./js/jsurl";
+import JSURL from "jsurl";
 import {localSituation} from "../config/config";
 import {
     checkServerlessMode,

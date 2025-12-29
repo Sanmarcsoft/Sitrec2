@@ -4,7 +4,7 @@ import {par} from "../par";
 import {CNodeViewUI} from "../nodes/CNodeViewUI";
 import {AddTimeDisplayToUIOld} from "../UIHelpers";
 import {DragDropHandler} from "../DragDropHandler";
-import JSURL from "../js/jsurl"
+import JSURL from "jsurl"
 import {isLocal, SITREC_SERVER} from "../configUtils.js";
 import {CNodeSwitch} from "../nodes/CNodeSwitch";
 import {CNodeControllerManualPosition} from "../nodes/CNodeControllerVarious";

@@ -3,6 +3,7 @@ import {GlobalDateTimeNode, NodeMan, Sit} from "../Globals";
 import {assert} from "../assert.js";
 import {EUSToLLA} from "../LLA-ECEF-ENU";
 import {roundIfClose} from "../utils";
+import {saveAs} from "file-saver";
 
 export class CNodeArray extends CNode {
     constructor(v) {

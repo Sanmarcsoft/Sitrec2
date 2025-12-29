@@ -3,7 +3,7 @@ import {GlobalDateTimeNode, NodeMan, Sit} from "../Globals";
 import {RLLAToECEFV_Sphere, wgs84} from "../LLA-ECEF-ENU";
 
 import {MISB} from "../MISBUtils";
-import {saveAs} from "../js/FileSaver";
+import {saveAs} from "file-saver";
 import {CNodeTrack} from "./CNodeTrack";
 import {assert} from "../assert.js";
 import {CGeoJSON} from "../geoJSONUtils";

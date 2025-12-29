@@ -1,5 +1,5 @@
 import {par} from "./par";
-import {saveAs} from "./js/FileSaver";
+import {saveAs} from "file-saver";
 import {chartDiv, updateChartSize} from "./JetChart";
 import {infoDiv} from "./Globals";
 import {ViewMan} from "./CViewManager";

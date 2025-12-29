@@ -1,6 +1,6 @@
 ///////////////////////////////////////////////////////////
 import {NodeMan, Sit} from "./Globals";
-import {saveAs} from "./js/FileSaver";
+import {saveAs} from "file-saver";
 import {getIdealDeroFromFrame, getPodRollFromGlareAngleFrame} from "./JetHorizon";
 import {par} from "./par";
 import {PRJ2XYZ} from "./SphericalMath";
