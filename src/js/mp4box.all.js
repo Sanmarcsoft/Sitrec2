@@ -2660,9 +2660,13 @@ BoxParser.createMediaSampleEntryCtor(BoxParser.SAMPLE_ENTRY_TYPE_VISUAL, functio
     this.parseFooter(stream);
 });
 
+// Mick: Modified from mp4box@0.5.2 to add QuickTime audio sample entry version 1 and 2 parsing.
+// Original just had: stream.readUint32Array(2); which skipped version/revision/vendor fields.
+// This fix properly parses QuickTime .mov files with extended audio sample entries.
 BoxParser.createMediaSampleEntryCtor(BoxParser.SAMPLE_ENTRY_TYPE_AUDIO, function(stream) {
     this.parseHeader(stream);
     
+    // Mick: Parse version/revision/vendor instead of skipping with readUint32Array(2)
     var pos = stream.getPosition();
     
     var version = stream.readUint16();
@@ -2675,6 +2679,7 @@ BoxParser.createMediaSampleEntryCtor(BoxParser.SAMPLE_ENTRY_TYPE_AUDIO, function
     stream.readUint16();
     this.samplerate = (stream.readUint32()/(1<<16));
     
+    // Mick: Added handling for QuickTime audio sample entry versions 1 and 2
     if (version === 1) {
         this.samples_per_packet = stream.readUint32();
         this.bytes_per_packet = stream.readUint32();
