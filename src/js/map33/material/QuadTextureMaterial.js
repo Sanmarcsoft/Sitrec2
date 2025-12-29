@@ -1,5 +1,6 @@
 import {CanvasTexture, TextureLoader} from "three";
 import {createTerrainDayNightMaterial} from "./TerrainDayNightMaterial";
+import {TileUsageTracker} from "../../../TileUsageTracker";
 
 const loader = new TextureLoader()
 
@@ -54,7 +55,7 @@ export function loadTextureWithRetries(url, maxRetries = 0, delay = 100, current
               return;
             }
 
-      //  console.log(`Loaded ${url[urlIndex]} successfully`)
+            TileUsageTracker.trackTile(url[urlIndex]);
 
             resolve(texture);
             activeRequests--;

@@ -41,7 +41,7 @@ import {UpdateHUD} from "./JetStuff";
 import {degrees, getDateTimeFilename} from "./utils";
 import {ViewMan} from "./CViewManager";
 import {EventManager} from "./CEventManager";
-import {SITREC_APP, SITREC_SERVER} from "./configUtils";
+import {isLocal, SITREC_APP, SITREC_SERVER} from "./configUtils";
 import {CNodeDisplayTrack} from "./nodes/CNodeDisplayTrack";
 import {DebugArrowAB, elevationAtLL} from "./threeExt";
 import {FeatureManager} from "./CFeatureManager";
@@ -410,6 +410,10 @@ export class CCustomManager {
 
         // Add GUI mirroring functionality to help menu
         // guiMenus.help.add(this, "showMirrorMenuDemo").name("Mirror Menu Demo").tooltip("Demonstrates how to mirror any GUI menu to create a standalone floating menu");
+
+        if (isLocal || Globals.userID === 1) {
+            guiMenus.help.add(this, "openAdminDashboard").name("Admin Dashboard").tooltip("Open the admin dashboard");
+        }
 
         // TODO - Multiple events passed to EventManager.addEventListener
 
@@ -2339,6 +2343,9 @@ export class CCustomManager {
         FileManager.loginAttempt(this.serialize, this.serializeButton, this.buttonText, this.buttonColor);
     };
 
+    openAdminDashboard() {
+        window.open(SITREC_SERVER + 'admin_dashboard.php', '_blank');
+    }
 
     refreshLookViewTracks() {
         // intere over all nodes, and find all CNodeTrackGUI, and call setTrackVisibility

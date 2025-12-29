@@ -107,6 +107,7 @@ import {asyncOperationRegistry} from "./AsyncOperationRegistry";
 import {C3DSynthManager} from "./C3DSynthManager";
 import {undoManager} from "./UndoManager";
 import {arModeManager} from "./ARMode";
+import {TileUsageTracker} from "./TileUsageTracker";
 
 // CRITICAL: Global context menu blocker - ensures system context menu NEVER appears
 // Uses capture mode (true) so it catches events before other listeners
@@ -1114,6 +1115,9 @@ async function initializeOnce() {
     await checkServerlessMode();
 
     await checkLogin();
+
+    // Initialize tile usage tracking (non-blocking)
+    TileUsageTracker.init();
 
     // Initialize settings early, before any nodes are created
     // This ensures Globals.settings is available for terrain, UI, and other components

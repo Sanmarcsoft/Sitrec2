@@ -162,16 +162,16 @@ $data = json_decode(file_get_contents('php://input'), true);
 // Get user info early for rate limiting
 $userInfo = getUserInfo();
 
-// Get rate limits based on user's groups (uses highest limit from any group)
-$userRateLimits = getRateLimitsForUser($userInfo['user_groups']);
-
-// Check rate limits
-$rateLimitResult = checkRateLimit($userInfo['user_id'], $userRateLimits['minute'], $userRateLimits['hour'], $RATE_LIMIT_DIR);
-if (!$rateLimitResult['allowed']) {
-    header('Content-Type: application/json');
-    http_response_code(429);
-    echo json_encode(['text' => $rateLimitResult['error'], 'apiCalls' => [], 'debug' => ['error' => 'rate_limited']]);
-    exit;
+// Check rate limits only if stats tracking is enabled
+if (getenv('SITREC_TRACK_STATS') === 'true') {
+    $userRateLimits = getRateLimitsForUser($userInfo['user_groups']);
+    $rateLimitResult = checkRateLimit($userInfo['user_id'], $userRateLimits['minute'], $userRateLimits['hour'], $RATE_LIMIT_DIR);
+    if (!$rateLimitResult['allowed']) {
+        header('Content-Type: application/json');
+        http_response_code(429);
+        echo json_encode(['text' => $rateLimitResult['error'], 'apiCalls' => [], 'debug' => ['error' => 'rate_limited']]);
+        exit;
+    }
 }
 
 // Check if this is a session continuation with tool results
