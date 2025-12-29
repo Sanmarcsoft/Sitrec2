@@ -37,7 +37,6 @@ import {
     SRGBColorSpace,
     TextureLoader,
     UnsignedByteType,
-    Vector2,
     Vector3,
     WebGLRenderer,
     WebGLRenderTarget
@@ -66,6 +65,7 @@ import {ViewMan} from "../CViewManager";
 import * as LAYER from "../LayerMasks";
 import {globalProfiler} from "../VisualProfiler";
 import {FeatureManager} from "../CFeatureManager";
+import {fixXRLayerMasks, renderCelestialScene, renderFullscreenQuadStereo} from "../CXRRenderer";
 
 
 function linearToSrgb(color) {
@@ -496,15 +496,9 @@ export class CNodeView3D extends CNodeViewCanvas {
         this.renderer.xr.cameraAutoUpdate = false;
         this.renderer.xr.updateCamera(this.xrCamera);
         
-        let internalXRCamera = this.renderer.xr.getCamera();
-        
         // Fix layer masks on internal XR cameras (left/right eye)
         // The XR system clears high bits, so we OR them back in
-        internalXRCamera.cameras[0].layers.mask &= 0b110; // keep only bits 1 and 2 (LEFTEYE and RIGHTEYE)
-        internalXRCamera.cameras[0].layers.mask |= lookCamera.layers.mask;
-        
-        internalXRCamera.cameras[1].layers.mask &= 0b110;
-        internalXRCamera.cameras[1].layers.mask |= lookCamera.layers.mask;
+        fixXRLayerMasks(this.renderer, lookCamera.layers.mask);
         
         // Render sky - matches renderSky() logic from renderTargetAndEffects
         if (this.canDisplayNightSky && GlobalNightSkyScene !== undefined) {
@@ -534,46 +528,18 @@ export class CNodeView3D extends CNodeViewCanvas {
 
             // Render night sky if visible (opacity < 1 means stars are visible)
             if (skyOpacity < 1) {
-
-                // Clear with black background
                 this.renderer.clear(true, true, true);
-                
-                // Save XR camera RIG position and move to origin for celestial sphere
-                const tempPos = this.xrCameraRig.position.clone();
-                const tempQuat = this.xrCameraRig.quaternion.clone();
-                this.xrCameraRig.position.set(0, 0, 0);
-                this.xrCameraRig.updateMatrix();
-                this.xrCameraRig.updateMatrixWorld(true);
-                
-                // Update XR camera system after moving rig
-                this.xrCamera.updateMatrix();
-                this.xrCamera.updateMatrixWorld(true);
-                this.renderer.xr.updateCamera(this.xrCamera);
-                
-                // Re-fix layer masks after updateCamera
-                internalXRCamera = this.renderer.xr.getCamera();
-                internalXRCamera.cameras[0].layers.mask &= 0b110;
-                internalXRCamera.cameras[0].layers.mask |= lookCamera.layers.mask;
-                internalXRCamera.cameras[1].layers.mask &= 0b110;
-                internalXRCamera.cameras[1].layers.mask |= lookCamera.layers.mask;
-                
-
-                this.renderer.render(GlobalNightSkyScene, this.xrCamera);
-                this.renderer.clearDepth();
-                
-                // Restore XR camera RIG position
-                this.xrCameraRig.position.copy(tempPos);
-                this.xrCameraRig.quaternion.copy(tempQuat);
-                this.xrCameraRig.updateMatrix();
-                this.xrCameraRig.updateMatrixWorld(true);
-                this.xrCamera.updateMatrix();
-                this.xrCamera.updateMatrixWorld(true);
-                this.renderer.xr.updateCamera(this.xrCamera);
+                renderCelestialScene(
+                    this.renderer,
+                    this.xrCameraRig,
+                    this.xrCamera,
+                    lookCamera.layers.mask,
+                    GlobalNightSkyScene
+                );
             }
             
             // Render sky brightness overlay and sun sky only during daytime
             if (skyOpacity > 0) {
-
                 // Recreate fullscreen quad (matches renderSky behavior)
                 if (this.fullscreenQuadScene !== undefined) {
                     this.fullscreenQuadScene.remove(this.fullscreenQuad);
@@ -583,69 +549,19 @@ export class CNodeView3D extends CNodeViewCanvas {
                 
                 this.updateSkyUniforms(skyColor, skyOpacity);
                 
-                // Render fullscreen quad in stereo for both eyes
-                // We need to manually render for each eye viewport
-                internalXRCamera = this.renderer.xr.getCamera();
-                const cameras = internalXRCamera.cameras;
-                
-                if (cameras.length > 0) {
-                    // Stereo rendering - render fullscreen quad for each eye
-                    for (let i = 0; i < cameras.length; i++) {
-                        const cam = cameras[i];
-                        const viewport = cam.viewport;
-                        
-                        // Save XR state and render to this eye's viewport
-                        const savedXREnabled = this.renderer.xr.enabled;
-                        this.renderer.xr.enabled = false;
-                        this.renderer.setViewport(viewport.x, viewport.y, viewport.width, viewport.height);
-                        this.renderer.render(this.fullscreenQuadScene, this.fullscreenQuadCamera);
-                        this.renderer.xr.enabled = savedXREnabled;
-                    }
-                } else {
-                    // Mono rendering - single fullscreen quad
-                    const savedXREnabled = this.renderer.xr.enabled;
-                    this.renderer.xr.enabled = false;
-                    const size = this.renderer.getSize(new Vector2());
-                    this.renderer.setViewport(0, 0, size.x, size.y);
-                    this.renderer.render(this.fullscreenQuadScene, this.fullscreenQuadCamera);
-                    this.renderer.xr.enabled = savedXREnabled;
-                }
+                renderFullscreenQuadStereo(this.renderer, this.fullscreenQuadScene, this.fullscreenQuadCamera);
                 
                 this.renderer.clearDepth();
                 
                 // Render sun/day sky
                 if (GlobalSunSkyScene) {
-
-                    // Move camera RIG to origin for sun rendering
-                    const tempPos = this.xrCameraRig.position.clone();
-                    const tempQuat = this.xrCameraRig.quaternion.clone();
-                    this.xrCameraRig.position.set(0, 0, 0);
-                    this.xrCameraRig.updateMatrix();
-                    this.xrCameraRig.updateMatrixWorld(true);
-                    
-                    // Update XR camera system after moving rig
-                    this.xrCamera.updateMatrix();
-                    this.xrCamera.updateMatrixWorld(true);
-                    this.renderer.xr.updateCamera(this.xrCamera);
-                    
-                    // Re-fix layer masks after updateCamera
-                    internalXRCamera = this.renderer.xr.getCamera();
-                    internalXRCamera.cameras[0].layers.mask &= 0b110;
-                    internalXRCamera.cameras[0].layers.mask |= lookCamera.layers.mask;
-                    internalXRCamera.cameras[1].layers.mask &= 0b110;
-                    internalXRCamera.cameras[1].layers.mask |= lookCamera.layers.mask;
-                    
-                    this.renderer.render(GlobalSunSkyScene, this.xrCamera);
-                    this.renderer.clearDepth();
-                    
-                    // Restore camera RIG position
-                    this.xrCameraRig.position.copy(tempPos);
-                    this.xrCameraRig.quaternion.copy(tempQuat);
-                    this.xrCameraRig.updateMatrix();
-                    this.xrCameraRig.updateMatrixWorld(true);
-                    this.xrCamera.updateMatrix();
-                    this.xrCamera.updateMatrixWorld(true);
-                    this.renderer.xr.updateCamera(this.xrCamera);
+                    renderCelestialScene(
+                        this.renderer,
+                        this.xrCameraRig,
+                        this.xrCamera,
+                        lookCamera.layers.mask,
+                        GlobalSunSkyScene
+                    );
                 }
             }
         } else {
@@ -656,13 +572,8 @@ export class CNodeView3D extends CNodeViewCanvas {
         }
 
         // Fix layer masks one final time before rendering main scene
-        internalXRCamera = this.renderer.xr.getCamera();
-        internalXRCamera.cameras[0].layers.mask &= 0b110;
-        internalXRCamera.cameras[0].layers.mask |= lookCamera.layers.mask;
-        internalXRCamera.cameras[1].layers.mask &= 0b110;
-        internalXRCamera.cameras[1].layers.mask |= lookCamera.layers.mask;
+        fixXRLayerMasks(this.renderer, lookCamera.layers.mask);
         
-        //
         // Render the scene - Three.js XR system handles stereo rendering automatically
         // This will render twice (once per eye) with proper camera offsets for VR
         // Note: We skip post-processing effects in XR mode for performance
