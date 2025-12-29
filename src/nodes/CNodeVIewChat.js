@@ -4,6 +4,7 @@ import {SITREC_SERVER} from "../configUtils";
 import {sitrecAPI} from "../CSitrecAPI";
 import {parseBoolean} from "../utils";
 import {ModelFiles} from "./CNode3DObject";
+import {clientNLU} from "../CClientNLU";
 
 class CNodeViewChat extends CNodeViewText {
     constructor(v) {
@@ -252,20 +253,38 @@ class CNodeViewChat extends CNodeViewText {
         this.scrollToBottom();
     }
 
-    // Send message and history to server and process response
-    async sendToServer(text) {
-        this.historyPosition = 0;  // Reset history position when sending a new message
-        try {
+    async handleMessage(text) {
+        this.historyPosition = 0;
 
-            // use this to get a time string in the local timezone
+        const parseResult = clientNLU.parse(text);
+        this.addDebugMessage(`NLU: ${parseResult.patternName || 'none'} (${parseResult.confidence})`);
+
+        if (parseResult.intent && parseResult.confidence > 0) {
+            const executeResult = await clientNLU.execute(parseResult);
+
+            if (executeResult.success || (executeResult.success !== false && !executeResult.needsLLM)) {
+                const response = clientNLU.generateResponse(parseResult, executeResult);
+                this.addSystemMessage(response);
+                this.addDebugMessage(`Local: ${JSON.stringify(executeResult)}`);
+                return;
+            }
+
+            if (executeResult.needsLLM) {
+                this.addDebugMessage(`Local failed, falling back to LLM: ${executeResult.error}`);
+            }
+        }
+
+        await this.sendToLLM(text);
+    }
+
+    async sendToLLM(text) {
+        try {
             const timeString = GlobalDateTimeNode.timeWithTimeZone(new Date());
-            // Get the simulation date (what satellites are loaded for)
             const simDate = GlobalDateTimeNode.dateNow ? GlobalDateTimeNode.dateNow.toISOString() : null;
 
-            // Parse provider and model from settings (format: "provider:model")
             const chatModelSetting = Globals.settings.chatModel || "";
-            const [provider, model] = chatModelSetting.includes(':') 
-                ? chatModelSetting.split(':') 
+            const [provider, model] = chatModelSetting.includes(':')
+                ? chatModelSetting.split(':')
                 : [null, null];
 
             const history = this.chatHistory.slice(-10);
@@ -284,7 +303,7 @@ class CNodeViewChat extends CNodeViewText {
             const res = await fetch(SITREC_SERVER + 'chatbot.php', {
                 body,
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {'Content-Type': 'application/json'},
                 credentials: 'include',
             });
             const response = await res.json();
@@ -296,15 +315,42 @@ class CNodeViewChat extends CNodeViewText {
             if (response.apiCalls && response.apiCalls.length > 0) {
                 this.addDebugMessage(`API calls: ${JSON.stringify(response.apiCalls)}`);
                 const toolResults = this.handleAPICalls(response.apiCalls);
-                
+
+                this.logUnhandledLLMCall(text, response.apiCalls);
+
                 if (response.sessionContinue) {
                     await this.continueSession(toolResults, provider, model);
                 }
+            } else if (response.text) {
+                this.logUnhandledLLMCall(text, null, response.text);
             }
         } catch (e) {
             this.addSystemMessage("[error contacting server]");
             console.error(e);
         }
+    }
+
+    async logUnhandledLLMCall(prompt, apiCalls, textResponse = null) {
+        try {
+            await fetch(SITREC_SERVER + 'logNLU.php', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                credentials: 'include',
+                body: JSON.stringify({
+                    prompt,
+                    apiCalls,
+                    textResponse,
+                    timestamp: Date.now(),
+                }),
+            });
+        } catch (e) {
+            console.warn("Failed to log unhandled LLM call:", e);
+        }
+    }
+
+    // Legacy method name for compatibility
+    async sendToServer(text) {
+        return this.handleMessage(text);
     }
 
     // Process any API calls returned by the server - returns results for session continuation

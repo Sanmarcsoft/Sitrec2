@@ -1119,6 +1119,10 @@ class CSitrecAPI {
         }
     }
 
+    call(fn, args = {}) {
+        return this.handleAPICall({fn, args});
+    }
+
 }
 
 export const sitrecAPI = new CSitrecAPI();
