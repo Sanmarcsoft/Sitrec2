@@ -55,10 +55,12 @@ export class CGeoJSON {
     countTracks() {
         this.json.totalFeatures = this.json.features.length
         assert(this.json.totalFeatures > 0, "No features in geoJSON");
-        // the number of tracks is the number of unique thresherIds
         this.thresherIds = new Set();
         for (let i = 0; i < this.json.totalFeatures; i++) {
-            this.thresherIds.add(this.json.features[i].properties.thresherId);
+            const feature = this.json.features[i];
+            if (feature?.properties?.thresherId) {
+                this.thresherIds.add(feature.properties.thresherId);
+            }
         }
         return this.thresherIds.size;
     }
@@ -77,19 +79,18 @@ export class CGeoJSON {
         //   2. aircraftType (if not empty when stripped of whitespace)
         //   3. thresherId
         for (let i = 0; i < this.json.totalFeatures; i++) {
-            if (this.json.features[i].properties.thresherId === thresherID) {
-                if ("tailNumber" in this.json.features[i].properties && 
-                    this.json.features[i].properties.tailNumber.trim() !== "") {
-                    return this.json.features[i].properties.tailNumber;
-                } else if ("aircraftType" in this.json.features[i].properties && 
-                          this.json.features[i].properties.aircraftType.trim() !== "") {
-                    return this.json.features[i].properties.aircraftType;
+            const feature = this.json.features[i];
+            if (!feature?.properties) continue;
+            if (feature.properties.thresherId === thresherID) {
+                const tailNumber = feature.properties.tailNumber;
+                if (tailNumber && tailNumber.trim() !== "") {
+                    return tailNumber;
+                }
+                const aircraftType = feature.properties.aircraftType;
+                if (aircraftType && aircraftType.trim() !== "") {
+                    return aircraftType;
                 } else {
-                    // use thresherId as a last resort
-                    // but crop it down to 16 characters
                     return thresherID.substring(0, 16);
-
-
                 }
             }
         }
@@ -122,14 +123,13 @@ export class CGeoJSON {
         // if the thresherId matches the trackID, add it to the misb array
         let trackPointIndex = 0;
         for (let i = 0; i < this.json.totalFeatures; i++) {
-            if (this.json.features[i].properties.thresherId === trackID) {
-                // get lat, lon, alt from the properties
-                const lat = this.json.features[i].properties.lat;
-                const lon = this.json.features[i].properties.lon;
-                const alt = this.json.features[i].properties.alt;
-
-                // dtg is a string, convert it to a number
-                const _time = new Date(this.json.features[i].properties.dtg).getTime();
+            const feature = this.json.features[i];
+            if (!feature?.properties) continue;
+            if (feature.properties.thresherId === trackID) {
+                const lat = feature.properties.lat;
+                const lon = feature.properties.lon;
+                const alt = feature.properties.alt;
+                const _time = new Date(feature.properties.dtg).getTime();
                 misb[trackPointIndex] = new Array(MISBFields);
                 misb[trackPointIndex][MISB.UnixTimeStamp] = _time
                 misb[trackPointIndex][MISB.SensorLatitude] = lat

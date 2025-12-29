@@ -1,3 +1,7 @@
+/*
+    STANAG 4676 Track File Parser
+ */
+
 import {CTrackFile} from "./CTrackFile";
 import {MISB, MISBFields} from "../MISBFields";
 import {timeStrToEpoch} from "../DateTimeUtils";
