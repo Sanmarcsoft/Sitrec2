@@ -45,33 +45,31 @@ function getUserIDCustom()
 {
     // a default user id for testing
     // and for if there's no xenforo
-    $user_id = 99999999;
+    $user_id = 0;
 
-    // Check for localhost in multiple ways
-    $isLocalhost = ($_SERVER['HTTP_HOST'] === getenv('LOCALHOST') ||
-                    $_SERVER['SERVER_NAME'] === getenv('LOCALHOST') ||
-                    $_SERVER['HTTP_HOST'] === 'localhost' ||
-                    $_SERVER['SERVER_NAME'] === 'localhost' ||
-                    strpos($_SERVER['HTTP_HOST'], 'local.') === 0);
+    // SECURITY: Use REMOTE_ADDR (not HTTP_HOST which can be spoofed)
+    $isLocalhost = ($_SERVER['REMOTE_ADDR'] === '127.0.0.1' ||
+                    $_SERVER['REMOTE_ADDR'] === '::1');
 
-    if ($isLocalhost) {
-        // for local testing - return early
-        return $user_id;
-    } else {
-        $fileDir = getenv('XENFORO_PATH');
-        if ($fileDir) {
-            // check if the file exists
-            $xf_file = $fileDir . 'src/XF.php';
-            if (file_exists($xf_file)) {
-                require($xf_file);
-                XF::start($fileDir);
-                $app = XF::setupApp('XF\Pub\App');
-                $app->start();
-                $user = XF::visitor();
-                $user_id = $user->user_id;
-            }
+    $fileDir = getenv('XENFORO_PATH');
+    if ($fileDir) {
+        // check if the file exists
+        $xf_file = $fileDir . 'src/XF.php';
+        if (file_exists($xf_file)) {
+            require($xf_file);
+            XF::start($fileDir);
+            $app = XF::setupApp('XF\Pub\App');
+            $app->start();
+            $user = XF::visitor();
+            $user_id = $user->user_id;
         }
     }
+
+    // Only return dummy user if NOT logged in AND on localhost
+    if ($user_id == 0 && $isLocalhost) {
+        $user_id = 99999999;
+    }
+
     return $user_id;
 }
 
