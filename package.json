@@ -48,7 +48,7 @@
     "js-md5": "^0.8.3",
     "json-stringify-pretty-compact": "^4.0.0",
     "jszip": "^3.10.1",
-    "mathjs": "^14.6.0",
+    "mathjs": "^15.1.0",
     "ndarray": "^1.0.19",
     "satellite.js": "^6.0.1",
     "seedrandom": "^3.0.5",
