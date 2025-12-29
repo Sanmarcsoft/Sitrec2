@@ -5,6 +5,16 @@
 * uPlot.js (μPlot)
 * A small, fast chart for time series, lines, areas, ohlc & bars
 * https://github.com/leeoniya/uPlot (v1.6.18)
+*
+* MICK: DO NOT UPGRADE to 1.6.32+
+* Versions after 1.6.18 changed cursor point update logic from:
+*   if (shouldSetLegend && cursorPts.length > 1)
+* to:
+*   if (shouldSetLegend || cursorOnePt)
+* This breaks our custom cursor.move/cursor.dataIdx callbacks used for
+* frame-synced navigation in JetChart.js. The dots showing current position
+* on each data series line disappear with the newer versions.
+* Tested Dec 2024 - upgrading would require reworking the cursor integration.
 */
 
 const FEAT_TIME          = true;
