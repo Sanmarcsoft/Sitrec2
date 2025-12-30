@@ -217,22 +217,18 @@ export class CNodeView3D extends CNodeViewCanvas {
             this.onXRSessionEnded = this.onXRSessionEnded.bind(this);
             this.renderXR = this.renderXR.bind(this);
 
-            // Add WebXR button using Three.js VRButton helper (only once)
-            // Check if VR button already exists to avoid duplicates
+            // Add hidden VRButton (needed for XR session management)
             if (!document.getElementById('VRButton')) {
                 const xrButton = VRButton.createButton(this.renderer);
-                xrButton.style.zIndex = 10003;
+                xrButton.style.cssText = 'position:absolute;left:-9999px;visibility:hidden;';
                 document.body.appendChild(xrButton);
             }
 
-            // Monitor XR session state by checking when the button initiates a session
-            // The VRButton automatically handles session creation, we just need to listen
+            // Monitor XR session state
             this.renderer.xr.addEventListener('sessionstart', this.onXRSessionStarted);
             this.renderer.xr.addEventListener('sessionend', this.onXRSessionEnded);
             
-            // Add console helper for testing
-            console.log("WebXR enabled for lookView");
-            console.log("To start VR: Click 'ENTER VR' button or use 'Start VR/XR' menu item");
+            console.log("WebXR enabled for lookView - use 'Start VR/XR' menu item");
         }
     }
 
@@ -242,14 +238,11 @@ export class CNodeView3D extends CNodeViewCanvas {
      * Useful for testing with Immersive Web Emulator
      */
     startXR() {
-        // Simply click the VR button that's already set up
         const vrButton = document.getElementById('VRButton');
         if (vrButton) {
-            console.log("Clicking VR button...");
             vrButton.click();
         } else {
             console.error("VR button not found");
-            alert("VR button not found. Make sure WebXR is enabled.");
         }
     }
 
