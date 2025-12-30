@@ -445,10 +445,9 @@ export class CFileManager extends CManager {
         return new Promise((resolve, reject) => {
             let sitchName = prompt("Enter a name for the sitch", Sit.sitchName);
             if (sitchName !== null && sitchName !== "") {
-                // the server validates the name with:
-                //     return preg_match('/^[A-Za-z0-9 _\\-\\.\\(\\)]+$/', $name);
-                // so we need to remove any invalid characters, replace them with underscore
-                let validSitchName = sitchName.replace(/[^A-Za-z0-9 _\\-\\.\\(\\)]+/g, "_");
+                // the server validates the name with: /^[^\/\\<>\x00-\x1f]+$/u
+                // so we remove: / \ < > and control characters (0x00-0x1f)
+                let validSitchName = sitchName.replace(/[\/\\<>\x00-\x1f]+/g, "_");
 
                 // strip leading and trailing whitespace
                 validSitchName = validSitchName.trim();

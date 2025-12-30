@@ -13,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/config_paths.php';
 
-define('SITCH_NAME_PATTERN', '/^[A-Za-z0-9_\-\. ,()]+$/');
+define('SITCH_NAME_PATTERN', '/^[^\/\\\\<>\x00-\x1f]+$/u');
 
 $storagePath = $UPLOAD_URL; // from config.php
 
@@ -277,17 +277,28 @@ if (isset($_GET['get'])) {
 
 
     } else if ($_GET['get'] == "validate_names") {
+        global $UPLOAD_PATH;
         $invalid = array();
         $pattern = SITCH_NAME_PATTERN;
         
         if (!$useAWS) {
-            if (is_dir($dir)) {
-                $files = @scandir($dir);
-                if ($files !== false) {
-                    foreach ($files as $file) {
-                        if (is_dir($dir . '/' . $file) && $file != '.' && $file != '..') {
-                            if (!preg_match($pattern, $file) || strpos($file, '..') !== false) {
-                                $invalid[] = $file;
+            if (is_dir($UPLOAD_PATH)) {
+                $userDirs = @scandir($UPLOAD_PATH);
+                if ($userDirs !== false) {
+                    foreach ($userDirs as $userDir) {
+                        if ($userDir == '.' || $userDir == '..') continue;
+                        $userPath = $UPLOAD_PATH . $userDir;
+                        if (!is_dir($userPath)) continue;
+                        
+                        $sitchDirs = @scandir($userPath);
+                        if ($sitchDirs !== false) {
+                            foreach ($sitchDirs as $sitchDir) {
+                                if ($sitchDir == '.' || $sitchDir == '..') continue;
+                                if (!is_dir($userPath . '/' . $sitchDir)) continue;
+                                
+                                if (!preg_match($pattern, $sitchDir)) {
+                                    $invalid[] = ['user' => $userDir, 'name' => $sitchDir];
+                                }
                             }
                         }
                     }
@@ -296,21 +307,20 @@ if (isset($_GET['get'])) {
         } else {
             $objects = $s3->getIterator('ListObjects', array(
                 "Bucket" => $aws['bucket'],
-                "Prefix" => $dir . '/'
+                "Prefix" => ''
             ));
             $seen = array();
             foreach ($objects as $object) {
                 $key = $object['Key'];
-                $startText = $dir . '/';
-                if (strpos($key, $startText) === 0) {
-                    $key = substr($key, strlen($startText));
-                }
-                if ($key != "" && strpos($key, "/") !== false) {
-                    $folder = strtok($key, "/");
-                    if (!isset($seen[$folder])) {
-                        $seen[$folder] = true;
-                        if (!preg_match($pattern, $folder) || strpos($folder, '..') !== false) {
-                            $invalid[] = $folder;
+                $parts = explode('/', $key);
+                if (count($parts) >= 2 && $parts[0] != '' && $parts[1] != '') {
+                    $userDir = $parts[0];
+                    $sitchDir = $parts[1];
+                    $seenKey = $userDir . '/' . $sitchDir;
+                    if (!isset($seen[$seenKey])) {
+                        $seen[$seenKey] = true;
+                        if (!preg_match($pattern, $sitchDir)) {
+                            $invalid[] = ['user' => $userDir, 'name' => $sitchDir];
                         }
                     }
                 }
@@ -323,7 +333,7 @@ if (isset($_GET['get'])) {
             $name = $_GET['name'];
             
             // SECURITY: Validate name to prevent path traversal
-            if (!preg_match(SITCH_NAME_PATTERN, $name) || strpos($name, '..') !== false) {
+            if (!preg_match(SITCH_NAME_PATTERN, $name)) {
                 http_response_code(400);
                 echo json_encode(['error' => 'Invalid name parameter']);
                 exit();
