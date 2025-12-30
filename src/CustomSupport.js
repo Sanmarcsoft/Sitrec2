@@ -413,6 +413,7 @@ export class CCustomManager {
 
         if (isLocal || Globals.userID === 1) {
             guiMenus.help.add(this, "openAdminDashboard").name("Admin Dashboard").tooltip("Open the admin dashboard");
+            guiMenus.help.add(this, "validateSitchNames").name("Validate Sitch Names").tooltip("Check all user sitch names against the validation pattern");
         }
 
         // TODO - Multiple events passed to EventManager.addEventListener
@@ -2345,6 +2346,10 @@ export class CCustomManager {
 
     openAdminDashboard() {
         window.open(SITREC_SERVER + 'admin_dashboard.php', '_blank');
+    }
+
+    validateSitchNames() {
+        window.open(SITREC_SERVER + 'getsitches.php?get=validate_names', '_blank');
     }
 
     refreshLookViewTracks() {
