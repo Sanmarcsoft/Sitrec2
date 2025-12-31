@@ -677,6 +677,20 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
         return cachedFrame && cachedFrame.width && cachedFrame.width > 0;
     }
 
+    async waitForFrame(frame, timeout = 5000) {
+        this.requestFrame(Math.floor(frame / this.videoSpeed));
+        
+        const startTime = Date.now();
+        while (!this.isFrameCached(frame)) {
+            if (Date.now() - startTime > timeout) {
+                console.warn(`Timeout waiting for frame ${frame}`);
+                return false;
+            }
+            await new Promise(r => setTimeout(r, 10));
+        }
+        return true;
+    }
+
     createBlankFrame() {
         if (!this.videoWidth || !this.videoHeight) {
             const tempCanvas = document.createElement('canvas');

@@ -200,9 +200,12 @@ class CNodeViewCanvas2D extends CNodeViewCanvas {
             //    This handles cases where canvas was just resized or context needs re-scaling
             this.ensureContextScaled()
 
-            // the autoClear will clear it to transparent, so need to
-            // fill it with a solid color if we've got an autoFill
+            // autoClear clears to transparent before rendering
+            if (this.autoClear) {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            }
 
+            // autoFill fills with a solid color (after clear if both are set)
             if (this.autoFill) {
                 this.ctx.fillStyle = this.autoFillColor ?? "black";
                 this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);

@@ -289,6 +289,9 @@ export class CNodeView3D extends CNodeViewCanvas {
                     if (node.update !== undefined) {
                         node.update(frame);
                     }
+                    if (node.videoData && node.videoData.waitForFrame) {
+                        await node.videoData.waitForFrame(frame);
+                    }
                 }
                 
                 this.renderCanvas(frame);

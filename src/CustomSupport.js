@@ -709,6 +709,149 @@ export class CCustomManager {
             }
         }, "exportVideo").name("Export Video")
             .tooltip("Export the selected view as a video file (WebM format) with all frames");
+
+        guiMenus.view.add({
+            exportViewport: () => this.exportViewportVideo()
+        }, "exportViewport").name("Export Viewport Video")
+            .tooltip("Export the entire viewport as a video file (WebM format) with all frames");
+    }
+
+    async exportViewportVideo() {
+        const {WebMVideoExporter} = await import("./WebMVideoExporter");
+        
+        const totalFrames = Sit.frames;
+        const width = ViewMan.widthPx;
+        const height = ViewMan.heightPx;
+        const fps = Sit.fps;
+
+        console.log(`Starting viewport video export: ${totalFrames} frames at ${fps} fps, ${width}x${height}`);
+
+        const savedFrame = par.frame;
+        const savedPaused = par.paused;
+        par.paused = true;
+
+        const progressDiv = document.createElement('div');
+        progressDiv.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);color:white;padding:20px;border-radius:10px;z-index:10000;font-family:Arial;text-align:center;';
+        progressDiv.innerHTML = '<div>Exporting viewport video...</div><div id="exportProgress">0 / ' + totalFrames + '</div>';
+        document.body.appendChild(progressDiv);
+
+        const compositeCanvas = document.createElement('canvas');
+        compositeCanvas.width = width;
+        compositeCanvas.height = height;
+        const compositeCtx = compositeCanvas.getContext('2d');
+
+        try {
+            const exporter = new WebMVideoExporter({
+                width,
+                height,
+                fps,
+                bitrate: 8_000_000,
+                keyFrameInterval: 30
+            });
+
+            await exporter.initialize();
+
+            for (let frame = 0; frame < totalFrames; frame++) {
+                par.frame = frame;
+                GlobalDateTimeNode.update(frame);
+
+                for (const entry of Object.values(NodeMan.list)) {
+                    const node = entry.data;
+                    if (node.update !== undefined) {
+                        node.update(frame);
+                    }
+                    if (node.videoData && node.videoData.waitForFrame) {
+                        await node.videoData.waitForFrame(frame);
+                    }
+                }
+
+                compositeCtx.fillStyle = '#000000';
+                compositeCtx.fillRect(0, 0, width, height);
+
+                const nonOverlays = [];
+                const overlays = [];
+
+                ViewMan.iterate((id, view) => {
+                    if (view.overlayView) {
+                        view.setVisible(view.overlayView.visible);
+                    }
+
+                    let visible = view.visible;
+                    if (view.overlayView && !view.seperateVisibility) {
+                        visible = view.overlayView.visible;
+                    }
+                    if (view.relativeTo) {
+                        visible = view.relativeTo.visible;
+                    }
+
+                    if (visible) {
+                        if (view.overlayView) {
+                            overlays.push(view);
+                        } else {
+                            nonOverlays.push(view);
+                        }
+                    }
+                });
+
+                for (const view of nonOverlays) {
+                    view.renderCanvas(frame);
+                    if (view.canvas) {
+                        const x = view.leftPx;
+                        const y = view.topPx - ViewMan.topPx;
+                        compositeCtx.drawImage(view.canvas, x, y, view.widthPx, view.heightPx);
+                    }
+                }
+
+                for (const view of overlays) {
+                    const alpha = view.transparency !== undefined ? view.transparency : 1;
+                    if (alpha <= 0) continue;
+                    
+                    if (view.canvas) {
+                        const ctx = view.canvas.getContext('2d');
+                        ctx.clearRect(0, 0, view.canvas.width, view.canvas.height);
+                    }
+                    view.renderCanvas(frame);
+                    if (view.canvas) {
+                        const parentView = view.overlayView;
+                        const x = parentView.leftPx;
+                        const y = parentView.topPx - ViewMan.topPx;
+                        compositeCtx.globalAlpha = alpha;
+                        compositeCtx.drawImage(view.canvas, x, y, parentView.widthPx, parentView.heightPx);
+                        compositeCtx.globalAlpha = 1;
+                    }
+                }
+
+                await exporter.addFrame(compositeCanvas, frame);
+
+                if (frame % 10 === 0) {
+                    document.getElementById('exportProgress').textContent = `${frame + 1} / ${totalFrames}`;
+                    await new Promise(r => setTimeout(r, 0));
+                }
+            }
+
+            document.getElementById('exportProgress').textContent = 'Creating file...';
+
+            const webmBlob = await exporter.finalize();
+
+            const filename = `viewport_${Sit.name || 'export'}_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.webm`;
+            const url = URL.createObjectURL(webmBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            console.log(`Viewport video export complete: ${filename}`);
+
+        } catch (e) {
+            console.error('Export failed:', e);
+            alert('Viewport video export failed: ' + e.message);
+        } finally {
+            progressDiv.remove();
+            par.frame = savedFrame;
+            par.paused = savedPaused;
+            setRenderOne(true);
+        }
     }
 
     setupStandaloneMenuExample() {
