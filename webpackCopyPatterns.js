@@ -83,4 +83,10 @@ patterns.push({
     to: './libs/draco'
 });
 
+// Copy OpenCV.js for local hosting
+patterns.push({
+    from: './src/js/opencv.js',
+    to: './libs/opencv.js'
+});
+
 module.exports = patterns;

@@ -99,6 +99,7 @@ import {checkLocal} from "./configUtils";
 import {CNodeView3D} from "./nodes/CNodeView3D";
 import {getApproximateLocationFromIP} from "./GeoLocation";
 import {LLAToEUS} from "./LLA-ECEF-ENU";
+import {addMotionAnalysisMenu} from "./CMotionAnalysis";
 import {QuadTreeTile} from "./QuadTreeTile";
 import {showError} from "./showError";
 import {destroyGlobalProfiler, globalProfiler, initGlobalProfiler} from "./VisualProfiler";
@@ -1377,6 +1378,7 @@ async function initializeOnce() {
 
     // legacy accessor variables. can also use guiMenus.physics, etc
     setupGUIGlobals(_gui,_guiShowHide,_guiTweaks, _guiShowHideViews, _guiPhysics)
+    addMotionAnalysisMenu();
     setUnits(new CUnits("Nautical"));
     setFileManager(new CFileManager())
 
