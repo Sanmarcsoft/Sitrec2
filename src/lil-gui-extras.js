@@ -713,9 +713,15 @@ export class CGuiMenuBar {
 
         // Listen for fullscreen changes to update menu bar position
         document.addEventListener('fullscreenchange', () => {
-            if (!this._hidden) {
-                this._updateMenuBarPosition();
-            }
+            // Use requestAnimationFrame to wait for browser to finish fullscreen layout
+            requestAnimationFrame(() => {
+                if (!this._hidden) {
+                    this._updateMenuBarPosition();
+                } else {
+                    // Menu is hidden, but still need to update ViewMan for fullscreen mode
+                    ViewMan.updateSize();
+                }
+            });
         });
 
         // Listen for window resize to check if floating menus end up off-screen
@@ -938,6 +944,11 @@ export class CGuiMenuBar {
         }
         // Also toggle the controls visibility to maximize view space
         toggleControlsVisibility();
+        // Update ViewMan size after controls visibility has changed
+        // Use requestAnimationFrame to ensure DOM layout has completed
+        requestAnimationFrame(() => {
+            ViewMan.updateSize();
+        });
     }
 
     reset() {

@@ -40,7 +40,7 @@ import {getShortURL} from "./urlUtils";
 import {CNode3DObject} from "./nodes/CNode3DObject";
 import {UpdateHUD, UpdatePRFromEA} from "./JetStuff";
 import {Frame2Az, Frame2El} from "./JetUtils";
-import {degrees, getDateTimeFilename} from "./utils";
+import {closeFullscreen, degrees, getDateTimeFilename, openFullscreen} from "./utils";
 import {ViewMan} from "./CViewManager";
 import {EventManager} from "./CEventManager";
 import {isLocal, SITREC_APP, SITREC_SERVER} from "./configUtils";
@@ -698,28 +698,38 @@ export class CCustomManager {
             this.videoExportView = exportableViews[0];
         }
 
-        guiMenus.view.add(this, "videoExportView", exportableViews)
-            .name("Export View")
+        this.renderVideoFolder = guiMenus.view.addFolder("Video Render & Export").close()
+            .tooltip("Options for rendering and exporting video files from Sitrec views or full viewport");
+
+
+        this.renderVideoFolder.add(this, "videoExportView", exportableViews)
+            .name("Render Video View")
             .tooltip("Select which view to export as video");
 
-        guiMenus.view.add(this, "retinaExport")
-            .name("Retina Export")
-            .tooltip("Export at retina/HiDPI resolution (2x on most displays)");
-
-        guiMenus.view.add({
+        this.renderVideoFolder.add({
             exportVideo: () => {
                 const view = ViewMan.get(this.videoExportView, false);
                 if (view && view.exportVideo) {
                     view.exportVideo();
                 }
             }
-        }, "exportVideo").name("Export Video")
+        }, "exportVideo").name("Render Single View Video")
             .tooltip("Export the selected view as a video file (WebM format) with all frames");
 
-        guiMenus.view.add({
+        this.renderVideoFolder.add({
             exportViewport: () => this.exportViewportVideo()
-        }, "exportViewport").name("Export Viewport Video")
+        }, "exportViewport").name("Render Viewport Video")
             .tooltip("Export the entire viewport as a video file (WebM format) with all frames");
+
+        this.renderVideoFolder.add({
+            exportFullscreenViewport: () => this.exportFullscreenViewportVideo()
+        }, "exportFullscreenViewport").name("Render Fullscreen Video")
+            .tooltip("Export the entire viewport in fullscreen mode as a video file (WebM format) with all frames");
+
+        this.renderVideoFolder.add(this, "retinaExport")
+            .name("Use HD/Retina Export")
+            .tooltip("Export at retina/HiDPI resolution (2x on most displays)");
+
     }
 
     async exportViewportVideo() {
@@ -870,6 +880,22 @@ export class CCustomManager {
             par.frame = savedFrame;
             par.paused = savedPaused;
             setRenderOne(true);
+        }
+    }
+
+    async exportFullscreenViewportVideo() {
+        const uiWasVisible = !Globals.menuBar._hidden;
+        try {
+            if (uiWasVisible) {
+                Globals.menuBar.toggleVisiblity();
+            }
+            openFullscreen();
+            await this.exportViewportVideo();
+        } finally {
+            closeFullscreen();
+            if (uiWasVisible) {
+                Globals.menuBar.toggleVisiblity();
+            }
         }
     }
 
