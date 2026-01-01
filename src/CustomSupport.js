@@ -788,7 +788,7 @@ export class CCustomManager {
                 const overlays = [];
 
                 ViewMan.iterate((id, view) => {
-                    if (view.overlayView) {
+                    if (view.overlayView && !view.seperateVisibility) {
                         view.setVisible(view.overlayView.visible);
                     }
 
