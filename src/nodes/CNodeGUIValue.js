@@ -84,6 +84,10 @@ export class CNodeGUIValue extends CNodeGUIConstant {
             }
         ).name(v.desc ? v.desc : "<no desc>").listen()
 
+        if (v.noSlider) {
+            this.guiEntry.noSlider();
+        }
+
         // "tip" and "tooltip" are both used for the tooltip
         // "tip" is legacy, "tooltip" is the recommended name
         if (v.tip) {

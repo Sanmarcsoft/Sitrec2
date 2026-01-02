@@ -845,7 +845,8 @@ class NumberController extends Controller {
 
         const value = this.getValue();
 
-        if ( this._hasSlider ) {
+        // Mick: checking $fill instead of $_hasSlider as we set $_hasSlider to true to prevent recreation after removing the DOM element it with noSloder()
+        if ( this.$fill ) {
 
             let percent = ( value - this._min ) / ( this._max - this._min );
             percent = Math.max( 0, Math.min( percent, 1 ) );
@@ -1326,6 +1327,17 @@ class NumberController extends Controller {
 
         }
 
+    }
+
+    noSlider() {
+        if (this.$slider) {
+            this.$slider.remove();
+            this.$slider = undefined;
+            this.$fill = undefined;
+            this.domElement.classList.remove('hasSlider');
+        }
+        this._hasSlider = true;
+        return this;
     }
 
     _normalizeMouseWheel( e ) {

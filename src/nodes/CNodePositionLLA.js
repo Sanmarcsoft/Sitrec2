@@ -47,6 +47,7 @@ export class CNodePositionLLA extends CNode {
                    value: this._LLA[0],
                    start: -90, end: 90, step: 0.01,
                    stepExplicit: false, // prevent snapping
+                   noSlider: true,
                    onChange: (v) => {
                        // Get the text of the input to see if they pasted in Lat, Lon
                        // like 40.9096508,-74.0734146
@@ -87,6 +88,7 @@ export class CNodePositionLLA extends CNode {
                    value: this._LLA[1],
                    start: -180, end: 180, step: 0.01,
                    stepExplicit: false, // prevent snapping
+                   noSlider: true,
                    onChange: (v) => {
                        this._LLA[1] = v;
                        this.recalculateCascade()
