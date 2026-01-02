@@ -355,6 +355,48 @@ export class CAudioMp4Data {
         this.isBufferSourceStarted = false;
     }
 
+    getAudioBufferForExport() {
+        if (!this.decodingComplete || !this.decodedAudioData.length) {
+            return null;
+        }
+        
+        if (this.audioBuffer) {
+            return this.audioBuffer;
+        }
+        
+        try {
+            const firstBuffer = this.decodedAudioData[0].data;
+            const sampleRate = firstBuffer.sampleRate || 44100;
+            const numberOfChannels = firstBuffer.numberOfChannels;
+            
+            let totalLength = 0;
+            for (const item of this.decodedAudioData) {
+                totalLength += Math.floor(item.duration / 1000000 * sampleRate);
+            }
+            
+            const offlineCtx = new OfflineAudioContext(numberOfChannels, totalLength, sampleRate);
+            const exportBuffer = offlineCtx.createBuffer(numberOfChannels, totalLength, sampleRate);
+            
+            let offset = 0;
+            for (const item of this.decodedAudioData) {
+                const audioData = item.data;
+                const framesToCopy = Math.floor(item.duration / 1000000 * sampleRate);
+                for (let ch = 0; ch < numberOfChannels; ch++) {
+                    const srcBuffer = new Float32Array(audioData.numberOfFrames);
+                    audioData.copyTo(srcBuffer, { planeIndex: ch });
+                    exportBuffer.getChannelData(ch).set(srcBuffer.subarray(0, framesToCopy), offset);
+                }
+                offset += framesToCopy;
+            }
+            
+            console.log(`[Audio] Created export buffer: ${exportBuffer.duration.toFixed(2)}s, ${numberOfChannels}ch, ${sampleRate}Hz`);
+            return exportBuffer;
+        } catch (e) {
+            console.warn("[Audio] Error creating export buffer:", e);
+            return null;
+        }
+    }
+
     createAudioBuffer() {
         if (this._bufferCreationInProgress) {
             if (this.debug) console.log("Buffer creation already in progress");

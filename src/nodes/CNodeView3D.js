@@ -252,8 +252,9 @@ export class CNodeView3D extends CNodeViewCanvas {
     /**
      * Export the lookView as a video file
      * @param {string} formatId - Video format ID (e.g., 'mp4-h264', 'webm-vp8')
+     * @param {boolean} includeAudio - Whether to include audio track if available
      */
-    async exportVideo(formatId = DefaultVideoFormat) {
+    async exportVideo(formatId = DefaultVideoFormat, includeAudio = true) {
         const startFrame = Sit.aFrame;
         const endFrame = Sit.bFrame;
         const totalFrames = endFrame - startFrame + 1;
@@ -272,6 +273,29 @@ export class CNodeView3D extends CNodeViewCanvas {
         
         const videoStartDate = GlobalDateTimeNode ? GlobalDateTimeNode.frameToDate(startFrame) : null;
         
+        let audioBuffer = null;
+        let audioStartTime = 0;
+        let audioDuration = null;
+        let originalFps = fps;
+        
+        if (includeAudio) {
+            for (const entry of Object.values(NodeMan.list)) {
+                const node = entry.data;
+                if (node.videoData && node.videoData.audioHandler && 
+                    node.videoData.audioHandler.decodingComplete) {
+                    const exportAudioBuffer = node.videoData.audioHandler.getAudioBufferForExport();
+                    if (exportAudioBuffer) {
+                        audioBuffer = exportAudioBuffer;
+                        originalFps = node.videoData.audioHandler.originalFps || fps;
+                        audioStartTime = startFrame / originalFps;
+                        audioDuration = totalFrames / fps;
+                        console.log(`Found audio: ${audioBuffer.duration.toFixed(2)}s, using ${audioDuration.toFixed(2)}s from ${audioStartTime.toFixed(2)}s`);
+                        break;
+                    }
+                }
+            }
+        }
+        
         const compositeCanvas = document.createElement('canvas');
         compositeCanvas.width = width;
         compositeCanvas.height = height;
@@ -284,7 +308,11 @@ export class CNodeView3D extends CNodeViewCanvas {
                 fps,
                 bitrate: 5_000_000,
                 keyFrameInterval: 30,
-                videoStartDate
+                videoStartDate,
+                audioBuffer,
+                audioStartTime,
+                audioDuration,
+                originalFps,
             });
             
             await exporter.initialize();

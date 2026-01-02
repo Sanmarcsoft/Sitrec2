@@ -1,16 +1,17 @@
-import {WebMVideoExporter} from "./WebMVideoExporter";
-import {MP4VideoExporter} from "./MP4VideoExporter";
+import {MediabunnyExporter} from "./MediabunnyExporter";
 
 export const VideoFormats = {
     'mp4-h264': {
         name: 'MP4 (H.264)',
         extension: 'mp4',
-        exporter: 'mp4',
+        format: 'mp4',
+        codec: 'avc',
     },
     'webm-vp8': {
         name: 'WebM (VP8)',
         extension: 'webm',
-        exporter: 'webm',
+        format: 'webm',
+        codec: 'vp8',
     },
 };
 
@@ -22,13 +23,11 @@ export async function createVideoExporter(formatId, options) {
         throw new Error(`Unknown video format: ${formatId}`);
     }
 
-    if (format.exporter === 'webm') {
-        return new WebMVideoExporter(options);
-    } else if (format.exporter === 'mp4') {
-        return new MP4VideoExporter(options);
-    }
-
-    throw new Error(`Unknown exporter type: ${format.exporter}`);
+    return new MediabunnyExporter({
+        ...options,
+        format: format.format,
+        codec: format.codec,
+    });
 }
 
 export function getVideoExtension(formatId) {

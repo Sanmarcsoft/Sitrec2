@@ -689,6 +689,7 @@ export class CCustomManager {
     setupVideoExport() {
         this.videoExportView = "lookView";
         this.retinaExport = false;
+        this.exportAudio = true;
         
         const {getVideoFormatOptions, DefaultVideoFormat} = require("./VideoExporter");
         this.videoFormat = DefaultVideoFormat;
@@ -726,7 +727,7 @@ export class CCustomManager {
             exportVideo: () => {
                 const view = ViewMan.get(this.videoExportView, false);
                 if (view && view.exportVideo) {
-                    view.exportVideo(this.videoFormat);
+                    view.exportVideo(this.videoFormat, this.exportAudio);
                 }
             }
         }, "exportVideo").name("Render Single View Video")
@@ -745,6 +746,10 @@ export class CCustomManager {
         this.renderVideoFolder.add(this, "retinaExport")
             .name("Use HD/Retina Export")
             .tooltip("Export at retina/HiDPI resolution (2x on most displays)");
+
+        this.renderVideoFolder.add(this, "exportAudio")
+            .name("Include Audio")
+            .tooltip("Include audio track from source video if available");
 
     }
 
@@ -776,6 +781,29 @@ export class CCustomManager {
 
         const videoStartDate = GlobalDateTimeNode ? GlobalDateTimeNode.frameToDate(startFrame) : null;
 
+        let audioBuffer = null;
+        let audioStartTime = 0;
+        let audioDuration = null;
+        let originalFps = fps;
+        
+        if (this.exportAudio) {
+            for (const entry of Object.values(NodeMan.list)) {
+                const node = entry.data;
+                if (node.videoData && node.videoData.audioHandler && 
+                    node.videoData.audioHandler.decodingComplete) {
+                    const exportAudioBuffer = node.videoData.audioHandler.getAudioBufferForExport();
+                    if (exportAudioBuffer) {
+                        audioBuffer = exportAudioBuffer;
+                        originalFps = node.videoData.audioHandler.originalFps || fps;
+                        audioStartTime = startFrame / originalFps;
+                        audioDuration = totalFrames / fps;
+                        console.log(`Found audio: ${audioBuffer.duration.toFixed(2)}s, using ${audioDuration.toFixed(2)}s from ${audioStartTime.toFixed(2)}s`);
+                        break;
+                    }
+                }
+            }
+        }
+
         try {
             const exporter = await createVideoExporter(formatId, {
                 width,
@@ -783,7 +811,11 @@ export class CCustomManager {
                 fps,
                 bitrate: 8_000_000 * scale * scale,
                 keyFrameInterval: 30,
-                videoStartDate
+                videoStartDate,
+                audioBuffer,
+                audioStartTime,
+                audioDuration,
+                originalFps,
             });
 
             await exporter.initialize();
