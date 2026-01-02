@@ -105,9 +105,9 @@ export class WebMVideoExporter {
         this.frameCount++;
     }
 
-    async finalize(onProgress = null) {
-        if (onProgress) {
-            onProgress(0, this.chunks.length);
+    async finalize(onProgress = null, onStatus = null) {
+        if (onStatus) {
+            onStatus('Flushing encoder...');
             await new Promise(r => setTimeout(r, 0));
         }
         await this.encoder.flush();

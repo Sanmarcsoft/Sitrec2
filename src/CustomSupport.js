@@ -912,9 +912,10 @@ export class CCustomManager {
             }
 
             if (progress.shouldSave()) {
-                const webmBlob = await exporter.finalize((current, total) => {
-                    progress.setFinalizeProgress(current, total);
-                });
+                const webmBlob = await exporter.finalize(
+                    (current, total) => progress.setFinalizeProgress(current, total),
+                    (status) => progress.setStatus(status)
+                );
 
                 const filename = `viewport_${Sit.name || 'export'}_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.webm`;
                 const url = URL.createObjectURL(webmBlob);
