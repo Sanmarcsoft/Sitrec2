@@ -57,7 +57,7 @@
 - 2025-07-08
   - Fixed the trackign default single point (i.e. when there's no track) so it's in the centerof the video (with the new coordinate systems)
   - Notes on visibility for overlay views tracker invisible by default
-  - Don't render the tracking view if not visible. Tracking view is the only thing that uses the seperateVisibility flag
+  - Don't render the tracking view if not visible. Tracking view is the only thing that uses the separateVisibility flag
   - Removed unused demuser_mp4.js
   - Startup with no video window, just size-by-size main and look view Detect aspect ratio, and choose appropriate view preset when loading a video
   - Tooltips

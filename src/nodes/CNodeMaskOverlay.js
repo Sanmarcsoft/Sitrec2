@@ -1,12 +1,21 @@
 import {CNodeActiveOverlay} from "./CNodeTrackingOverlay";
 import {setRenderOne, Sit} from "../Globals";
 import {mouseToCanvas} from "../ViewUtils";
+import {undoManager} from "../UndoManager";
 
 export class CNodeMaskOverlay extends CNodeActiveOverlay {
     constructor(v) {
         super(v);
         
+        this.separateVisibility = true;
+        
+        if (v.visible !== undefined) {
+            this.visible = !v.visible;
+            this.setVisible(v.visible);
+        }
+        
         this.brushSize = v.brushSize ?? 20;
+        this.onMaskChange = v.onMaskChange ?? null;
         this.maskCanvas = null;
         this.maskCtx = null;
         this.maskImageData = null;
@@ -15,8 +24,15 @@ export class CNodeMaskOverlay extends CNodeActiveOverlay {
         this.lastDrawY = null;
         this.lastMouseX = 0;
         this.lastMouseY = 0;
+        this.preDrawMaskData = null;
         
         this.loadMask();
+    }
+    
+    notifyMaskChange() {
+        if (typeof this.onMaskChange === 'function') {
+            this.onMaskChange();
+        }
     }
     
     loadMask() {
@@ -36,6 +52,7 @@ export class CNodeMaskOverlay extends CNodeActiveOverlay {
         if (this.maskCanvas) {
             Sit.motionMask = this.maskCanvas.toDataURL('image/png');
             this.updateMaskImageData();
+            this.notifyMaskChange();
         }
     }
     
@@ -86,9 +103,31 @@ export class CNodeMaskOverlay extends CNodeActiveOverlay {
     
     clearMask() {
         if (this.maskCanvas) {
+            const preData = this.maskCtx.getImageData(0, 0, this.maskCanvas.width, this.maskCanvas.height);
+            const overlay = this;
+            
             this.maskCtx.clearRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
             this.updateMaskImageData();
             this.saveMask();
+            
+            undoManager.add({
+                description: "Clear mask",
+                undo: () => {
+                    if (overlay.maskCanvas) {
+                        overlay.maskCtx.putImageData(preData, 0, 0);
+                        overlay.saveMask();
+                        setRenderOne(true);
+                    }
+                },
+                redo: () => {
+                    if (overlay.maskCanvas) {
+                        overlay.maskCtx.clearRect(0, 0, overlay.maskCanvas.width, overlay.maskCanvas.height);
+                        overlay.saveMask();
+                        setRenderOne(true);
+                    }
+                }
+            });
+            
             setRenderOne(true);
         }
     }
@@ -142,6 +181,11 @@ export class CNodeMaskOverlay extends CNodeActiveOverlay {
         const [cx, cy] = mouseToCanvas(this, mouseX, mouseY);
         const [vX, vY] = this.overlayView.canvasToVideoCoords(cx, cy);
         
+        this.ensureMaskInitialized();
+        if (this.maskCanvas) {
+            this.preDrawMaskData = this.maskCtx.getImageData(0, 0, this.maskCanvas.width, this.maskCanvas.height);
+        }
+        
         this.isDrawing = true;
         this.lastDrawX = null;
         this.lastDrawY = null;
@@ -151,6 +195,9 @@ export class CNodeMaskOverlay extends CNodeActiveOverlay {
     }
     
     onMouseDrag(e, mouseX, mouseY) {
+        this.lastMouseX = mouseX;
+        this.lastMouseY = mouseY;
+        
         if (!this.isDrawing) return;
         
         const [cx, cy] = mouseToCanvas(this, mouseX, mouseY);
@@ -165,6 +212,33 @@ export class CNodeMaskOverlay extends CNodeActiveOverlay {
             this.isDrawing = false;
             this.lastDrawX = null;
             this.lastDrawY = null;
+            
+            if (this.maskCanvas && this.preDrawMaskData) {
+                const postDrawMaskData = this.maskCtx.getImageData(0, 0, this.maskCanvas.width, this.maskCanvas.height);
+                const preData = this.preDrawMaskData;
+                const overlay = this;
+                
+                undoManager.add({
+                    description: "Mask paint",
+                    undo: () => {
+                        if (overlay.maskCanvas) {
+                            overlay.maskCtx.putImageData(preData, 0, 0);
+                            overlay.saveMask();
+                            setRenderOne(true);
+                        }
+                    },
+                    redo: () => {
+                        if (overlay.maskCanvas) {
+                            overlay.maskCtx.putImageData(postDrawMaskData, 0, 0);
+                            overlay.saveMask();
+                            setRenderOne(true);
+                        }
+                    }
+                });
+                
+                this.preDrawMaskData = null;
+            }
+            
             this.saveMask();
         }
     }

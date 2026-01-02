@@ -69,7 +69,7 @@ export function updateFrame(elapsed) {
         par.frame += advance;
 //        console.log("par.frame = "+par.frame+" par.time = "+par.time+" advance = "+advance+" dt = "+dt+" Sit.fps = "+Sit.fps+" par.direction = "+par.direction);
 
-        // A-B wrapping. We have a seperate check he so we can loop is just playing without keyboard controls
+        // A-B wrapping. We have a separate check he so we can loop is just playing without keyboard controls
         if (par.frame > B) {
             if (par.pingPong) {
                 par.frame = B;

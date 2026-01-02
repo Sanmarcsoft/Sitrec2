@@ -687,12 +687,12 @@ class CNodeView extends CNode {
         }
         else {
            // console.warn("Overlaying view "+this.id+" set visible propagating to the overlaid view" + this.overlayView.id)
-            if (!this.seperateVisibility) {
-                // not seperate, so we set the visibility of the overlay view (the parent)
+            if (!this.separateVisibility) {
+                // not separate, so we set the visibility of the overlay view (the parent)
                 // which will hide the children (this)
                 this.overlayView.setVisible(visible);
             } else {
-                // seperate, so we set the visibility of the canvas
+                // separate, so we set the visibility of the canvas
                 // so we can had the overlay independently of the parent
                console.log("Overlaying view " + this.id + " set visible using canvas")
                 this.canvas.style.visibility = this.visible ? 'visible' : 'hidden';

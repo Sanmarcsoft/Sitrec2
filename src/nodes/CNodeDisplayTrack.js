@@ -35,7 +35,7 @@ export class CNodeDisplayTrack extends CNode3DGroup {
         this.input("dataTrackDisplay", true); // optional data track for reference
         this.optionalInputs(["dataTrack"]) // trackData contains altitudeOffset. It's th
 
-        this.input("color") // or color can be supplied in a seperate node
+        this.input("color") // or color can be supplied in a separate node
         this.optionalInputs(["badColor", "secondColor"]) // to be used if a segment is flagged as "bad"
         this.input("width") // Width currently only working as a constant (v0 is used)
 

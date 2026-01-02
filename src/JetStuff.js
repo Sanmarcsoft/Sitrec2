@@ -303,7 +303,7 @@ export function ChangedPR() {
 
     if (Ball === undefined) {
         // waiting for the model to load, so set a flag saying we need to do this again
-        // this is a patch, as we really should seperate the the rendered model from the calculations
+        // this is a patch, as we really should separate the the rendered model from the calculations
         // of the gimbal orientation (plane->EOSU->Ball)
         // this is legacy code
         par.needsGimbalBallPatch = true;

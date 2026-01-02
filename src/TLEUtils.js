@@ -194,7 +194,7 @@ function satRecToDate(satrec) {
 // there can be several satrecs with the same name, so we need to store them in an array
 // and pick the best one based on the playback date/time
 export class CTLEData {
-    // constructor is passed in a string that contains the TLE file as \n seperated lines
+    // constructor is passed in a string that contains the TLE file as \n separated lines
     // extracts in into
     constructor(fileData) {
 

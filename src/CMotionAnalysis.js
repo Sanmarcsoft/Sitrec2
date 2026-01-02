@@ -1,4 +1,4 @@
-import {guiMenus, NodeMan, setRenderOne} from "./Globals";
+import {guiMenus, NodeMan, setRenderOne, Sit} from "./Globals";
 
 import {CNodeMaskOverlay} from "./nodes/CNodeMaskOverlay";
 
@@ -106,6 +106,7 @@ class MotionAnalyzer {
     constructor(videoView) {
         this.videoView = videoView;
         this.active = false;
+        this.overlaysCreated = false;
         this.overlay = null;
         this.overlayCtx = null;
         this.graphCanvas = null;
@@ -142,6 +143,30 @@ class MotionAnalyzer {
         this.maskOverlayNode = null;
         this.maskEnabled = true;
         this.brushSize = 20;
+        
+        this.resultCache = new Map();
+        this.lastAFrame = null;
+        this.lastBFrame = null;
+        this.lastVideoDataId = null;
+    }
+    
+    invalidateCache() {
+        this.resultCache.clear();
+        this.frameBuffer = [];
+        this.staticHistory.clear();
+        this.angleHistory = [];
+        this.smoothedDirection = {x: 0, y: 0, angle: 0, magnitude: 0, confidence: 0};
+        this.lastFlowData = null;
+    }
+    
+    onParamChange() {
+        this.invalidateCache();
+        setRenderOne(true);
+    }
+    
+    onMaskChange() {
+        this.invalidateCache();
+        setRenderOne(true);
     }
     
     setMaskEditing(enabled) {
@@ -157,14 +182,16 @@ class MotionAnalyzer {
         }
     }
 
-    createOverlay() {
-        if (this.overlay) return;
+    createOverlays() {
+        if (this.overlaysCreated) return;
+        this.overlaysCreated = true;
 
         this.maskOverlayNode = new CNodeMaskOverlay({
             id: "motionMaskOverlay",
             overlayView: this.videoView,
             brushSize: this.brushSize,
             visible: false,
+            onMaskChange: () => this.onMaskChange(),
         });
 
         this.overlay = document.createElement('canvas');
@@ -194,40 +221,29 @@ class MotionAnalyzer {
         this.graphCtx = this.graphCanvas.getContext('2d');
     }
 
-    removeOverlay() {
-        if (this.overlay && this.overlay.parentNode) {
-            this.overlay.parentNode.removeChild(this.overlay);
+    showOverlays() {
+        if (this.overlay) this.overlay.style.display = 'block';
+        if (this.graphCanvas) this.graphCanvas.style.display = 'block';
+    }
+    
+    hideOverlays() {
+        if (this.overlay) {
+            this.overlay.style.display = 'none';
+            this.overlayCtx.clearRect(0, 0, this.overlay.width, this.overlay.height);
         }
-        if (this.graphCanvas && this.graphCanvas.parentNode) {
-            this.graphCanvas.parentNode.removeChild(this.graphCanvas);
-        }
-        if (this.maskOverlayNode) {
-            this.maskOverlayNode.dispose();
-            this.maskOverlayNode = null;
-        }
-        this.overlay = null;
-        this.overlayCtx = null;
-        this.graphCanvas = null;
-        this.graphCtx = null;
+        if (this.graphCanvas) this.graphCanvas.style.display = 'none';
+        if (this.maskOverlayNode) this.maskOverlayNode.setVisible(false);
     }
 
     start() {
         this.active = true;
-        this.createOverlay();
-        this.frameBuffer = [];
-        this.staticHistory.clear();
-        this.angleHistory = [];
-        this.smoothedDirection = {x: 0, y: 0, angle: 0, magnitude: 0, confidence: 0};
-        this.lastFlowData = null;
+        this.createOverlays();
+        this.showOverlays();
     }
 
     stop() {
         this.active = false;
-        this.removeOverlay();
-        for (const fb of this.frameBuffer) {
-            if (fb.gray) fb.gray.delete();
-        }
-        this.frameBuffer = [];
+        this.hideOverlays();
     }
 
     analyze(frame) {
@@ -235,6 +251,28 @@ class MotionAnalyzer {
 
         const videoData = this.videoView.videoData;
         if (!videoData) return;
+
+        const videoId = videoData.id || videoData.filename || 'unknown';
+        if (this.lastVideoDataId !== videoId) {
+            this.lastVideoDataId = videoId;
+            this.invalidateCache();
+        }
+        
+        if (this.lastAFrame !== Sit.aFrame || this.lastBFrame !== Sit.bFrame) {
+            this.lastAFrame = Sit.aFrame;
+            this.lastBFrame = Sit.bFrame;
+            this.invalidateCache();
+        }
+
+        const cached = this.resultCache.get(frame);
+        if (cached) {
+            this.lastFlowData = cached.flowData;
+            this.smoothedDirection = cached.smoothedDirection;
+            this.angleHistory = cached.angleHistory;
+            this.drawOverlay(this.videoView.widthPx, this.videoView.heightPx, cached.imgWidth, cached.imgHeight);
+            this.drawGraph();
+            return;
+        }
 
         const image = videoData.getImage(frame);
         if (!image) return;
@@ -291,6 +329,14 @@ class MotionAnalyzer {
         }
 
         gray.delete();
+
+        this.resultCache.set(frame, {
+            flowData: this.lastFlowData ? {...this.lastFlowData, vectors: [...this.lastFlowData.vectors]} : null,
+            smoothedDirection: {...this.smoothedDirection},
+            angleHistory: [...this.angleHistory],
+            imgWidth: tempCanvas.width,
+            imgHeight: tempCanvas.height,
+        });
 
         this.drawOverlay(width, height, tempCanvas.width, tempCanvas.height);
         this.drawGraph();
@@ -621,6 +667,7 @@ class MotionAnalyzer {
 
 let motionAnalyzer = null;
 let analyzeMenuItem = null;
+let renderHooked = false;
 
 export function toggleMotionAnalysis() {
     const videoView = NodeMan.get("video", false);
@@ -631,7 +678,6 @@ export function toggleMotionAnalysis() {
 
     if (motionAnalyzer && motionAnalyzer.active) {
         motionAnalyzer.stop();
-        motionAnalyzer = null;
         removeParamSliders();
         if (analyzeMenuItem) {
             analyzeMenuItem.name("Analyze Motion");
@@ -643,6 +689,11 @@ export function toggleMotionAnalysis() {
         return;
     }
 
+    if (cv) {
+        startAnalysis(videoView);
+        return;
+    }
+    
     if (analyzeMenuItem) {
         analyzeMenuItem.name("Loading OpenCV...");
     }
@@ -661,7 +712,9 @@ export function toggleMotionAnalysis() {
 let paramControllers = [];
 
 function startAnalysis(videoView) {
-    motionAnalyzer = new MotionAnalyzer(videoView);
+    if (!motionAnalyzer) {
+        motionAnalyzer = new MotionAnalyzer(videoView);
+    }
     motionAnalyzer.start();
     
     if (analyzeMenuItem) {
@@ -670,13 +723,16 @@ function startAnalysis(videoView) {
 
     createParamSliders();
 
-    const originalRender = videoView.renderCanvas.bind(videoView);
-    videoView.renderCanvas = function(frame) {
-        originalRender(frame);
-        if (motionAnalyzer && motionAnalyzer.active) {
-            motionAnalyzer.analyze(frame);
-        }
-    };
+    if (!renderHooked) {
+        renderHooked = true;
+        const originalRender = videoView.renderCanvas.bind(videoView);
+        videoView.renderCanvas = function(frame) {
+            originalRender(frame);
+            if (motionAnalyzer && motionAnalyzer.active) {
+                motionAnalyzer.analyze(frame);
+            }
+        };
+    }
 
     setRenderOne(true);
 }
@@ -703,33 +759,34 @@ function createParamSliders() {
     removeParamSliders();
     
     const p = motionAnalyzer.params;
+    const invalidate = () => motionAnalyzer.onParamChange();
     const update = () => setRenderOne(true);
     
-    paramControllers.push(motionFolder.add(p, 'frameSkip', 1, 10, 1).name("Frame Skip").onChange(update)
+    paramControllers.push(motionFolder.add(p, 'frameSkip', 1, 10, 1).name("Frame Skip").onChange(invalidate)
         .tooltip("Frames between comparisons (higher = detect slower motion)"));
-    paramControllers.push(motionFolder.add(p, 'blurSize', 1, 15, 2).name("Blur Size").onChange(update)
+    paramControllers.push(motionFolder.add(p, 'blurSize', 1, 15, 2).name("Blur Size").onChange(invalidate)
         .tooltip("Gaussian blur for macro features (odd numbers)"));
-    paramControllers.push(motionFolder.add(p, 'maxFeatures', 50, 500, 10).name("Max Features").onChange(update)
+    paramControllers.push(motionFolder.add(p, 'maxFeatures', 50, 500, 10).name("Max Features").onChange(invalidate)
         .tooltip("Maximum tracked features"));
-    paramControllers.push(motionFolder.add(p, 'minDistance', 5, 50, 1).name("Min Distance").onChange(update)
+    paramControllers.push(motionFolder.add(p, 'minDistance', 5, 50, 1).name("Min Distance").onChange(invalidate)
         .tooltip("Minimum distance between features"));
-    paramControllers.push(motionFolder.add(p, 'qualityLevel', 0.001, 0.1, 0.001).name("Quality Level").onChange(update)
+    paramControllers.push(motionFolder.add(p, 'qualityLevel', 0.001, 0.1, 0.001).name("Quality Level").onChange(invalidate)
         .tooltip("Feature detection quality threshold"));
-    paramControllers.push(motionFolder.add(p, 'minQuality', 0, 1, 0.05).name("Min Quality").onChange(update)
+    paramControllers.push(motionFolder.add(p, 'minQuality', 0, 1, 0.05).name("Min Quality").onChange(invalidate)
         .tooltip("Minimum quality to display arrow"));
-    paramControllers.push(motionFolder.add(p, 'maxTrackError', 5, 50, 1).name("Max Track Error").onChange(update)
+    paramControllers.push(motionFolder.add(p, 'maxTrackError', 5, 50, 1).name("Max Track Error").onChange(invalidate)
         .tooltip("Maximum tracking error threshold"));
-    paramControllers.push(motionFolder.add(p, 'minMotion', 0, 2, 0.1).name("Min Motion").onChange(update)
+    paramControllers.push(motionFolder.add(p, 'minMotion', 0, 2, 0.1).name("Min Motion").onChange(invalidate)
         .tooltip("Minimum motion magnitude (pixels/frame)"));
-    paramControllers.push(motionFolder.add(p, 'maxMotion', 10, 200, 5).name("Max Motion").onChange(update)
+    paramControllers.push(motionFolder.add(p, 'maxMotion', 10, 200, 5).name("Max Motion").onChange(invalidate)
         .tooltip("Maximum motion magnitude"));
-    paramControllers.push(motionFolder.add(p, 'staticThreshold', 0.1, 2, 0.1).name("Static Threshold").onChange(update)
+    paramControllers.push(motionFolder.add(p, 'staticThreshold', 0.1, 2, 0.1).name("Static Threshold").onChange(invalidate)
         .tooltip("Motion below this is considered static (HUD)"));
-    paramControllers.push(motionFolder.add(p, 'staticFrames', 5, 30, 1).name("Static Frames").onChange(update)
+    paramControllers.push(motionFolder.add(p, 'staticFrames', 5, 30, 1).name("Static Frames").onChange(invalidate)
         .tooltip("Frames to confirm static detection"));
-    paramControllers.push(motionFolder.add(p, 'smoothingAlpha', 0.5, 0.99, 0.01).name("Smoothing").onChange(update)
+    paramControllers.push(motionFolder.add(p, 'smoothingAlpha', 0.5, 0.99, 0.01).name("Smoothing").onChange(invalidate)
         .tooltip("Direction smoothing (higher = more smoothing)"));
-    paramControllers.push(motionFolder.add(p, 'inlierThreshold', 0.3, 0.9, 0.05).name("Inlier Threshold").onChange(update)
+    paramControllers.push(motionFolder.add(p, 'inlierThreshold', 0.3, 0.9, 0.05).name("Inlier Threshold").onChange(invalidate)
         .tooltip("Threshold for consensus direction agreement"));
     
     const maskControls = {
@@ -737,12 +794,14 @@ function createParamSliders() {
         clearMask: () => {
             if (motionAnalyzer) {
                 motionAnalyzer.clearMask();
+                motionAnalyzer.onMaskChange();
             }
         }
     };
     
-    paramControllers.push(motionFolder.add(motionAnalyzer, 'maskEnabled').name("Enable Mask").onChange(update)
-        .tooltip("Enable/disable mask filtering"));
+    paramControllers.push(motionFolder.add(motionAnalyzer, 'maskEnabled').name("Enable Mask").onChange(() => {
+        motionAnalyzer.onMaskChange();
+    }).tooltip("Enable/disable mask filtering"));
     
     paramControllers.push(motionFolder.add(maskControls, 'editMask').name("Edit Mask").onChange((v) => {
         motionAnalyzer.setMaskEditing(v);

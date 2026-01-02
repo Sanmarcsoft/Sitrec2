@@ -339,7 +339,7 @@ Then there are the project build files:
 - `Dockerfile` - configures the Docker image (which goes in the container)
 - `package.json` - top-level descriptor, contains npm scripts for build and deploy. It also contains the devDependencies (node modules that are used)
 - `webpack.common.js` - the main configuration file for Webpack. The next two files both include this.
-- `webpack.copy-files.js` - a seperate Webpack config to just copy the files wihout rebuilding
+- `webpack.copy-files.js` - a separate Webpack config to just copy the files wihout rebuilding
 - `webpack.dev.js` - used for development
 - `webpack.prod.js` - used for production/deployment
 - `webpackCopyPatterns.js` - defines what files are copied from the dev folder to the build, and how they are transformed and.or renamed (e.g. custom.env)

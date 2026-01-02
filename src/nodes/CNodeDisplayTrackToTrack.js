@@ -19,7 +19,7 @@ export class CNodeDisplayTrackToTrack extends CNode3DGroup {
         // and automatically convert constant inputs to CConstantNodes
         this.input("cameraTrack") // track contains position, and optionally color
         this.input("targetTrack") // track contains position, and optionally color
-        this.input("color") // or color can be supplied in a seperate node
+        this.input("color") // or color can be supplied in a separate node
         this.input("width") // Width currently only working as a constant (v0 is used)
 
         assert(this.in.cameraTrack.p(0) !== undefined, "CNodeDisplayTrackPosition needs input with position")

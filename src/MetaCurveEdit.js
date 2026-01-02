@@ -92,7 +92,7 @@ function tween(a,b,t) {
 
 // given a series of [x,y] points in ps and a parametric time t, find the point along the curve
 // this could be a lot faster if we store the numbers simpler
-// can even seperate out x and y and just work with one of them
+// can even separate out x and y and just work with one of them
 // (like for finding t for a particular y value, you don't need all those x values)
 function BezierPoint(ps, t) {
 

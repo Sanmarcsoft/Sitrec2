@@ -254,7 +254,7 @@ export class CNodeTerrainUI extends CNode {
 
         this.gui = guiMenus.terrain;
         this.mapTypeMenu = this.gui.add(this, "mapType", this.mapTypesKV).listen().name("Map Type")
-            .tooltip("Map type for terrain textures (seperate from elevation data)")
+            .tooltip("Map type for terrain textures (separate from elevation data)")
 
 //////////////////////////////////////////////////////////////////////////////////////////
         // same for elevation sources

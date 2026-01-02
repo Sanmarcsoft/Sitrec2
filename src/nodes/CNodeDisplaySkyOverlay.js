@@ -25,7 +25,7 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
             this.syncVideoZoom = true;
         }
 
-        // this.seperateVisibility = true;
+        // this.separateVisibility = true;
 
         //    guiShowHide.add(this,"showSatelliteNames" ).onChange(()=>{setRenderOne(true);}).name(this.overlayView.id+" Sat names")
         gui.add(this, "showStarNames").onChange(() => {
