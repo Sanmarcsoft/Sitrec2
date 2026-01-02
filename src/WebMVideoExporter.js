@@ -105,14 +105,18 @@ export class WebMVideoExporter {
         this.frameCount++;
     }
 
-    async finalize() {
+    async finalize(onProgress = null) {
+        if (onProgress) {
+            onProgress(0, this.chunks.length);
+            await new Promise(r => setTimeout(r, 0));
+        }
         await this.encoder.flush();
         this.encoder.close();
         
-        return this.createWebMBlob();
+        return this.createWebMBlob(onProgress);
     }
 
-    createWebMBlob() {
+    async createWebMBlob(onProgress = null) {
         const chunks = this.chunks;
         const width = this.width;
         const height = this.height;
@@ -237,6 +241,7 @@ export class WebMVideoExporter {
         const clusters = [];
         const maxClusterDurationMs = 3000;
         let clusterStartIdx = 0;
+        let chunksProcessed = 0;
 
         while (clusterStartIdx < chunks.length) {
             const clusterStartTimeMicros = chunks[clusterStartIdx].timestamp;
@@ -268,6 +273,12 @@ export class WebMVideoExporter {
                 const simpleBlock = element([0xa3], blockData);
                 clusterParts.push(simpleBlock);
                 i++;
+                chunksProcessed++;
+                
+                if (onProgress && chunksProcessed % 10 === 0) {
+                    onProgress(chunksProcessed, chunks.length);
+                    await new Promise(r => setTimeout(r, 0));
+                }
             }
 
             let clusterDataLength = 0;
@@ -283,6 +294,10 @@ export class WebMVideoExporter {
 
             clusters.push(element([0x1f, 0x43, 0xb6, 0x75], clusterData));
             clusterStartIdx = i;
+        }
+
+        if (onProgress) {
+            onProgress(chunks.length, chunks.length);
         }
 
         // TODO: For better seeking support, add:

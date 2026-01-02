@@ -328,9 +328,9 @@ export class CNodeView3D extends CNodeViewCanvas {
             }
             
             if (progress.shouldSave()) {
-                progress.setStatus('Creating file...');
-                
-                const webmBlob = await exporter.finalize();
+                const webmBlob = await exporter.finalize((current, total) => {
+                    progress.setFinalizeProgress(current, total);
+                });
                 
                 const filename = `lookview_${Sit.name || 'export'}_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.webm`;
                 const url = URL.createObjectURL(webmBlob);

@@ -1259,6 +1259,10 @@ export class ExportProgressWidget {
         document.getElementById('exportProgress').textContent = text;
     }
     
+    setFinalizeProgress(current, total) {
+        document.getElementById('exportProgress').textContent = `Creating file... ${current} / ${total}`;
+    }
+    
     shouldStop() {
         return this.stopEarly || this.abortExport;
     }
