@@ -628,7 +628,7 @@ export class CNodeFrameSlider extends CNode {
         const globalMouseMove = (event) => {
             if (isDragging) {
                 const mousePos = getMousePos(event);
-                const newFrame = Math.max(0, Math.min(Sit.frames, pixelToFrame(mousePos.x)));
+                const newFrame = Math.max(0, Math.min(Sit.frames - 1, pixelToFrame(mousePos.x)));
                 
                 if (this.draggingALimit) {
                     Sit.aFrame = newFrame;
@@ -729,7 +729,7 @@ export class CNodeFrameSlider extends CNode {
                     touches: event.touches
                 };
                 const mousePos = getMousePos(touchEvent);
-                const newFrame = Math.max(0, Math.min(Sit.frames, pixelToFrame(mousePos.x)));
+                const newFrame = Math.max(0, Math.min(Sit.frames - 1, pixelToFrame(mousePos.x)));
                 
                 if (this.draggingALimit) {
                     Sit.aFrame = newFrame;
