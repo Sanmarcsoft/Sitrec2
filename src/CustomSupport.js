@@ -56,6 +56,7 @@ import {parseObjectInput as parseObjectInputUtil} from "./utils/parseObjectInput
 import {initializeSettings, SettingsSaver} from "./SettingsManager";
 import {CNodeCurveEditor2} from "./nodes/CNodeCurveEdit2";
 import {createCustomModalWithCopy, saveFilePrompted} from "./FileUtils";
+import {deserializeMotionAnalysis, serializeMotionAnalysis} from "./CMotionAnalysis";
 
 export class CCustomManager {
     constructor() {
@@ -2929,7 +2930,6 @@ export class CCustomManager {
             "aFrame",
             "bFrame",
             "ignores",
-            "motionMask",
         ]
 
         const globalsNeeded = [
@@ -3004,6 +3004,9 @@ export class CCustomManager {
 
         // Serialize synthetic 3D buildings from Synth3DManager
         out.syntheticBuildings = Synth3DManager.serialize()
+
+        // Serialize motion analysis state
+        out.motionAnalysis = serializeMotionAnalysis()
 
         // do the export version tracking last, so none of the combining sitches overwrites it
         out.exportVersion = process.env.BUILD_VERSION_STRING
@@ -3386,6 +3389,10 @@ export class CCustomManager {
 
         if (sitchData.guiMenus) {
             Globals.menuBar.modDeserialize(sitchData.guiMenus);
+        }
+
+        if (sitchData.motionAnalysis) {
+            deserializeMotionAnalysis(sitchData.motionAnalysis);
         }
 
         Globals.dontRecalculate = false;

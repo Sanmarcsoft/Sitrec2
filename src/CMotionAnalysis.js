@@ -171,7 +171,14 @@ class MotionAnalyzer {
     
     setMaskEditing(enabled) {
         if (this.maskOverlayNode) {
-            this.maskOverlayNode.setVisible(enabled);
+            this.maskOverlayNode.setEditing(enabled);
+            setRenderOne(true);
+        }
+    }
+    
+    updateMaskPreview() {
+        if (this.maskOverlayNode) {
+            this.maskOverlayNode.setShowMaskPreview(this.maskEnabled);
             setRenderOne(true);
         }
     }
@@ -232,13 +239,17 @@ class MotionAnalyzer {
             this.overlayCtx.clearRect(0, 0, this.overlay.width, this.overlay.height);
         }
         if (this.graphCanvas) this.graphCanvas.style.display = 'none';
-        if (this.maskOverlayNode) this.maskOverlayNode.setVisible(false);
+        if (this.maskOverlayNode) {
+            this.maskOverlayNode.setShowMaskPreview(false);
+            this.maskOverlayNode.setEditing(false);
+        }
     }
 
     start() {
         this.active = true;
         this.createOverlays();
         this.showOverlays();
+        this.updateMaskPreview();
     }
 
     stop() {
@@ -800,6 +811,7 @@ function createParamSliders() {
     };
     
     paramControllers.push(motionFolder.add(motionAnalyzer, 'maskEnabled').name("Enable Mask").onChange(() => {
+        motionAnalyzer.updateMaskPreview();
         motionAnalyzer.onMaskChange();
     }).tooltip("Enable/disable mask filtering"));
     
@@ -823,4 +835,77 @@ function removeParamSliders() {
         try { ctrl.destroy(); } catch (e) {}
     }
     paramControllers = [];
+}
+
+export function serializeMotionAnalysis() {
+    if (!motionAnalyzer) return null;
+    
+    return {
+        active: motionAnalyzer.active,
+        params: {...motionAnalyzer.params},
+        maskEnabled: motionAnalyzer.maskEnabled,
+        brushSize: motionAnalyzer.brushSize,
+        maskData: motionAnalyzer.maskOverlayNode?.maskData ?? null,
+    };
+}
+
+export function deserializeMotionAnalysis(data) {
+    if (!data) return;
+    
+    const videoView = NodeMan.get("video", false);
+    if (!videoView) return;
+    
+    if (data.active) {
+        const doRestore = () => {
+            if (!motionAnalyzer) {
+                motionAnalyzer = new MotionAnalyzer(videoView);
+            }
+            
+            if (data.params) {
+                Object.assign(motionAnalyzer.params, data.params);
+            }
+            if (data.maskEnabled !== undefined) {
+                motionAnalyzer.maskEnabled = data.maskEnabled;
+            }
+            if (data.brushSize !== undefined) {
+                motionAnalyzer.brushSize = data.brushSize;
+            }
+            
+            motionAnalyzer.start();
+            
+            if (data.maskData && motionAnalyzer.maskOverlayNode) {
+                motionAnalyzer.maskOverlayNode.maskData = data.maskData;
+                motionAnalyzer.maskOverlayNode.loadMask();
+            }
+            
+            if (analyzeMenuItem) {
+                analyzeMenuItem.name("Stop Analysis");
+            }
+            
+            createParamSliders();
+            
+            if (!renderHooked) {
+                renderHooked = true;
+                const originalRender = videoView.renderCanvas.bind(videoView);
+                videoView.renderCanvas = function(frame) {
+                    originalRender(frame);
+                    if (motionAnalyzer && motionAnalyzer.active) {
+                        motionAnalyzer.analyze(frame);
+                    }
+                };
+            }
+            
+            setRenderOne(true);
+        };
+        
+        if (cv) {
+            doRestore();
+        } else {
+            loadOpenCV().then(() => {
+                doRestore();
+            }).catch(e => {
+                console.error("Failed to restore motion analysis:", e);
+            });
+        }
+    }
 }

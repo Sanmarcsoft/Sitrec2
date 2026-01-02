@@ -1,5 +1,5 @@
 import {CNodeActiveOverlay} from "./CNodeTrackingOverlay";
-import {setRenderOne, Sit} from "../Globals";
+import {setRenderOne} from "../Globals";
 import {mouseToCanvas} from "../ViewUtils";
 import {undoManager} from "../UndoManager";
 import {isKeyCodeHeld} from "../KeyBoardHandler";
@@ -10,13 +10,9 @@ export class CNodeMaskOverlay extends CNodeActiveOverlay {
         
         this.separateVisibility = true;
         
-        if (v.visible !== undefined) {
-            this.visible = !v.visible;
-            this.setVisible(v.visible);
-        }
-        
         this.brushSize = v.brushSize ?? 20;
         this.onMaskChange = v.onMaskChange ?? null;
+        this.maskData = null;
         this.maskCanvas = null;
         this.maskCtx = null;
         this.maskImageData = null;
@@ -27,14 +23,45 @@ export class CNodeMaskOverlay extends CNodeActiveOverlay {
         this.lastMouseY = 0;
         this.preDrawMaskData = null;
         this.lastBrushAdjustTime = 0;
+        this.showMaskPreview = false;
+        this.editing = false;
+        this.visible = false;
         
         this.loadMask();
     }
     
-    setVisible(visible) {
-        super.setVisible(visible);
+    modSerialize() {
+        return {
+            ...super.modSerialize(),
+            maskData: this.maskData,
+        };
+    }
+    
+    modDeserialize(v) {
+        super.modDeserialize(v);
+        if (v.maskData !== undefined) {
+            this.maskData = v.maskData;
+            this.loadMask();
+        }
+    }
+    
+    setEditing(editing) {
+        this.editing = editing;
+        this.updateVisibility();
         if (this.overlayView && this.overlayView.div) {
-            this.overlayView.div.style.cursor = visible ? 'none' : '';
+            this.overlayView.div.style.cursor = editing ? 'none' : '';
+        }
+    }
+    
+    setShowMaskPreview(show) {
+        this.showMaskPreview = show;
+        this.updateVisibility();
+    }
+    
+    updateVisibility() {
+        const shouldBeVisible = this.editing || this.showMaskPreview;
+        if (this.visible !== shouldBeVisible) {
+            this.visible = shouldBeVisible;
         }
     }
     
@@ -45,7 +72,7 @@ export class CNodeMaskOverlay extends CNodeActiveOverlay {
     }
     
     loadMask() {
-        if (Sit.motionMask) {
+        if (this.maskData) {
             const img = new Image();
             img.onload = () => {
                 if (this.maskCanvas) {
@@ -53,13 +80,13 @@ export class CNodeMaskOverlay extends CNodeActiveOverlay {
                     this.updateMaskImageData();
                 }
             };
-            img.src = Sit.motionMask;
+            img.src = this.maskData;
         }
     }
     
     saveMask() {
         if (this.maskCanvas) {
-            Sit.motionMask = this.maskCanvas.toDataURL('image/png');
+            this.maskData = this.maskCanvas.toDataURL('image/png');
             this.updateMaskImageData();
             this.notifyMaskChange();
         }
@@ -85,13 +112,13 @@ export class CNodeMaskOverlay extends CNodeActiveOverlay {
             tempCtx.putImageData(oldData, 0, 0);
             this.maskCtx.drawImage(tempCanvas, 0, 0, width, height);
             this.updateMaskImageData();
-        } else if (Sit.motionMask) {
+        } else if (this.maskData) {
             const img = new Image();
             img.onload = () => {
                 this.maskCtx.drawImage(img, 0, 0, width, height);
                 this.updateMaskImageData();
             };
-            img.src = Sit.motionMask;
+            img.src = this.maskData;
         }
     }
     
@@ -187,6 +214,8 @@ export class CNodeMaskOverlay extends CNodeActiveOverlay {
     }
     
     onMouseDown(e, mouseX, mouseY) {
+        if (!this.editing) return false;
+        
         const [cx, cy] = mouseToCanvas(this, mouseX, mouseY);
         const [vX, vY] = this.overlayView.canvasToVideoCoords(cx, cy);
         
@@ -204,6 +233,8 @@ export class CNodeMaskOverlay extends CNodeActiveOverlay {
     }
     
     onMouseDrag(e, mouseX, mouseY) {
+        if (!this.editing) return;
+        
         this.lastMouseX = mouseX;
         this.lastMouseY = mouseY;
         
@@ -217,6 +248,8 @@ export class CNodeMaskOverlay extends CNodeActiveOverlay {
     }
     
     onMouseUp(e, mouseX, mouseY) {
+        if (!this.editing) return;
+        
         if (this.isDrawing) {
             this.isDrawing = false;
             this.lastDrawX = null;
@@ -253,6 +286,8 @@ export class CNodeMaskOverlay extends CNodeActiveOverlay {
     }
     
     onMouseMove(e, mouseX, mouseY) {
+        if (!this.editing) return;
+        
         this.lastMouseX = mouseX;
         this.lastMouseY = mouseY;
         setRenderOne(true);
@@ -282,9 +317,15 @@ export class CNodeMaskOverlay extends CNodeActiveOverlay {
     }
     
     renderCanvas(frame) {
+        if (!this.editing && !this.showMaskPreview) {
+            return;
+        }
+        
         super.renderCanvas(frame);
         
-        this.handleBrushSizeKeys();
+        if (this.editing) {
+            this.handleBrushSizeKeys();
+        }
         
         this.ensureMaskInitialized();
         if (!this.maskCanvas) return;
@@ -292,7 +333,7 @@ export class CNodeMaskOverlay extends CNodeActiveOverlay {
         const ctx = this.ctx;
         
         ctx.save();
-        ctx.globalAlpha = 0.4;
+        ctx.globalAlpha = this.editing ? 0.4 : 0.2;
         
         this.overlayView.getSourceAndDestCoords();
         const {dx, dy, dWidth, dHeight} = this.overlayView;
@@ -300,7 +341,9 @@ export class CNodeMaskOverlay extends CNodeActiveOverlay {
         ctx.drawImage(this.maskCanvas, dx, dy, dWidth, dHeight);
         ctx.restore();
         
-        this.drawBrushCursor();
+        if (this.editing) {
+            this.drawBrushCursor();
+        }
     }
     
     drawBrushCursor() {
