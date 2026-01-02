@@ -40,7 +40,14 @@ import {getShortURL} from "./urlUtils";
 import {CNode3DObject} from "./nodes/CNode3DObject";
 import {UpdateHUD, UpdatePRFromEA, updateSize} from "./JetStuff";
 import {Frame2Az, Frame2El} from "./JetUtils";
-import {closeFullscreen, degrees, drawVideoWatermark, getDateTimeFilename, openFullscreen} from "./utils";
+import {
+    closeFullscreen,
+    degrees,
+    drawVideoWatermark,
+    ExportProgressWidget,
+    getDateTimeFilename,
+    openFullscreen
+} from "./utils";
 import {ViewMan} from "./CViewManager";
 import {EventManager} from "./CEventManager";
 import {isLocal, SITREC_APP, SITREC_SERVER} from "./configUtils";
@@ -751,10 +758,7 @@ export class CCustomManager {
         const savedPaused = par.paused;
         par.paused = true;
 
-        const progressDiv = document.createElement('div');
-        progressDiv.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);color:white;padding:20px;border-radius:10px;z-index:10000;font-family:Arial;text-align:center;';
-        progressDiv.innerHTML = '<div>Exporting viewport video...</div><div id="exportProgress">0 / ' + totalFrames + '</div>';
-        document.body.appendChild(progressDiv);
+        const progress = new ExportProgressWidget('Exporting viewport video...', totalFrames);
 
         const compositeCanvas = document.createElement('canvas');
         compositeCanvas.width = width;
@@ -776,6 +780,8 @@ export class CCustomManager {
             await exporter.initialize();
 
             for (let i = 0; i < totalFrames; i++) {
+                if (progress.shouldStop()) break;
+                
                 const frame = startFrame + i;
                 par.frame = frame;
                 GlobalDateTimeNode.update(frame);
@@ -900,30 +906,34 @@ export class CCustomManager {
                 await exporter.addFrame(compositeCanvas, frame);
 
                 if (i % 10 === 0) {
-                    document.getElementById('exportProgress').textContent = `${i + 1} / ${totalFrames}`;
+                    progress.update(i + 1);
                     await new Promise(r => setTimeout(r, 0));
                 }
             }
 
-            document.getElementById('exportProgress').textContent = 'Creating file...';
+            if (progress.shouldSave()) {
+                progress.setStatus('Creating file...');
 
-            const webmBlob = await exporter.finalize();
+                const webmBlob = await exporter.finalize();
 
-            const filename = `viewport_${Sit.name || 'export'}_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.webm`;
-            const url = URL.createObjectURL(webmBlob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            a.click();
-            URL.revokeObjectURL(url);
+                const filename = `viewport_${Sit.name || 'export'}_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.webm`;
+                const url = URL.createObjectURL(webmBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(url);
 
-            console.log(`Viewport video export complete: ${filename}`);
+                console.log(`Viewport video export complete: ${filename}`);
+            } else {
+                console.log('Viewport video export aborted by user');
+            }
 
         } catch (e) {
             console.error('Export failed:', e);
             alert('Viewport video export failed: ' + e.message);
         } finally {
-            progressDiv.remove();
+            progress.remove();
             par.frame = savedFrame;
             par.paused = savedPaused;
             setRenderOne(true);

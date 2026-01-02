@@ -646,13 +646,17 @@ export function openFullscreen() {
         elem.msRequestFullscreen();
     }
 } /* Close fullscreen */
+export function isFullscreen() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+}
+
 export function closeFullscreen() {
-    var elem = document.documentElement;
+    if (!isFullscreen()) return;
     if (document.exitFullscreen) {
         document.exitFullscreen();
-    } else if (document.webkitExitFullscreen) { /* Safari */
+    } else if (document.webkitExitFullscreen) {
         document.webkitExitFullscreen();
-    } else if (document.msExitFullscreen) { /* IE11 */
+    } else if (document.msExitFullscreen) {
         document.msExitFullscreen();
     }
 }
@@ -1226,4 +1230,44 @@ export function getDateTimeFilename() {
     // strip out - and : so it's a valid filename (leave the underscore)
     const todayDateTimeFilename = todayDateTimeStr.replaceAll("-", "").replaceAll(":", "");
     return todayDateTimeFilename;
+}
+
+export class ExportProgressWidget {
+    constructor(label, totalFrames) {
+        this.totalFrames = totalFrames;
+        this.stopEarly = false;
+        this.abortExport = false;
+        
+        this.div = document.createElement('div');
+        this.div.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);color:white;padding:20px;border-radius:10px;z-index:2147483647;font-family:Arial;text-align:center;';
+        this.div.innerHTML = `<div>${label}</div><div id="exportProgress">0 / ${totalFrames}</div>` +
+            '<div style="margin-top:15px;">' +
+            '<button id="exportEnough" style="background:#28a745;color:white;border:none;padding:8px 16px;margin-right:10px;border-radius:5px;cursor:pointer;font-size:14px;">Enough</button>' +
+            '<button id="exportAbort" style="background:#dc3545;color:white;border:none;padding:8px 16px;border-radius:5px;cursor:pointer;font-size:14px;">Abort</button>' +
+            '</div>';
+        document.body.appendChild(this.div);
+        
+        document.getElementById('exportEnough').addEventListener('click', () => { this.stopEarly = true; });
+        document.getElementById('exportAbort').addEventListener('click', () => { this.abortExport = true; });
+    }
+    
+    update(current) {
+        document.getElementById('exportProgress').textContent = `${current} / ${this.totalFrames}`;
+    }
+    
+    setStatus(text) {
+        document.getElementById('exportProgress').textContent = text;
+    }
+    
+    shouldStop() {
+        return this.stopEarly || this.abortExport;
+    }
+    
+    shouldSave() {
+        return !this.abortExport;
+    }
+    
+    remove() {
+        this.div.remove();
+    }
 }
