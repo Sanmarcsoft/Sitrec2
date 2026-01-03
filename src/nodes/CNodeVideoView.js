@@ -554,6 +554,11 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
     getSourceAndDestCoords() {
         assert(this.in.zoom !== undefined, "canvasToVideoCoords requires zoom input to be defined");
 
+        // Ensure dimensions are current - important when overlays call this before the video view renders
+        if (this.div && (this.widthPx !== this.div.clientWidth || this.heightPx !== this.div.clientHeight)) {
+            this.setFromDiv(this.div);
+        }
+
         // videoWidth and videoHeight are the original video dimensions
         let sourceW = this.videoWidth;
         let sourceH = this.videoHeight

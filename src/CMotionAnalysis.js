@@ -275,19 +275,6 @@ class MotionAnalyzer {
             this.invalidateCache();
         }
 
-        const cached = this.resultCache.get(frame);
-        if (cached) {
-            this.lastFlowData = cached.flowData;
-            this.smoothedDirection = cached.smoothedDirection;
-            this.angleHistory = cached.angleHistory;
-            this.drawOverlay(this.videoView.widthPx, this.videoView.heightPx, cached.imgWidth, cached.imgHeight);
-            this.drawGraph();
-            return;
-        }
-
-        const image = videoData.getImage(frame);
-        if (!image) return;
-
         const width = this.videoView.widthPx;
         const height = this.videoView.heightPx;
 
@@ -295,6 +282,19 @@ class MotionAnalyzer {
             this.overlay.width = width;
             this.overlay.height = height;
         }
+
+        const cached = this.resultCache.get(frame);
+        if (cached) {
+            this.lastFlowData = cached.flowData;
+            this.smoothedDirection = cached.smoothedDirection;
+            this.angleHistory = cached.angleHistory;
+            this.drawOverlay(width, height, cached.imgWidth, cached.imgHeight);
+            this.drawGraph();
+            return;
+        }
+
+        const image = videoData.getImage(frame);
+        if (!image) return;
 
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = image.width || image.videoWidth || width;
@@ -567,43 +567,19 @@ class MotionAnalyzer {
         return {dx, dy, confidence, inlierCount: inliers.length};
     }
 
-    getVideoBounds(canvasWidth, canvasHeight, videoWidth, videoHeight) {
-        const aspectSource = videoWidth / videoHeight;
-        const aspectView = canvasWidth / canvasHeight;
-        
-        let dx, dy, dWidth, dHeight;
-        
-        if (aspectSource > aspectView) {
-            dx = 0;
-            dy = (canvasHeight - canvasWidth / aspectSource) / 2;
-            dWidth = canvasWidth;
-            dHeight = canvasWidth / aspectSource;
-        } else {
-            dx = (canvasWidth - canvasHeight * aspectSource) / 2;
-            dy = 0;
-            dWidth = canvasHeight * aspectSource;
-            dHeight = canvasHeight;
-        }
-        
-        return {dx, dy, dWidth, dHeight};
-    }
-
     drawOverlay(width, height, imgWidth, imgHeight) {
         const ctx = this.overlayCtx;
         ctx.clearRect(0, 0, width, height);
 
         if (!this.lastFlowData) return;
 
-        const bounds = this.getVideoBounds(width, height, imgWidth, imgHeight);
-        const scaleX = bounds.dWidth / imgWidth;
-        const scaleY = bounds.dHeight / imgHeight;
         const arrowScale = 3;
 
         for (const v of this.lastFlowData.vectors) {
-            const cx = bounds.dx + v.px * scaleX;
-            const cy = bounds.dy + v.py * scaleY;
-            const dx = v.dx * scaleX * arrowScale;
-            const dy = v.dy * scaleY * arrowScale;
+            const [cx, cy] = this.videoView.videoToCanvasCoords(v.px, v.py);
+            const [endX, endY] = this.videoView.videoToCanvasCoords(v.px + v.dx * arrowScale, v.py + v.dy * arrowScale);
+            const dx = endX - cx;
+            const dy = endY - cy;
             const mag = Math.sqrt(dx * dx + dy * dy);
 
             if (mag < 1) continue;
@@ -630,9 +606,8 @@ class MotionAnalyzer {
         }
 
         if (this.smoothedDirection.magnitude > 0.5 && this.smoothedDirection.confidence > 0.1) {
-            const centerX = bounds.dx + bounds.dWidth / 2;
-            const centerY = bounds.dy + bounds.dHeight / 2;
-            const arrowLen = Math.min(bounds.dWidth, bounds.dHeight) * 0.15 * Math.min(1, this.smoothedDirection.magnitude / 5);
+            const [centerX, centerY] = this.videoView.videoToCanvasCoords(imgWidth / 2, imgHeight / 2);
+            const arrowLen = Math.min(width, height) * 0.15 * Math.min(1, this.smoothedDirection.magnitude / 5);
             const dx = Math.cos(this.smoothedDirection.angle) * arrowLen;
             const dy = Math.sin(this.smoothedDirection.angle) * arrowLen;
 
