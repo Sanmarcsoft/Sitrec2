@@ -994,10 +994,9 @@ export class CGuiMenuBar {
                 } else {
                     // Has content - make sure it's visible
                     div.style.display = "block";
-                    if (gui._closed) {
-                        if (!gui.lockOpenClose) {
-                            div.style.left = x + "px";
-                        }
+                    if (gui.mode === "DOCKED") {
+                        div.style.left = x + "px";
+                        gui.originalLeft = x;
                     }
                     x += getTextWidth(gui.$title.innerText) + 16;
                 }
