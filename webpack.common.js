@@ -173,6 +173,10 @@ ${bodyContent}
 </body>
 </html>`;
                                 await fs.promises.writeFile(outputPath, htmlContent, 'utf-8');
+                                
+                                // Also copy raw .md file for AI chatbot access
+                                const mdOutputPath = path.join(outputDir, relativePath);
+                                await fs.promises.copyFile(fullPath, mdOutputPath);
                             } else {
                                 // Copy non-markdown files (images, CSS, etc.)
                                 const outputFilePath = path.join(outputDir, relativePath);

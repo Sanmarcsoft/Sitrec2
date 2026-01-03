@@ -288,12 +288,23 @@ class CNodeViewChat extends CNodeViewText {
                 : [null, null];
 
             const history = this.chatHistory.slice(-10);
+            const availableDocs = {
+                "WhatsNew": "Recent changes and new features in Sitrec",
+                "UserInterface": "User interface basics and navigation",
+                "CustomSitchTool": "How to set up a custom situation (sitch)",
+                "Starlink": "How to investigate Starlink satellite flares",
+                "CustomModels": "Using custom 3D models like aircraft",
+                "SavingLoadingSharing": "Saving, loading, and sharing sitches",
+                "ObjectTracking": "Object tracking in video overlays",
+                "LocalCustomSitches": "Setting up local custom sitches",
+            };
             const body = JSON.stringify({
                 history,
                 prompt: text,
                 sitrecDoc: sitrecAPI.getDocumentation(),
                 menuSummary: sitrecAPI.getMenuSummary(),
                 availableModels: Object.keys(ModelFiles),
+                availableDocs: availableDocs,
                 dateTime: timeString,
                 simDateTime: simDate,
                 provider: provider,

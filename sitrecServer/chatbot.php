@@ -223,6 +223,7 @@ if ($continueSession && $toolResults && isset($_SESSION['chatbot_pending'])) {
         $pendingState['model'],
         $pendingState['menuSummary'],
         $pendingState['available3DModels'],
+        $pendingState['availableDocs'] ?? [],
         $pendingState['remainingIterations']
     );
     
@@ -236,6 +237,7 @@ if ($continueSession && $toolResults && isset($_SESSION['chatbot_pending'])) {
             'model' => $pendingState['model'],
             'menuSummary' => $pendingState['menuSummary'],
             'available3DModels' => $pendingState['available3DModels'],
+            'availableDocs' => $pendingState['availableDocs'] ?? [],
             'remainingIterations' => max(1, $pendingState['remainingIterations'] - 1)
         ];
         $result['sessionContinue'] = true;
@@ -279,10 +281,33 @@ foreach (array_slice($rawHistory, -$maxHistoryMessages) as $msg) {
 $sitrecDoc = $data['sitrecDoc'] ?? [];
 $menuSummary = $data['menuSummary'] ?? [];
 $available3DModels = $data['availableModels'] ?? [];
+$availableDocs = $data['availableDocs'] ?? [];
 $date = $data['dateTime'] ?? date('Y-m-d H:i:s');
 $simDateTime = $data['simDateTime'] ?? null;
 $requestedProvider = $data['provider'] ?? null;
 $requestedModel = $data['model'] ?? null;
+
+function getHelpDocContent($docName, $availableDocs) {
+    global $APP_PATH;
+    
+    if (!isset($availableDocs[$docName])) {
+        return ['error' => "Unknown doc: $docName. Available: " . implode(', ', array_keys($availableDocs))];
+    }
+    
+    $docPath = __DIR__ . '/' . $APP_PATH . 'docs/' . $docName . '.md';
+    if (!file_exists($docPath)) {
+        return ['error' => "Doc file not found: $docName. Tried path: $docPath, __DIR__=" . __DIR__ . ", APP_PATH=$APP_PATH"];
+    }
+    
+    $content = file_get_contents($docPath);
+    $content = preg_replace('/<!--[\s\S]*?-->/', '', $content);
+    
+    if (strlen($content) > 8000) {
+        $content = substr($content, 0, 8000) . "\n\n[Content truncated - showing first 8000 characters]";
+    }
+    
+    return ['content' => $content];
+}
 
 // Log AI request
 if (getenv('SITREC_TRACK_STATS')) {
@@ -451,6 +476,19 @@ function buildToolsFromDoc($sitrecDoc, $menuSummary) {
         ]
     ];
     
+    $tools[] = [
+        "type" => "function",
+        "function" => [
+            "name" => "getHelpDoc",
+            "description" => "Read a help documentation file. Use this to answer questions about Sitrec features, what's new, or how to use specific functionality.",
+            "parameters" => [
+                "type" => "object",
+                "properties" => ["docName" => ["type" => "string", "description" => "Name of the doc to read (e.g., 'WhatsNew', 'Starlink', 'UserInterface')"]],
+                "required" => ["docName"]
+            ]
+        ]
+    ];
+    
     return $tools;
 }
 
@@ -558,6 +596,15 @@ Do not discuss anything unrelated to Sitrec, including people, events, or politi
 EOT;
 
 $systemPrompt .= $menuDocForPrompt;
+
+if (!empty($availableDocs)) {
+    $systemPrompt .= "\n\nAVAILABLE HELP DOCUMENTATION:\n";
+    $systemPrompt .= "Use getHelpDoc to read these docs when answering questions about features or how to do things:\n";
+    foreach ($availableDocs as $docName => $description) {
+        $systemPrompt .= "- $docName: $description\n";
+    }
+    $systemPrompt .= "\nFor questions like 'what's new' or 'how do I do X', use getHelpDoc to get accurate information.\n";
+}
 
 // Call OpenAI API
 function callOpenAI($apiKey, $systemPrompt, $history, $tools, $model = 'gpt-4o') {
@@ -887,7 +934,7 @@ function callGrok($apiKey, $systemPrompt, $history, $tools, $model = 'grok-2-lat
 
 // Simulate query-type tool calls on the server side
 // Returns [handled => bool, result => mixed] - if handled, result is the tool response
-function simulateToolCall($fn, $args, $menuSummary, $availableModels) {
+function simulateToolCall($fn, $args, $menuSummary, $availableModels, $availableDocs = []) {
     
     switch ($fn) {
         case 'listMenus':
@@ -900,17 +947,19 @@ function simulateToolCall($fn, $args, $menuSummary, $availableModels) {
             return ['handled' => true, 'result' => ['error' => "Menu '$menu' not found"]];
         case 'listAvailableModels':
             return ['handled' => true, 'result' => $availableModels];
+        case 'getHelpDoc':
+            $docName = $args['docName'] ?? '';
+            $result = getHelpDocContent($docName, $availableDocs);
+            return ['handled' => true, 'result' => $result];
         case 'listObjectFolders':
-            // This would need client state - return empty to force client handling
             return ['handled' => false, 'result' => null];
         default:
-            // Action tools - need client execution
             return ['handled' => false, 'result' => null];
     }
 }
 
 // Tool use loop - allows AI to make multiple tool calls
-function runToolLoop($provider, $apiKey, $systemPrompt, $history, $tools, $model, $menuSummary, $availableModels, $maxIterations = 5) {
+function runToolLoop($provider, $apiKey, $systemPrompt, $history, $tools, $model, $menuSummary, $availableModels, $availableDocs = [], $maxIterations = 5) {
     $allApiCalls = [];  // Action calls to send to client
     $debugInfo = [];
     $finalText = '';
@@ -933,6 +982,7 @@ function runToolLoop($provider, $apiKey, $systemPrompt, $history, $tools, $model
         }
         
         $debugInfo['iteration_' . $iteration] = $result['debug'];
+        $debugInfo['iteration_' . $iteration]['toolResults'] = [];
         
         // Collect any text response
         if (!empty($result['text'])) {
@@ -949,10 +999,15 @@ function runToolLoop($provider, $apiKey, $systemPrompt, $history, $tools, $model
         $pendingActionCalls = [];
         
         foreach ($result['apiCalls'] as $call) {
-            $simResult = simulateToolCall($call['fn'], $call['args'], $menuSummary, $availableModels);
+            $simResult = simulateToolCall($call['fn'], $call['args'], $menuSummary, $availableModels, $availableDocs);
             if ($simResult['handled']) {
                 // Query tool - we can simulate it
                 $handledCalls[] = [
+                    'fn' => $call['fn'],
+                    'args' => $call['args'],
+                    'result' => $simResult['result']
+                ];
+                $debugInfo['iteration_' . $iteration]['toolResults'][] = [
                     'fn' => $call['fn'],
                     'args' => $call['args'],
                     'result' => $simResult['result']
@@ -1009,7 +1064,7 @@ if (!$selectedProvider) {
         'grok' => $GROK_API_KEY,
         default => $OPENAI_API_KEY
     };
-    $result = runToolLoop($selectedProvider, $apiKey, $systemPrompt, $history, $tools, $selectedModel, $menuSummary, $available3DModels, 5);
+    $result = runToolLoop($selectedProvider, $apiKey, $systemPrompt, $history, $tools, $selectedModel, $menuSummary, $available3DModels, $availableDocs, 5);
     
     if (!empty($result['apiCalls'])) {
         $_SESSION['chatbot_pending'] = [
@@ -1021,6 +1076,7 @@ if (!$selectedProvider) {
             'model' => $selectedModel,
             'menuSummary' => $menuSummary,
             'available3DModels' => $available3DModels,
+            'availableDocs' => $availableDocs,
             'remainingIterations' => 4
         ];
         $result['sessionContinue'] = true;
