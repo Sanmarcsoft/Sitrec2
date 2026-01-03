@@ -78,9 +78,8 @@ export class MediabunnyExporter {
             }
         });
 
-        const codecString = this.codec === 'avc' ? 'avc1.640028' : 'vp8';
         const config = {
-            codec: codecString,
+            codec: 'vp8',
             width: encodedWidth,
             height: encodedHeight,
             framerate: this.fps,
@@ -89,18 +88,33 @@ export class MediabunnyExporter {
 
         if (this.codec === 'avc') {
             config.avc = { format: 'avc' };
-        }
-
-        const support = await VideoEncoder.isConfigSupported(config);
-        if (!support.supported) {
-            if (this.codec === 'avc') {
-                config.codec = 'avc1.42001f';
-                const support2 = await VideoEncoder.isConfigSupported(config);
-                if (!support2.supported) {
-                    throw new Error('H.264 codec not supported by browser');
-                }
+            const pixels = encodedWidth * encodedHeight;
+            let startLevel;
+            if (pixels > 8294400) {
+                startLevel = 3; // 5.2 for 4K+
+            } else if (pixels > 3686400) {
+                startLevel = 2; // 5.1 for up to ~4K
+            } else if (pixels > 2073600) {
+                startLevel = 1; // 5.0 for up to ~2.5K
             } else {
-                throw new Error(`${this.codec} codec not supported by browser`);
+                startLevel = 0; // 4.0 for up to ~1080p
+            }
+            const levels = ['avc1.640028', 'avc1.640032', 'avc1.640033', 'avc1.640034'];
+            let supported = false;
+            for (let i = startLevel; i < levels.length; i++) {
+                config.codec = levels[i];
+                if ((await VideoEncoder.isConfigSupported(config)).supported) {
+                    supported = true;
+                    break;
+                }
+            }
+            if (!supported) {
+                throw new Error(`H.264 codec not supported for ${encodedWidth}x${encodedHeight}`);
+            }
+        } else {
+            const support = await VideoEncoder.isConfigSupported(config);
+            if (!support.supported) {
+                throw new Error(`${this.codec} codec not supported for ${encodedWidth}x${encodedHeight}`);
             }
         }
 
