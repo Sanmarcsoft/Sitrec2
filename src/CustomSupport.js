@@ -65,6 +65,7 @@ import {initializeSettings, SettingsSaver} from "./SettingsManager";
 import {CNodeCurveEditor2} from "./nodes/CNodeCurveEdit2";
 import {createCustomModalWithCopy, saveFilePrompted} from "./FileUtils";
 import {deserializeMotionAnalysis, getMotionAnalysisOverlays, serializeMotionAnalysis} from "./CMotionAnalysis";
+import {setupPanoramaExport} from "./PanoramaExporter";
 
 export class CCustomManager {
     constructor() {
@@ -751,6 +752,7 @@ export class CCustomManager {
             .name("Include Audio")
             .tooltip("Include audio track from source video if available");
 
+        setupPanoramaExport(this.renderVideoFolder);
     }
 
     async exportViewportVideo() {
