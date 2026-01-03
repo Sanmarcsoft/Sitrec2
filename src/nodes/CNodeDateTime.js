@@ -251,11 +251,31 @@ export class CNodeDateTime extends CNode {
             this.dateTimeFolder.close();
         }
 
-        this.dateTimeFolder.add(Sit, "frames",1,2000,1).name("Sitch Frames").listen().elastic().onChange((v) => {
-            this.changedFrames();
-
-        })
+        this.guiSitchFrames = this.dateTimeFolder.add(Sit, "frames",1,2000,1).name("Sitch Frames").listen().elastic()
+            .onChange((v) => {
+                this.sitchDuration = this.framesToDuration(Sit.frames);
+            })
+            .onFinishChange((v) => {
+                this.changedFrames();
+            })
             .tooltip("The number of frames in the sitch. If there's a video then this will be the number of frames in the video, but you can change it if you want to add more frames to the sitch, or if you want to use the sitch without a video")
+
+        this.sitchDuration = this.framesToDuration(Sit.frames);
+        this.guiSitchDuration = this.dateTimeFolder.add(this, "sitchDuration").name("Sitch Duration").listen().onFinishChange((v) => {
+            const frames = this.durationToFrames(v);
+            if (frames !== null && frames !== Sit.frames) {
+                Sit.frames = frames;
+                if (Sit.frames > this.guiSitchFrames._max) {
+                    this.guiSitchFrames._elasticMax = Math.max(this.guiSitchFrames._elasticMax, Sit.frames);
+                    while (Sit.frames > this.guiSitchFrames._max && this.guiSitchFrames._max < this.guiSitchFrames._elasticMax) {
+                        this.guiSitchFrames._max = Math.min(this.guiSitchFrames._max * 2, this.guiSitchFrames._elasticMax);
+                    }
+                    this.guiSitchFrames.updateElasticStep();
+                }
+                this.changedFrames();
+            }
+        })
+            .tooltip("Duration of the sitch in HH:MM:SS.sss format")
 
         this.guiAFrame = this.dateTimeFolder.add(Sit, "aFrame",1,Sit.frames,1).name("A Frame").listen().onChange((v) => {
 
@@ -326,11 +346,53 @@ export class CNodeDateTime extends CNode {
         this.guiDay.max(days);
     }
     
+    framesToDuration(frames) {
+        const totalSeconds = frames / Sit.fps;
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        const wholeSeconds = Math.floor(seconds);
+        const milliseconds = Math.round((seconds - wholeSeconds) * 1000);
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${wholeSeconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
+    }
+
+    durationToFrames(durationStr) {
+        let hours = 0, minutes = 0, seconds = 0, milliseconds = 0;
+        
+        const fullMatch = durationStr.match(/^(\d+):(\d+):(\d+)(?:\.(\d+))?$/);
+        if (fullMatch) {
+            hours = parseInt(fullMatch[1], 10);
+            minutes = parseInt(fullMatch[2], 10);
+            seconds = parseInt(fullMatch[3], 10);
+            milliseconds = fullMatch[4] ? parseInt(fullMatch[4].padEnd(3, '0').substring(0, 3), 10) : 0;
+        } else {
+            const mmssMatch = durationStr.match(/^(\d+):(\d+)(?:\.(\d+))?$/);
+            if (mmssMatch) {
+                minutes = parseInt(mmssMatch[1], 10);
+                seconds = parseInt(mmssMatch[2], 10);
+                milliseconds = mmssMatch[3] ? parseInt(mmssMatch[3].padEnd(3, '0').substring(0, 3), 10) : 0;
+            } else {
+                const ssMatch = durationStr.match(/^(\d+)(?:\.(\d+))?$/);
+                if (ssMatch) {
+                    seconds = parseInt(ssMatch[1], 10);
+                    milliseconds = ssMatch[2] ? parseInt(ssMatch[2].padEnd(3, '0').substring(0, 3), 10) : 0;
+                } else {
+                    return null;
+                }
+            }
+        }
+        
+        const totalSeconds = hours * 3600 + minutes * 60 + seconds + milliseconds / 1000;
+        return Math.round(totalSeconds * Sit.fps);
+    }
+
     changedFrames() {
         Sit.frames = Math.round(Sit.frames);
         par.frames = Sit.frames;
         updateGUIFrames();
         updateFrameSlider();
+
+        this.sitchDuration = this.framesToDuration(Sit.frames);
 
         // new maximum values for the aFrame and bFrame sliders
         this.guiAFrame.max(Sit.frames-1);

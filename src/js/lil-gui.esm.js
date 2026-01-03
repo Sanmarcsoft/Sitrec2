@@ -903,7 +903,18 @@ class NumberController extends Controller {
             //     value = this._snap( value );
             // }
 
-            this.setValue( this._clamp( value ) );
+            if ( this._elastic ) {
+                if ( value > this._elasticMax ) {
+                    this._elasticMax = value;
+                }
+                while ( value > this._max && this._max < this._elasticMax ) {
+                    this._max = Math.min( this._max * 2, this._elasticMax );
+                    this.updateElasticStep();
+                }
+                this.setValue( value );
+            } else {
+                this.setValue( this._clamp( value ) );
+            }
 
         };
 
