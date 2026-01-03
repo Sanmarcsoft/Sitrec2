@@ -1,5 +1,10 @@
 import {MediabunnyExporter} from "./MediabunnyExporter";
 
+const isFirefox = typeof navigator !== 'undefined' && navigator.userAgent.includes('Firefox');
+const defaultAccelerationOrder = isFirefox 
+    ? ['prefer-software', 'no-preference'] 
+    : ['prefer-hardware', 'prefer-software', 'no-preference'];
+
 export const VideoFormats = {
     'mp4-h264': {
         name: 'MP4 (H.264)',
@@ -53,7 +58,7 @@ async function checkH264Support(width, height) {
         avc: { format: 'avc' },
     };
     
-    for (const accel of ['prefer-hardware', 'prefer-software', 'no-preference']) {
+    for (const accel of defaultAccelerationOrder) {
         config.hardwareAcceleration = accel;
         try {
             if ((await VideoEncoder.isConfigSupported(config)).supported) {
@@ -112,6 +117,7 @@ export function getFilteredVideoFormatOptions(encodingSupport) {
 }
 
 export function getDefaultVideoFormat(encodingSupport) {
+    if (isFirefox && encodingSupport.vp8) return 'webm-vp8';
     if (encodingSupport.h264) return 'mp4-h264';
     if (encodingSupport.vp8) return 'webm-vp8';
     return null;
@@ -152,7 +158,7 @@ export async function checkCodecAtResolution(formatId, width, height) {
     if (format.codec === 'avc') {
         config.avc = { format: 'avc' };
         const levels = ['avc1.640029', 'avc1.640032', 'avc1.640033', 'avc1.640034'];
-        for (const accel of ['prefer-hardware', 'prefer-software', 'no-preference']) {
+        for (const accel of defaultAccelerationOrder) {
             config.hardwareAcceleration = accel;
             for (const level of levels) {
                 config.codec = level;
