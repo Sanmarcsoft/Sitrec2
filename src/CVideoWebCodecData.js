@@ -478,6 +478,74 @@ export class CVideoWebCodecData extends CVideoData {
         return this.imageCache[frame] !== undefined && this.imageCache[frame].width !== 0;
     }
 
+    async waitForFrame(frame, timeout = 10000) {
+        frame = Math.floor(frame / this.videoSpeed);
+        const start = performance.now();
+        
+        // Wait for video initialization (decoder + chunks + groups must be ready)
+        while (!this.decoder || !this.chunks || !this.groups || this.groups.length === 0) {
+            if (performance.now() - start > timeout) {
+                console.warn(`waitForFrame: timeout waiting for video initialization, frame ${frame}`);
+                return false;
+            }
+            await new Promise(r => setTimeout(r, 50));
+        }
+        
+        if (frame < 0) frame = 0;
+        if (frame >= this.chunks.length) frame = this.chunks.length - 1;
+        
+        if (this.isFrameLoaded(frame * this.videoSpeed)) {
+            return true;
+        }
+        
+        const group = this.getGroup(frame);
+        if (!group) {
+            console.warn(`waitForFrame: no group for frame ${frame}`);
+            return false;
+        }
+        
+        // If group is already loaded, return immediately
+        if (group.loaded) {
+            return this.isFrameLoaded(frame * this.videoSpeed);
+        }
+        
+        // If group is already being decoded, just wait for it
+        if (group.pending > 0) {
+            while (!group.loaded) {
+                if (performance.now() - start > timeout) {
+                    console.warn(`waitForFrame timeout waiting for pending group, frame ${frame}`);
+                    return false;
+                }
+                await new Promise(r => setTimeout(r, 10));
+            }
+            return this.isFrameLoaded(frame * this.videoSpeed);
+        }
+        
+        // Group not loaded and not pending - need to request it
+        // Wait only for decoder to be idle, not for all groups
+        while (this.decoder && this.decoder.decodeQueueSize > 0) {
+            if (performance.now() - start > timeout) {
+                console.warn(`waitForFrame timeout waiting for decoder queue, frame ${frame}`);
+                return false;
+            }
+            await new Promise(r => setTimeout(r, 10));
+        }
+        
+        // Request our group
+        this.requestGroup(group);
+        
+        // Wait for our group to load
+        while (!group.loaded) {
+            if (performance.now() - start > timeout) {
+                console.warn(`waitForFrame timeout waiting for group to load, frame ${frame}`);
+                return false;
+            }
+            await new Promise(r => setTimeout(r, 10));
+        }
+        
+        return this.isFrameLoaded(frame * this.videoSpeed);
+    }
+
     getImage(frame) {
 
         frame = Math.floor(frame / this.videoSpeed); // videoSpeed will normally be 1, but for timelapse will be

@@ -33,6 +33,19 @@ export class CVideoData {
         return img && img.width > 0 && img.height > 0;
     }
 
+    async waitForFrame(frame, timeout = 5000) {
+        this.getImage(frame);
+        const start = performance.now();
+        while (!this.isFrameLoaded(frame)) {
+            if (performance.now() - start > timeout) {
+                console.warn(`waitForFrame timeout for frame ${frame}`);
+                return false;
+            }
+            await new Promise(r => setTimeout(r, 10));
+        }
+        return true;
+    }
+
     update() {
         // nothing to do here
     }

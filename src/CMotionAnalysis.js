@@ -1973,16 +1973,23 @@ async function analyzeAllFrames(progressCallback) {
     if (!videoData) return false;
 
     const totalFrames = Sit.frames;
+    const skipFrames = Math.max(1, Math.round(motionAnalyzer.params.frameSkip));
     
     for (let f = 0; f < totalFrames; f++) {
         if (motionAnalyzer.resultCache.has(f)) continue;
         
+        await videoData.waitForFrame(f);
+        const prevFrame = f - skipFrames;
+        if (prevFrame >= 0) {
+            await videoData.waitForFrame(prevFrame);
+        }
+        
         motionAnalyzer.analyze(f);
         
-        if (progressCallback && f % 10 === 0) {
+        if (progressCallback) {
             progressCallback(f, totalFrames);
-            await new Promise(r => setTimeout(r, 0));
         }
+        await new Promise(r => setTimeout(r, 0));
     }
     return true;
 }
@@ -2080,6 +2087,199 @@ async function createTrackFromMotion() {
     console.log(`Created motion track '${trackId}' from ${motionAnalyzer.resultCache.size} analyzed frames, ${metersPerPixel.toFixed(3)} m/px`);
 }
 
+const MAX_PANORAMA_WIDTH = 20000;
+let exportPanoMenuItem = null;
+let panoCrop = 10;
+let useMaskInPano = true;
+
+async function exportMotionPanorama() {
+    const videoView = NodeMan.get("video", false);
+    if (!videoView) {
+        alert("No video view found.");
+        return;
+    }
+
+    const videoData = videoView.videoData;
+    if (!videoData) {
+        alert("No video data found.");
+        return;
+    }
+
+    if (!cv) {
+        if (exportPanoMenuItem) exportPanoMenuItem.name("Loading OpenCV...");
+        try {
+            await loadOpenCV();
+        } catch (e) {
+            alert("Failed to load OpenCV: " + e.message);
+            if (exportPanoMenuItem) exportPanoMenuItem.name("Export Motion Panorama");
+            return;
+        }
+    }
+
+    if (!motionAnalyzer) {
+        motionAnalyzer = new MotionAnalyzer(videoView);
+    }
+    motionAnalyzer.active = true;
+    motionAnalyzer.createOverlays();
+
+    if (!motionAnalyzer.isCacheFull()) {
+        if (exportPanoMenuItem) exportPanoMenuItem.name("Analyzing... 0%");
+        await analyzeAllFrames((current, total) => {
+            const pct = Math.round(100 * current / total);
+            if (exportPanoMenuItem) exportPanoMenuItem.name(`Analyzing... ${pct}%`);
+        });
+    }
+
+    if (exportPanoMenuItem) exportPanoMenuItem.name("Building panorama...");
+
+    const startFrame = Sit.aFrame;
+    const endFrame = Sit.bFrame;
+    const totalFrames = endFrame - startFrame + 1;
+
+    const motionData = motionAnalyzer.getMotionDataForAllFrames();
+
+    const frameData = [];
+    let cumX = 0, cumY = 0;
+    
+    for (let i = 0; i < totalFrames; i++) {
+        const frame = startFrame + i;
+        if (i > 0) {
+            const md = motionData[frame];
+            cumX -= md.dx;
+            cumY -= md.dy;
+        }
+        frameData.push({frame, px: cumX, py: cumY});
+    }
+
+    let minPx = Infinity, maxPx = -Infinity;
+    let minPy = Infinity, maxPy = -Infinity;
+
+    for (const fd of frameData) {
+        minPx = Math.min(minPx, fd.px);
+        maxPx = Math.max(maxPx, fd.px);
+        minPy = Math.min(minPy, fd.py);
+        maxPy = Math.max(maxPy, fd.py);
+    }
+
+    const firstImage = videoData.getImage(startFrame);
+    const frameWidth = firstImage.width || firstImage.videoWidth || 1920;
+    const frameHeight = firstImage.height || firstImage.videoHeight || 1080;
+
+    const crop = panoCrop;
+    const croppedWidth = frameWidth - 2 * crop;
+    const croppedHeight = frameHeight - 2 * crop;
+
+    console.log(`Motion Panorama: X range ${minPx.toFixed(1)} to ${maxPx.toFixed(1)} px (${(maxPx-minPx).toFixed(1)}px)`);
+    console.log(`Motion Panorama: Y range ${minPy.toFixed(1)} to ${maxPy.toFixed(1)} px (${(maxPy-minPy).toFixed(1)}px)`);
+
+    const pxRange = maxPx - minPx;
+    const pyRange = maxPy - minPy;
+
+    let panoWidthPx = Math.ceil(pxRange + croppedWidth);
+    let panoHeightPx = Math.ceil(pyRange + croppedHeight);
+
+    let scale = 1;
+    if (panoWidthPx > MAX_PANORAMA_WIDTH) {
+        scale = MAX_PANORAMA_WIDTH / panoWidthPx;
+        panoWidthPx = MAX_PANORAMA_WIDTH;
+        panoHeightPx = Math.ceil(panoHeightPx * scale);
+    }
+
+    const scaledFrameWidth = Math.ceil(croppedWidth * scale);
+    const scaledFrameHeight = Math.ceil(croppedHeight * scale);
+
+    console.log(`Motion Panorama: ${panoWidthPx}x${panoHeightPx}px, scale=${scale.toFixed(3)}`);
+
+    const panoCanvas = document.createElement('canvas');
+    panoCanvas.width = panoWidthPx;
+    panoCanvas.height = panoHeightPx;
+    const panoCtx = panoCanvas.getContext('2d');
+
+    panoCtx.fillStyle = 'black';
+    panoCtx.fillRect(0, 0, panoWidthPx, panoHeightPx);
+
+    const useMask = useMaskInPano && motionAnalyzer.maskEnabled && motionAnalyzer.maskOverlayNode && motionAnalyzer.maskOverlayNode.maskCanvas;
+    let tempCanvas = null;
+    let tempCtx = null;
+    let maskImageData = null;
+    
+    if (useMask) {
+        tempCanvas = document.createElement('canvas');
+        tempCanvas.width = frameWidth;
+        tempCanvas.height = frameHeight;
+        tempCtx = tempCanvas.getContext('2d', {willReadFrequently: true});
+        motionAnalyzer.maskOverlayNode.updateMaskImageData();
+        maskImageData = motionAnalyzer.maskOverlayNode.maskImageData;
+    }
+
+    for (let i = 0; i < totalFrames; i++) {
+        const fd = frameData[i];
+        
+        await videoData.waitForFrame(fd.frame);
+        const image = videoData.getImage(fd.frame);
+        
+        if (!image || !image.width) continue;
+
+        const x = (fd.px - minPx) * scale;
+        const y = (fd.py - minPy) * scale;
+
+        if (useMask && maskImageData) {
+            tempCtx.clearRect(0, 0, frameWidth, frameHeight);
+            tempCtx.drawImage(image, 0, 0);
+            const frameImgData = tempCtx.getImageData(crop, crop, croppedWidth, croppedHeight);
+            const framePixels = frameImgData.data;
+            const maskPixels = maskImageData.data;
+            const maskWidth = maskImageData.width;
+            
+            for (let py = 0; py < croppedHeight; py++) {
+                for (let px = 0; px < croppedWidth; px++) {
+                    const maskX = px + crop;
+                    const maskY = py + crop;
+                    if (maskX < maskWidth && maskY < maskImageData.height) {
+                        const maskIdx = (maskY * maskWidth + maskX) * 4;
+                        if (maskPixels[maskIdx + 3] > 128) {
+                            const frameIdx = (py * croppedWidth + px) * 4;
+                            framePixels[frameIdx + 3] = 0;
+                        }
+                    }
+                }
+            }
+            
+            tempCtx.putImageData(frameImgData, crop, crop);
+            panoCtx.drawImage(
+                tempCanvas,
+                crop, crop, croppedWidth, croppedHeight,
+                x, y, scaledFrameWidth, scaledFrameHeight
+            );
+        } else {
+            panoCtx.drawImage(
+                image,
+                crop, crop, croppedWidth, croppedHeight,
+                x, y, scaledFrameWidth, scaledFrameHeight
+            );
+        }
+
+        const pct = Math.round(100 * i / totalFrames);
+        if (exportPanoMenuItem) exportPanoMenuItem.name(`Rendering... ${pct}%`);
+        await new Promise(r => setTimeout(r, 0));
+    }
+
+    if (exportPanoMenuItem) exportPanoMenuItem.name("Saving...");
+
+    panoCanvas.toBlob((blob) => {
+        const filename = `motion_panorama_${Sit.name || 'export'}_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.png`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        console.log(`Motion panorama exported: ${filename}`);
+        if (exportPanoMenuItem) exportPanoMenuItem.name("Export Motion Panorama");
+    }, 'image/png');
+}
+
 export function addMotionAnalysisMenu() {
     if (!guiMenus.view) return;
     
@@ -2088,6 +2288,7 @@ export function addMotionAnalysisMenu() {
     const menuActions = {
         analyzeMotion: toggleMotionAnalysis,
         createTrack: createTrackFromMotion,
+        exportPanorama: exportMotionPanorama,
     };
 
     analyzeMenuItem = motionFolder.add(menuActions, 'analyzeMotion')
@@ -2098,6 +2299,24 @@ export function addMotionAnalysisMenu() {
     createTrackMenuItem = motionFolder.add(menuActions, 'createTrack')
         .name("Create Track from Motion")
         .tooltip("Analyze all frames and create a ground track from motion vectors")
+        .perm();
+
+    exportPanoMenuItem = motionFolder.add(menuActions, 'exportPanorama')
+        .name("Export Motion Panorama")
+        .tooltip("Create a panorama image from video frames using motion tracking offsets")
+        .perm();
+
+    const panoParams = {
+        get panoCrop() { return panoCrop; }, set panoCrop(v) { panoCrop = v; },
+        get useMaskInPano() { return useMaskInPano; }, set useMaskInPano(v) { useMaskInPano = v; }
+    };
+    motionFolder.add(panoParams, 'panoCrop', 0, 100, 1)
+        .name("Panorama Crop")
+        .tooltip("Pixels to crop from each edge of video frames")
+        .perm();
+    motionFolder.add(panoParams, 'useMaskInPano')
+        .name("Use Mask in Pano")
+        .tooltip("Apply motion tracking mask as transparency when rendering panorama")
         .perm();
 }
 

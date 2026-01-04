@@ -677,18 +677,69 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
         return cachedFrame && cachedFrame.width && cachedFrame.width > 0;
     }
 
-    async waitForFrame(frame, timeout = 5000) {
-        this.requestFrame(Math.floor(frame / this.videoSpeed));
-        
+    async waitForFrame(frame, timeout = 10000) {
+        const actualFrame = Math.floor(frame / this.videoSpeed);
         const startTime = Date.now();
-        while (!this.isFrameCached(frame)) {
+        
+        // Wait for video initialization (decoder + chunks + groups must be ready)
+        while (!this.decoder || !this.chunks || !this.groups || this.groups.length === 0) {
             if (Date.now() - startTime > timeout) {
-                console.warn(`Timeout waiting for frame ${frame}`);
+                console.warn(`waitForFrame: timeout waiting for video initialization, frame ${frame}`);
+                return false;
+            }
+            await new Promise(r => setTimeout(r, 50));
+        }
+        
+        if (this.isFrameCached(frame)) {
+            return true;
+        }
+        
+        const group = this.getGroup(actualFrame);
+        if (!group) {
+            console.warn(`waitForFrame: no group for frame ${frame}`);
+            return false;
+        }
+        
+        // If group is already loaded, return immediately
+        if (group.loaded) {
+            return this.isFrameCached(frame);
+        }
+        
+        // If group is already being decoded, just wait for it
+        if (group.pending > 0) {
+            while (!group.loaded) {
+                if (Date.now() - startTime > timeout) {
+                    console.warn(`waitForFrame timeout waiting for pending group, frame ${frame}`);
+                    return false;
+                }
+                await new Promise(r => setTimeout(r, 10));
+            }
+            return this.isFrameCached(frame);
+        }
+        
+        // Group not loaded and not pending - need to request it
+        // Wait only for decoder to be idle (decodeQueueSize === 0), not for all groups
+        while (this.decoder && this.decoder.decodeQueueSize > 0) {
+            if (Date.now() - startTime > timeout) {
+                console.warn(`waitForFrame timeout waiting for decoder queue, frame ${frame}`);
                 return false;
             }
             await new Promise(r => setTimeout(r, 10));
         }
-        return true;
+        
+        // Request our group
+        this.requestGroup(group);
+        
+        // Wait for our group to load
+        while (!group.loaded) {
+            if (Date.now() - startTime > timeout) {
+                console.warn(`waitForFrame timeout waiting for group to load, frame ${frame}`);
+                return false;
+            }
+            await new Promise(r => setTimeout(r, 10));
+        }
+        
+        return this.isFrameCached(frame);
     }
 
     createBlankFrame() {
