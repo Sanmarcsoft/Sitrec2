@@ -99,7 +99,12 @@ import {checkLocal} from "./configUtils";
 import {CNodeView3D} from "./nodes/CNodeView3D";
 import {getApproximateLocationFromIP} from "./GeoLocation";
 import {LLAToEUS} from "./LLA-ECEF-ENU";
-import {addMotionAnalysisMenu, getMotionAnalyzerForTesting, toggleMotionAnalysis} from "./CMotionAnalysis";
+import {
+    addMotionAnalysisMenu,
+    getMotionAnalyzerForTesting,
+    resetMotionAnalysis,
+    toggleMotionAnalysis
+} from "./CMotionAnalysis";
 import {QuadTreeTile} from "./QuadTreeTile";
 import {showError} from "./showError";
 import {destroyGlobalProfiler, globalProfiler, initGlobalProfiler} from "./VisualProfiler";
@@ -2500,6 +2505,8 @@ function disposeEverything() {
     // delete all the nodes (which should remove their GUI elements, but might not have implement that all. CNodeSwitch destroys)
     NodeMan.disposeAll();
 
+    // reset motion analysis state (must be after NodeMan.disposeAll since it references the video node)
+    resetMotionAnalysis();
 
     // dispose of any remaining GUI, except for the permanent folders and items
     Globals.menuBar.destroy(false);

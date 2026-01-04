@@ -50,6 +50,11 @@ export class CNodeFrameSlider extends CNode {
         this.lastDraggingBLimit = false;
         this.needsCanvasRedraw = true;
 
+        // Status overlay: array of per-frame status (0=uncached, 1=cached)
+        this.statusOverlay = null;
+        this.statusOverlayOffset = 2; // vertical offset from top
+        this.lastStatusOverlay = null;
+
         this.setupFrameSlider();
     }
 
@@ -946,6 +951,34 @@ export class CNodeFrameSlider extends CNode {
         const padding = 5; // pixels of padding on each side
         const drawableWidth = this.canvas.width - (2 * padding);
 
+        // Draw status overlay if set
+        if (this.statusOverlay && this.statusOverlay.length > 0) {
+            ctx.strokeStyle = '#00ff00';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            let inSegment = false;
+            for (let i = 0; i < this.statusOverlay.length; i++) {
+                const x = padding + (drawableWidth * i / Sit.frames);
+                if (this.statusOverlay[i]) {
+                    if (!inSegment) {
+                        ctx.moveTo(x, this.statusOverlayOffset);
+                        inSegment = true;
+                    } else {
+                        ctx.lineTo(x, this.statusOverlayOffset);
+                    }
+                } else {
+                    if (inSegment) {
+                        ctx.stroke();
+                        ctx.beginPath();
+                        inSegment = false;
+                    }
+                }
+            }
+            if (inSegment) {
+                ctx.stroke();
+            }
+        }
+
         // Draw A limit line (green)
         const aPixel = padding + (drawableWidth * Sit.aFrame / Sit.frames);
         let aColor = '#008000'; // Default green
@@ -1154,6 +1187,17 @@ export class CNodeFrameSlider extends CNode {
     setFrame(frame) {
         this.sliderInput.value = frame;
         par.frame = frame;
+    }
+
+    setStatusOverlay(statusArray, verticalOffset = 2) {
+        this.statusOverlay = statusArray;
+        this.statusOverlayOffset = verticalOffset;
+        this.needsCanvasRedraw = true;
+    }
+
+    clearStatusOverlay() {
+        this.statusOverlay = null;
+        this.needsCanvasRedraw = true;
     }
 
     // Helper function to format time in timezone (HH:MM:SS.xx)

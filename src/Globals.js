@@ -142,6 +142,40 @@ export function setFileManager(f) {FileManager = f;}
 export const keyHeld = {}
 export const keyCodeHeld = {}
 
+// Frame advance blockers - callbacks that can prevent frame advancement
+// Each callback receives (currentFrame, nextFrame) and returns true to block
+const frameAdvanceBlockers = new Map();
+
+export function registerFrameBlocker(id, callback) {
+    frameAdvanceBlockers.set(id, callback);
+}
+
+export function unregisterFrameBlocker(id) {
+    frameAdvanceBlockers.delete(id);
+}
+
+export function isFrameAdvanceBlocked(currentFrame, nextFrame) {
+    for (const [id, blocker] of frameAdvanceBlockers) {
+        const result = blocker.check(currentFrame, nextFrame);
+        if (result) {
+            if (blocker.onBlocked) {
+                blocker.onBlocked(currentFrame, nextFrame);
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+export function requiresSingleFrameMode() {
+    for (const [id, blocker] of frameAdvanceBlockers) {
+        if (blocker.requiresSingleFrame && blocker.requiresSingleFrame()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Track if mouse is over a GUI element (to disable keyboard shortcuts)
 export let mouseOverGUI = false;
 export function setMouseOverGUI(value) { mouseOverGUI = value; }

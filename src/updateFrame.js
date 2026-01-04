@@ -1,5 +1,5 @@
 import {par} from "./par";
-import {GlobalDateTimeNode, Sit} from "./Globals";
+import {GlobalDateTimeNode, isFrameAdvanceBlocked, requiresSingleFrameMode, setRenderOne, Sit} from "./Globals";
 import {isKeyHeld, keyHeldTime, KeyMan} from "./KeyBoardHandler";
 import {updateFrameSlider} from "./nodes/CNodeFrameSlider";
 import {UpdatePRFromEA} from "./JetStuff";
@@ -65,17 +65,41 @@ export function updateFrame(elapsed) {
         // par.frame is the frame number in the video
         // (par.frame * Sit.simSpeed) is the time (based on frame number) in reality
 
-        const advance = frameStep * par.direction;
-        par.frame += advance;
-//        console.log("par.frame = "+par.frame+" par.time = "+par.time+" advance = "+advance+" dt = "+dt+" Sit.fps = "+Sit.fps+" par.direction = "+par.direction);
-
-        // A-B wrapping. We have a separate check he so we can loop is just playing without keyboard controls
-        if (par.frame > B) {
-            if (par.pingPong) {
-                par.frame = B;
-                par.direction = -par.direction
+        // Use single-frame mode when blockers require it (e.g., motion analysis with incomplete cache)
+        const singleFrameMode = requiresSingleFrameMode();
+        const advance = singleFrameMode ? par.direction : frameStep * par.direction;
+        let nextFrame = Math.floor(par.frame) + (par.direction > 0 ? 1 : -1);
+        
+        // Handle wrapping for nextFrame calculation (so blockers see the correct target)
+        if (nextFrame > B) {
+            nextFrame = par.pingPong ? B : A;
+        } else if (nextFrame < A) {
+            nextFrame = par.pingPong ? A : B;
+        }
+        
+        // Check if any blockers prevent advancing to the next frame
+        if (isFrameAdvanceBlocked(Math.floor(par.frame), nextFrame)) {
+            // Stay on current frame, request another render to check again
+            setRenderOne(true);
+        } else {
+            if (singleFrameMode) {
+                par.frame = nextFrame;
+                // Handle ping-pong direction change
+                if (par.pingPong) {
+                    if (nextFrame >= B) par.direction = -1;
+                    else if (nextFrame <= A) par.direction = 1;
+                }
             } else {
-                par.frame = 0;  // wrap if auto playing
+                par.frame += advance;
+                // A-B wrapping for non-single-frame mode
+                if (par.frame > B) {
+                    if (par.pingPong) {
+                        par.frame = B;
+                        par.direction = -par.direction;
+                    } else {
+                        par.frame = A;
+                    }
+                }
             }
         }
     }

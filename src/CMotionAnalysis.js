@@ -1,4 +1,4 @@
-import {guiMenus, NodeMan, setRenderOne, Sit} from "./Globals";
+import {Globals, guiMenus, NodeMan, registerFrameBlocker, setRenderOne, Sit, unregisterFrameBlocker} from "./Globals";
 
 import {CNodeMaskOverlay} from "./nodes/CNodeMaskOverlay";
 import {CNodeVelocityFromMotion} from "./nodes/CNodeVelocityFromMotion";
@@ -175,6 +175,27 @@ class MotionAnalyzer {
         this.lastFlowData = null;
     }
 
+    getCacheStatusArray() {
+        const status = new Array(Sit.frames).fill(0);
+        for (let f = 0; f < Sit.frames; f++) {
+            if (this.resultCache.has(f)) {
+                status[f] = 1;
+            }
+        }
+        return status;
+    }
+
+    isCacheFull() {
+        const aFrame = Sit.aFrame || 0;
+        const bFrame = Sit.bFrame ?? (Sit.frames - 1);
+        for (let f = aFrame; f <= bFrame; f++) {
+            if (!this.resultCache.has(f)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     getMotionDataForAllFrames() {
         const data = [];
         for (let f = 0; f < Sit.frames; f++) {
@@ -293,11 +314,28 @@ class MotionAnalyzer {
         this.createOverlays();
         this.showOverlays();
         this.updateMaskPreview();
+        
+        registerFrameBlocker('motionAnalysis', {
+            check: (currentFrame, nextFrame) => {
+                if (!this.active) return false;
+                // Block advancement only if CURRENT frame is not yet cached
+                // This allows advancing to uncached frames (which will then be analyzed)
+                // but prevents skipping ahead before current frame is analyzed
+                const current = Math.floor(currentFrame);
+                if (current < 0 || current >= Sit.frames) return false;
+                return !this.resultCache.has(current);
+            },
+            requiresSingleFrame: () => {
+                return this.active && !this.isCacheFull();
+            }
+        });
     }
 
     stop() {
         this.active = false;
         this.hideOverlays();
+        this.clearSliderStatus();
+        unregisterFrameBlocker('motionAnalysis');
     }
 
     analyze(frame) {
@@ -337,7 +375,10 @@ class MotionAnalyzer {
         }
 
         const image = videoData.getImage(frame);
-        if (!image || !image.width || !image.height) return;
+        if (!image || !image.width || !image.height) {
+            this.overlayCtx.clearRect(0, 0, width, height);
+            return;
+        }
 
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = image.width || image.videoWidth || width;
@@ -430,8 +471,35 @@ class MotionAnalyzer {
 
             this.drawOverlay(width, height, tempCanvas.width, tempCanvas.height);
             this.drawGraph();
+            this.updateSliderStatus();
         } else {
             gray.delete();
+            
+            this.resultCache.set(frame, {
+                flowData: null,
+                smoothedDirection: {...this.smoothedDirection},
+                angleHistory: [...this.angleHistory],
+                imgWidth: tempCanvas.width,
+                imgHeight: tempCanvas.height,
+            });
+            
+            this.drawOverlay(width, height, tempCanvas.width, tempCanvas.height);
+            this.drawGraph();
+            this.updateSliderStatus();
+        }
+    }
+
+    updateSliderStatus() {
+        const slider = NodeMan.get("FrameSlider", false);
+        if (slider) {
+            slider.setStatusOverlay(this.getCacheStatusArray(), 2);
+        }
+    }
+
+    clearSliderStatus() {
+        const slider = NodeMan.get("FrameSlider", false);
+        if (slider) {
+            slider.clearStatusOverlay();
         }
     }
 
@@ -481,7 +549,7 @@ class MotionAnalyzer {
             this.smoothedDirection.angle = Math.atan2(this.smoothedDirection.y, this.smoothedDirection.x);
             this.smoothedDirection.confidence = alpha * this.smoothedDirection.confidence + (1 - alpha) * consensus.confidence;
             this.smoothedDirection.rotation = consensus.rotation || 0;
-            console.log(`Motion: technique=${this.params.technique}, consensus=(${consensus.dx.toFixed(2)}, ${consensus.dy.toFixed(2)}), smoothed=(${this.smoothedDirection.x.toFixed(2)}, ${this.smoothedDirection.y.toFixed(2)}), mag=${this.smoothedDirection.magnitude.toFixed(2)}, conf=${this.smoothedDirection.confidence.toFixed(2)}`);
+            if (Globals.regression) console.log(`Motion: technique=${this.params.technique}, consensus=(${consensus.dx.toFixed(2)}, ${consensus.dy.toFixed(2)}), smoothed=(${this.smoothedDirection.x.toFixed(2)}, ${this.smoothedDirection.y.toFixed(2)}), mag=${this.smoothedDirection.magnitude.toFixed(2)}, conf=${this.smoothedDirection.confidence.toFixed(2)}`);
             
             this.angleHistory.push({
                 angle: this.smoothedDirection.angle,
@@ -653,6 +721,15 @@ class MotionAnalyzer {
         let dx = -shiftX * motionScale;
         let dy = -shiftY * motionScale;
         const motionMag = Math.sqrt(dx * dx + dy * dy);
+        
+        if (motionMag < this.params.minMotion && response < 0.5) {
+            if (!this._phaseCorrelationFallbackWarned) {
+                console.warn("Phase Correlation detected no significant translation (response=" + response.toFixed(2) + "), falling back to Sparse + Consensus");
+                this._phaseCorrelationFallbackWarned = true;
+            }
+            return this.computeSparseConsensus(prevGray, gray, imgWidth, imgHeight, skipFrames);
+        }
+        
         const confidence = Math.min(1, Math.max(0.3, response * 10));
         
         const flowVectors = (motionMag >= this.params.minMotion && motionMag <= this.params.maxMotion)
@@ -704,13 +781,14 @@ class MotionAnalyzer {
         const tyRaw = warpMatrix.floatAt(1, 2);
         warpMatrix.delete();
         
-        const rotation = Math.atan2(sinTheta, cosTheta);
+        const rotationRaw = Math.atan2(sinTheta, cosTheta);
+        const rotation = rotationRaw * motionScale;
         const dx = txRaw * motionScale;
         const dy = tyRaw * motionScale;
         const mag = Math.sqrt(dx * dx + dy * dy);
         const confidence = Math.min(1, cc);
         
-        const showVectors = mag >= this.params.minMotion || Math.abs(rotation) >= 0.001;
+        const showVectors = mag >= this.params.minMotion || Math.abs(rotation) >= 0.0003;
         const flowVectors = showVectors
             ? this.generateSyntheticVectors(dx, dy, rotation, imgWidth, imgHeight)
             : [];
@@ -722,6 +800,14 @@ class MotionAnalyzer {
     }
 
     computeAffineRANSAC(prevGray, gray, imgWidth, imgHeight, skipFrames) {
+        if (typeof cv.estimateAffinePartial2D !== 'function') {
+            if (!this._affineWarned) {
+                console.warn("cv.estimateAffinePartial2D not available, falling back to Sparse + Consensus");
+                this._affineWarned = true;
+            }
+            return this.computeSparseConsensus(prevGray, gray, imgWidth, imgHeight, skipFrames);
+        }
+        
         const {prevPoints, nextPoints, qualities} = this.trackFeatures(prevGray, gray, skipFrames);
         
         if (prevPoints.length < 4) {
@@ -1130,6 +1216,17 @@ class MotionAnalyzer {
 let motionAnalyzer = null;
 let analyzeMenuItem = null;
 let renderHooked = false;
+
+export function resetMotionAnalysis() {
+    if (motionAnalyzer) {
+        motionAnalyzer.stop();
+        motionAnalyzer = null;
+    }
+    renderHooked = false;
+    analyzeMenuItem = null;
+    motionFolder = null;
+    paramControllers = [];
+}
 
 export function toggleMotionAnalysis() {
     const videoView = NodeMan.get("video", false);
