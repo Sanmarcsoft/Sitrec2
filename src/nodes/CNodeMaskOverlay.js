@@ -141,6 +141,23 @@ export class CNodeMaskOverlay extends CNodeActiveOverlay {
         return this.maskImageData.data[idx + 3] > 128;
     }
     
+    getMaskMat() {
+        if (!this.maskCanvas || !window.cv) return null;
+        
+        const cv = window.cv;
+        const imageData = this.maskCtx.getImageData(0, 0, this.maskCanvas.width, this.maskCanvas.height);
+        const src = cv.matFromImageData(imageData);
+        const gray = new cv.Mat();
+        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+        src.delete();
+        
+        const mask = new cv.Mat();
+        cv.threshold(gray, mask, 128, 255, cv.THRESH_BINARY);
+        gray.delete();
+        
+        return mask;
+    }
+    
     clearMask() {
         if (this.maskCanvas) {
             const preData = this.maskCtx.getImageData(0, 0, this.maskCanvas.width, this.maskCanvas.height);

@@ -99,7 +99,7 @@ import {checkLocal} from "./configUtils";
 import {CNodeView3D} from "./nodes/CNodeView3D";
 import {getApproximateLocationFromIP} from "./GeoLocation";
 import {LLAToEUS} from "./LLA-ECEF-ENU";
-import {addMotionAnalysisMenu} from "./CMotionAnalysis";
+import {addMotionAnalysisMenu, getMotionAnalyzerForTesting, toggleMotionAnalysis} from "./CMotionAnalysis";
 import {QuadTreeTile} from "./QuadTreeTile";
 import {showError} from "./showError";
 import {destroyGlobalProfiler, globalProfiler, initGlobalProfiler} from "./VisualProfiler";
@@ -1138,6 +1138,8 @@ async function initializeOnce() {
         window.NodeMan = NodeMan;
         window.DragDropHandler = DragDropHandler;
         window.UndoManager = undoManager;
+        window.toggleMotionAnalysis = toggleMotionAnalysis;
+        window.getMotionAnalyzerForTesting = getMotionAnalyzerForTesting;
 
         // Set a flag to indicate that these objects are ready
         window.SITREC_OBJECTS_READY = {
