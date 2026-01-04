@@ -7,6 +7,7 @@ export function incrementMainLoopCount() {
 export const Globals = {
     editingTrack: null,  // Reference to the CMetaTrack currently being edited
     editingBuilding: null,  // Reference to the CNodeSynthBuilding currently being edited
+    justVideoAnalysis: false,  // When true, skip most logic and only render video viewport
     GPUMemoryMonitor: null,  // GPU Memory Monitor instance
     debugGPUBacklog: false,  // Enable logging of GPU buffer flushes
     showTileStats: false,  // Enable tile statistics logging

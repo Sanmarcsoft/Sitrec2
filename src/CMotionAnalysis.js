@@ -1969,28 +1969,24 @@ let createTrackMenuItem = null;
 async function analyzeAllFrames(progressCallback) {
     if (!motionAnalyzer) return false;
     
-    const videoData = motionAnalyzer.videoView?.videoData;
-    if (!videoData) return false;
-
-    const totalFrames = Sit.frames;
-    const skipFrames = Math.max(1, Math.round(motionAnalyzer.params.frameSkip));
+    const aFrame = Sit.aFrame || 0;
+    const bFrame = Sit.bFrame ?? (Sit.frames - 1);
+    const totalFrames = bFrame - aFrame + 1;
     
-    for (let f = 0; f < totalFrames; f++) {
-        if (motionAnalyzer.resultCache.has(f)) continue;
-        
-        await videoData.waitForFrame(f);
-        const prevFrame = f - skipFrames;
-        if (prevFrame >= 0) {
-            await videoData.waitForFrame(prevFrame);
-        }
-        
-        motionAnalyzer.analyze(f);
-        
+    const savedPaused = par.paused;
+    Globals.justVideoAnalysis = true;
+    par.paused = false;
+    
+    while (!motionAnalyzer.isCacheFull()) {
+        const analyzed = motionAnalyzer.resultCache.size;
         if (progressCallback) {
-            progressCallback(f, totalFrames);
+            progressCallback(analyzed, totalFrames);
         }
-        await new Promise(r => setTimeout(r, 0));
+        await new Promise(r => setTimeout(r, 100));
     }
+    
+    par.paused = savedPaused;
+    Globals.justVideoAnalysis = false;
     return true;
 }
 
@@ -2212,13 +2208,58 @@ async function exportMotionPanorama() {
         maskImageData = motionAnalyzer.maskOverlayNode.maskImageData;
     }
 
+    const previewOverlay = document.createElement('div');
+    previewOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;';
+    
+    const previewCanvas = document.createElement('canvas');
+    const previewAspect = panoWidthPx / panoHeightPx;
+    const maxPreviewWidth = window.innerWidth * 0.95;
+    const maxPreviewHeight = window.innerHeight * 0.85;
+    if (maxPreviewWidth / maxPreviewHeight > previewAspect) {
+        previewCanvas.height = maxPreviewHeight;
+        previewCanvas.width = maxPreviewHeight * previewAspect;
+    } else {
+        previewCanvas.width = maxPreviewWidth;
+        previewCanvas.height = maxPreviewWidth / previewAspect;
+    }
+    previewCanvas.style.border = '2px solid #444';
+    const previewCtx = previewCanvas.getContext('2d');
+    
+    const statusText = document.createElement('div');
+    statusText.style.cssText = 'color:#fff;font-size:18px;margin-top:15px;font-family:sans-serif;';
+    statusText.textContent = 'Building panorama... 0%';
+    
+    previewOverlay.appendChild(previewCanvas);
+    previewOverlay.appendChild(statusText);
+    document.body.appendChild(previewOverlay);
+
+    Globals.justVideoAnalysis = true;
+    const savedPaused = par.paused;
+    par.paused = true;
+    const previewEveryNFrames = 20;
+    
+    const updatePreview = () => {
+        previewCtx.drawImage(panoCanvas, 0, 0, previewCanvas.width, previewCanvas.height);
+    };
+    
+    let skippedFrames = 0;
     for (let i = 0; i < totalFrames; i++) {
         const fd = frameData[i];
         
-        await videoData.waitForFrame(fd.frame);
-        const image = videoData.getImage(fd.frame);
+        statusText.textContent = `Loading frame ${fd.frame}... (${i+1}/${totalFrames})`;
         
-        if (!image || !image.width) continue;
+        const loaded = await videoData.requestFrameSequential(fd.frame);
+        if (!loaded) {
+            console.warn(`Failed to load frame ${fd.frame}, skipping`);
+            skippedFrames++;
+            continue;
+        }
+        
+        const image = videoData.getImageNoPurge(fd.frame);
+        if (!image || !image.width) {
+            skippedFrames++;
+            continue;
+        }
 
         const x = (fd.px - minPx) * scale;
         const y = (fd.py - minPy) * scale;
@@ -2259,11 +2300,21 @@ async function exportMotionPanorama() {
             );
         }
 
-        const pct = Math.round(100 * i / totalFrames);
-        if (exportPanoMenuItem) exportPanoMenuItem.name(`Rendering... ${pct}%`);
-        await new Promise(r => setTimeout(r, 0));
+        if (i % previewEveryNFrames === 0) {
+            const pct = Math.round(100 * i / totalFrames);
+            updatePreview();
+            const skipInfo = skippedFrames > 0 ? ` (${skippedFrames} skipped)` : '';
+            statusText.textContent = `Building panorama... ${pct}% (frame ${i+1}/${totalFrames})${skipInfo}`;
+            if (exportPanoMenuItem) exportPanoMenuItem.name(`Rendering... ${pct}%`);
+            await new Promise(r => setTimeout(r, 0));
+        }
     }
 
+    updatePreview();
+    statusText.textContent = 'Saving...';
+    Globals.justVideoAnalysis = false;
+    par.paused = savedPaused;
+    
     if (exportPanoMenuItem) exportPanoMenuItem.name("Saving...");
 
     panoCanvas.toBlob((blob) => {
@@ -2277,6 +2328,8 @@ async function exportMotionPanorama() {
         
         console.log(`Motion panorama exported: ${filename}`);
         if (exportPanoMenuItem) exportPanoMenuItem.name("Export Motion Panorama");
+        
+        document.body.removeChild(previewOverlay);
     }, 'image/png');
 }
 

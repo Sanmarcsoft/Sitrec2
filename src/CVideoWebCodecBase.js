@@ -352,12 +352,15 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
             // Handle deferred requests differently for each subclass
             if (this.nextRequest !== null && this.nextRequest >= 0) {
                 // CVideoMp4Data style
-                console.log("FULFILLING deferred request as no groups pending, frame = " + this.nextRequest);
                 this.requestGroup(this.nextRequest);
                 this.nextRequest = -1;
+            } else if (this.nextRequest && typeof this.nextRequest === 'object') {
+                // nextRequest is a group object
+                const group = this.nextRequest;
+                this.nextRequest = null;
+                this.requestGroup(group);
             } else if (this.requestQueue && this.requestQueue.length > 0) {
                 // CVideoH264Data style
-                console.log("FULFILLING deferred requests as no groups pending");
                 const nextGroup = this.requestQueue.shift();
                 this.requestGroup(nextGroup);
             }
@@ -462,8 +465,9 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
             return; // Not initialized yet
         }
 
-        if (group.loaded || group.pending > 0)
+        if (group.loaded || group.pending > 0) {
             return;
+        }
 
         // Check if audio is playing and not muted - if so, defer video decoding
         if (this.isAudioActive()) {
@@ -480,7 +484,6 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
             this.handleBusyDecoder(group);
             return;
         }
-
         group.pending = group.length;
         group.loaded = false;
         group.decodeOrder = [];
@@ -675,6 +678,69 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
         }
         const cachedFrame = this.imageCache[frame];
         return cachedFrame && cachedFrame.width && cachedFrame.width > 0;
+    }
+
+    getImageNoPurge(frame) {
+        frame = Math.floor(frame / this.videoSpeed);
+        if (!this.imageCache || frame < 0 || frame >= this.imageCache.length) {
+            return null;
+        }
+        const cachedFrame = this.imageCache[frame];
+        if (cachedFrame && cachedFrame.width && cachedFrame.width > 0) {
+            return cachedFrame;
+        }
+        return null;
+    }
+
+    async requestFrameSequential(frame, timeout = 5000) {
+        const actualFrame = Math.floor(frame / this.videoSpeed);
+        const startTime = Date.now();
+        
+        if (!this.decoder || !this.chunks || !this.groups || this.groups.length === 0) {
+            return false;
+        }
+        
+        if (this.isFrameCached(frame)) {
+            return true;
+        }
+        
+        const group = this.getGroup(actualFrame);
+        if (!group) {
+            return false;
+        }
+        
+        if (group.loaded) {
+            return this.isFrameCached(frame);
+        }
+        
+        if (group.pending === 0) {
+            while (this.decoder && this.decoder.decodeQueueSize > 0) {
+                if (Date.now() - startTime > timeout) {
+                    console.warn(`[reqFrame] ${frame}: TIMEOUT waiting for decoder queue`);
+                    return false;
+                }
+                await new Promise(r => setTimeout(r, 20));
+            }
+            this.requestGroup(group);
+        }
+        
+        let loadWaitCount = 0;
+        while (!group.loaded) {
+            // Check for error state: pending=0 but not loaded means decode failed
+            if (group.pending === 0 && !group.loaded) {
+                console.warn(`[reqFrame] ${frame}: group decode failed`);
+                return false;
+            }
+            
+            if (Date.now() - startTime > timeout) {
+                console.warn(`[reqFrame] ${frame}: TIMEOUT (pending=${group.pending}, queueSize=${this.decoder?.decodeQueueSize})`);
+                return false;
+            }
+            loadWaitCount++;
+            await new Promise(r => setTimeout(r, 20));
+        }
+        
+        return this.isFrameCached(frame);
     }
 
     async waitForFrame(frame, timeout = 10000) {

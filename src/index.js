@@ -2184,7 +2184,7 @@ function renderMain(elapsed) {
         }
     }
 
-    if (!par.noLogic) {
+    if (!par.noLogic && !Globals.justVideoAnalysis) {
         if (globalProfiler) globalProfiler.push('#ff7f0e', 'Updates');
 
         if (Sit.updateFunction) {
@@ -2263,6 +2263,11 @@ function renderMain(elapsed) {
                     targetSphere.layers.disable(LAYER.podsEye)
             }
         }
+    } else if (Globals.justVideoAnalysis) {
+        const frameSlider = NodeMan.get("FrameSlider", false);
+        if (frameSlider && frameSlider.update) {
+            frameSlider.update(par.frame);
+        }
     }
 
     // render each viewport
@@ -2281,6 +2286,11 @@ function renderMain(elapsed) {
     // When in XR mode, the XR animation loop handles rendering
     if (!xrActive) {
         ViewMan.iterate((key, view) => {
+
+            // In video analysis mode, only render the video viewport
+            if (Globals.justVideoAnalysis && key !== "video") {
+                return;
+            }
 
             // if this is an overlay view, then inherit the "visible" flag from the parent view (this this view overlays)
             if (view.overlayView && !view.separateVisibility) {
