@@ -17,7 +17,7 @@ export class CVideoImageData extends CVideoData {
     }
 
     getImage(frame) {
-        return this.img;
+        return this.getStabilizedImage(frame, this.img);
     }
 
     dispose() {

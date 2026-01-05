@@ -18,6 +18,12 @@ export class CVideoData {
         this.videoWidth = 100
         this.videoHeight = 100
 
+        // Stabilization support
+        this.stabilizationEnabled = false;
+        this.stabilizationData = null;  // Map of frame -> {x, y} offsets
+        this.stabilizationReferencePoint = null; // {x, y} - the fixed point
+        this.stabilizedImageCache = [];  // Cache for stabilized frames
+
         this.flushEntireCache();
 
     }
@@ -50,11 +56,69 @@ export class CVideoData {
         // nothing to do here
     }
 
+    // Set stabilization data from tracking
+    setStabilizationData(trackingData, referencePoint) {
+        this.stabilizationData = new Map(trackingData);
+        this.stabilizationReferencePoint = referencePoint;
+        // Clear stabilized cache when data changes
+        this.stabilizedImageCache = [];
+    }
+
+    // Enable/disable stabilization
+    setStabilizationEnabled(enabled) {
+        this.stabilizationEnabled = enabled;
+        if (!enabled) {
+            // Clear cache when disabling
+            this.stabilizedImageCache = [];
+        }
+    }
+
+    // Get stabilized image for a frame
+    getStabilizedImage(frame, originalImage) {
+        if (!this.stabilizationEnabled || !this.stabilizationData || !this.stabilizationReferencePoint) {
+            return originalImage;
+        }
+
+        // Check cache
+        if (this.stabilizedImageCache[frame]) {
+            return this.stabilizedImageCache[frame];
+        }
+
+        const trackPos = this.stabilizationData.get(frame);
+        if (!trackPos) {
+            // No tracking data for this frame, return original
+            return originalImage;
+        }
+
+        // Calculate shift needed to keep tracked point at reference position
+        const shiftX = this.stabilizationReferencePoint.x - trackPos.x;
+        const shiftY = this.stabilizationReferencePoint.y - trackPos.y;
+
+        // Create shifted image
+        const canvas = document.createElement('canvas');
+        canvas.width = originalImage.width || originalImage.videoWidth;
+        canvas.height = originalImage.height || originalImage.videoHeight;
+        const ctx = canvas.getContext('2d');
+
+        // Fill with black background
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Draw shifted image
+        ctx.drawImage(originalImage, shiftX, shiftY);
+
+        // Cache the result
+        this.stabilizedImageCache[frame] = canvas;
+
+        return canvas;
+    }
+
     flushEntireCache() {
 
         this.imageCache = [] // full sized images
         this.imageDataCache = []
         this.frameCache = []
+        this.stabilizedImageCache = []
 
         for (let i = 0; i < this.frames; i++) {
             this.imageCache.push(new Image())

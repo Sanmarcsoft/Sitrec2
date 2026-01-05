@@ -1,4 +1,4 @@
-import {Globals, guiMenus, NodeMan, setRenderOne, Sit} from "./Globals";
+import {Globals, guiMenus, NodeMan, registerFrameBlocker, setRenderOne, Sit, unregisterFrameBlocker} from "./Globals";
 import {par} from "./par";
 import {getCV, loadOpenCV} from "./openCVLoader";
 
@@ -12,20 +12,24 @@ class ObjectTracker {
         this.overlayCreated = false;
         this.overlay = null;
         this.overlayCtx = null;
-        
+
         this.trackX = 0;
         this.trackY = 0;
         this.trackRadius = 30;
-        
+
         this.trackedPositions = new Map();
-        
+
         this.isDragging = false;
         this.lastMouseX = 0;
         this.lastMouseY = 0;
-        
+
         this.tracker = null;
         this.trackerType = 'CSRT';
-        
+
+        // Centroid tracking for bright spots (stars, etc)
+        this.centerOnBright = false;
+        this.brightnessThreshold = 128;  // 0-255, pixels above this are considered "bright"
+
         this.guiFolder = null;
         this.savedPaused = true;
     }
@@ -135,6 +139,7 @@ class ObjectTracker {
         this.tracking = false;
         this.hideOverlay();
         this.clearSliderStatus();
+        unregisterFrameBlocker('objectTracking');
     }
     
     startTracking() {
@@ -142,10 +147,24 @@ class ObjectTracker {
         this.tracking = true;
         this.initializeTracker();
         this.updateSliderStatus();
-        
+
         this.savedPaused = par.paused;
         Globals.justVideoAnalysis = true;
         par.paused = false;
+
+        // Register frame blocker to prevent skipping frames
+        registerFrameBlocker('objectTracking', {
+            check: (currentFrame, nextFrame) => {
+                if (!this.tracking) return false;
+                const current = Math.floor(currentFrame);
+                if (current < 0 || current >= Sit.frames) return false;
+                // Block if current frame hasn't been tracked yet
+                return !this.trackedPositions.has(current);
+            },
+            requiresSingleFrame: () => {
+                return this.tracking;
+            }
+        });
     }
     
     stopTracking() {
@@ -155,6 +174,7 @@ class ObjectTracker {
         }
         par.paused = this.savedPaused;
         Globals.justVideoAnalysis = false;
+        unregisterFrameBlocker('objectTracking');
     }
     
     onTrackingComplete() {
@@ -173,9 +193,77 @@ class ObjectTracker {
         const dy = vY - this.trackY;
         return (dx * dx + dy * dy) <= (this.trackRadius * this.trackRadius);
     }
-    
+
+    // Calculate centroid (center of mass) of bright pixels within radius
+    // Returns {x, y} or null if no bright pixels found
+    calculateBrightCentroid(image, centerX, centerY, radius) {
+        const width = image.width || image.videoWidth;
+        const height = image.height || image.videoHeight;
+
+        // Create canvas to extract image data
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(image, 0, 0, width, height);
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+
+        let totalBrightness = 0;
+        let weightedX = 0;
+        let weightedY = 0;
+        let pixelCount = 0;
+
+        // Define search region (square around center)
+        const minX = Math.max(0, Math.floor(centerX - radius));
+        const maxX = Math.min(width - 1, Math.ceil(centerX + radius));
+        const minY = Math.max(0, Math.floor(centerY - radius));
+        const maxY = Math.min(height - 1, Math.ceil(centerY + radius));
+
+        const radiusSquared = radius * radius;
+
+        // Scan all pixels within the circular region
+        for (let y = minY; y <= maxY; y++) {
+            for (let x = minX; x <= maxX; x++) {
+                // Check if pixel is within circular radius
+                const dx = x - centerX;
+                const dy = y - centerY;
+                if (dx * dx + dy * dy > radiusSquared) continue;
+
+                const index = (y * width + x) * 4;
+                const r = data[index];
+                const g = data[index + 1];
+                const b = data[index + 2];
+
+                // Calculate brightness (luminance)
+                const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+
+                if (brightness > this.brightnessThreshold) {
+                    // Weight by brightness for better centering on bright core
+                    const weight = brightness - this.brightnessThreshold;
+                    totalBrightness += weight;
+                    weightedX += x * weight;
+                    weightedY += y * weight;
+                    pixelCount++;
+                }
+            }
+        }
+
+        // Calculate centroid
+        if (totalBrightness > 0 && pixelCount > 0) {
+            return {
+                x: weightedX / totalBrightness,
+                y: weightedY / totalBrightness
+            };
+        }
+
+        return null;
+    }
+
     trackFrame(frame) {
-        if (!this.tracking || !this.enabled || !cv) return;
+        if (!this.tracking || !this.enabled) return;
+        // Only require OpenCV for template matching mode
+        if (!this.centerOnBright && !cv) return;
         
         frame = Math.floor(frame);
         
@@ -204,56 +292,77 @@ class ObjectTracker {
         const videoData = this.videoView?.videoData;
         if (!videoData) return;
         
-        const prevImage = videoData.getImage(prevFrame);
         const currImage = videoData.getImage(frame);
-        
-        if (!prevImage || !currImage || !prevImage.width || !currImage.width) return;
-        
+
+        if (!currImage || !currImage.width) return;
+
+        // Use centroid tracking for bright spots (stars, etc)
+        if (this.centerOnBright) {
+            const centroid = this.calculateBrightCentroid(currImage, prevPos.x, prevPos.y, this.trackRadius);
+
+            if (centroid) {
+                this.trackX = centroid.x;
+                this.trackY = centroid.y;
+            } else {
+                // Fallback: keep previous position if no bright pixels found
+                this.trackX = prevPos.x;
+                this.trackY = prevPos.y;
+            }
+
+            this.trackedPositions.set(frame, {x: this.trackX, y: this.trackY});
+            this.updateSliderStatus();
+            return;
+        }
+
+        // Standard template matching tracking
+        const prevImage = videoData.getImage(prevFrame);
+        if (!prevImage || !prevImage.width) return;
+
         const width = prevImage.width || prevImage.videoWidth;
         const height = prevImage.height || prevImage.videoHeight;
-        
+
         const prevCanvas = document.createElement('canvas');
         prevCanvas.width = width;
         prevCanvas.height = height;
         const prevCtx = prevCanvas.getContext('2d');
         prevCtx.drawImage(prevImage, 0, 0, width, height);
         const prevImageData = prevCtx.getImageData(0, 0, width, height);
-        
+
         const currCanvas = document.createElement('canvas');
         currCanvas.width = width;
         currCanvas.height = height;
         const currCtx = currCanvas.getContext('2d');
         currCtx.drawImage(currImage, 0, 0, width, height);
         const currImageData = currCtx.getImageData(0, 0, width, height);
-        
+
         const prevMat = cv.matFromImageData(prevImageData);
         const currMat = cv.matFromImageData(currImageData);
-        
+
         const prevGray = new cv.Mat();
         const currGray = new cv.Mat();
         cv.cvtColor(prevMat, prevGray, cv.COLOR_RGBA2GRAY);
         cv.cvtColor(currMat, currGray, cv.COLOR_RGBA2GRAY);
-        
+
         const roiSize = this.trackRadius * 2;
         const roiX = Math.max(0, Math.floor(prevPos.x - roiSize));
         const roiY = Math.max(0, Math.floor(prevPos.y - roiSize));
         const roiW = Math.min(roiSize * 2, width - roiX);
         const roiH = Math.min(roiSize * 2, height - roiY);
-        
+
         const prevROI = prevGray.roi(new cv.Rect(roiX, roiY, roiW, roiH));
-        
+
         const result = new cv.Mat();
         cv.matchTemplate(currGray, prevROI, result, cv.TM_CCOEFF_NORMED);
-        
+
         const minMax = cv.minMaxLoc(result);
         const bestX = minMax.maxLoc.x + roiW / 2;
         const bestY = minMax.maxLoc.y + roiH / 2;
-        
+
         this.trackX = bestX;
         this.trackY = bestY;
         this.trackedPositions.set(frame, {x: this.trackX, y: this.trackY});
         this.updateSliderStatus();
-        
+
         prevMat.delete();
         currMat.delete();
         prevGray.delete();
@@ -370,6 +479,15 @@ let renderHooked = false;
 
 export function resetObjectTracking() {
     if (objectTracker) {
+        // Clear video stabilization
+        const videoView = objectTracker.videoView;
+        const videoData = videoView?.videoData;
+        if (videoData) {
+            videoData.setStabilizationEnabled(false);
+            videoData.stabilizationData = null;
+            videoData.stabilizationReferencePoint = null;
+        }
+
         objectTracker.disable();
         objectTracker = null;
     }
@@ -379,6 +497,9 @@ export function resetObjectTracking() {
     }
     if (startMenuItem) {
         startMenuItem.name("Start Tracking");
+    }
+    if (stabilizeToggleMenuItem) {
+        stabilizeToggleMenuItem.name("Enable Stabilization");
     }
 }
 
@@ -433,16 +554,25 @@ function toggleStartTracking() {
         setRenderOne(true);
         return;
     }
-    
+
+    // Centroid mode doesn't need OpenCV
+    if (objectTracker.centerOnBright) {
+        objectTracker.startTracking();
+        if (startMenuItem) startMenuItem.name("Stop Tracking");
+        setRenderOne(true);
+        return;
+    }
+
+    // Template matching mode requires OpenCV
     if (cv) {
         objectTracker.startTracking();
         if (startMenuItem) startMenuItem.name("Stop Tracking");
         setRenderOne(true);
         return;
     }
-    
+
     if (startMenuItem) startMenuItem.name("Loading OpenCV...");
-    
+
     loadOpenCV().then(() => {
         cv = getCV();
         objectTracker.startTracking();
@@ -461,7 +591,70 @@ function clearTrack() {
     }
 }
 
+function stabilizeVideo() {
+    if (!objectTracker || !objectTracker.enabled) {
+        alert("Please enable tracking first and track an object before stabilizing.");
+        return;
+    }
+
+    if (objectTracker.trackedPositions.size === 0) {
+        alert("No tracking data available. Please track an object first.");
+        return;
+    }
+
+    const videoView = objectTracker.videoView;
+    const videoData = videoView?.videoData;
+
+    if (!videoData) {
+        alert("No video data available.");
+        return;
+    }
+
+    // Use the first tracked frame as the reference point
+    const firstFrame = Math.min(...objectTracker.trackedPositions.keys());
+    const referencePoint = objectTracker.trackedPositions.get(firstFrame);
+
+    if (!referencePoint) {
+        alert("Could not determine reference point.");
+        return;
+    }
+
+    // Pass tracking data to video system
+    videoData.setStabilizationData(objectTracker.trackedPositions, referencePoint);
+    videoData.setStabilizationEnabled(true);
+
+    if (stabilizeToggleMenuItem) {
+        stabilizeToggleMenuItem.name("Disable Stabilization");
+    }
+
+    setRenderOne(true);
+}
+
+function toggleStabilization() {
+    if (!objectTracker || !objectTracker.enabled) {
+        return;
+    }
+
+    const videoView = objectTracker.videoView;
+    const videoData = videoView?.videoData;
+
+    if (!videoData || !videoData.stabilizationData) {
+        alert("No stabilization data available. Use 'Stabilize' first.");
+        return;
+    }
+
+    const newState = !videoData.stabilizationEnabled;
+    videoData.setStabilizationEnabled(newState);
+
+    if (stabilizeToggleMenuItem) {
+        stabilizeToggleMenuItem.name(newState ? "Disable Stabilization" : "Enable Stabilization");
+    }
+
+    setRenderOne(true);
+}
+
 let radiusController = null;
+let stabilizeToggleMenuItem = null;
 
 export function addObjectTrackingMenu() {
     if (!guiMenus.view) return;
@@ -472,6 +665,8 @@ export function addObjectTrackingMenu() {
         enableTracking: toggleEnableTracking,
         startTracking: toggleStartTracking,
         clearTrack: clearTrack,
+        stabilizeVideo: stabilizeVideo,
+        toggleStabilization: toggleStabilization,
     };
     
     enableMenuItem = trackingFolder.add(menuActions, 'enableTracking')
@@ -488,7 +683,17 @@ export function addObjectTrackingMenu() {
         .name("Clear Track")
         .tooltip("Clear all tracked positions and start fresh")
         .perm();
-    
+
+    trackingFolder.add(menuActions, 'stabilizeVideo')
+        .name("Stabilize")
+        .tooltip("Apply tracked positions to stabilize the video")
+        .perm();
+
+    stabilizeToggleMenuItem = trackingFolder.add(menuActions, 'toggleStabilization')
+        .name("Enable Stabilization")
+        .tooltip("Toggle video stabilization on/off")
+        .perm();
+
     const radiusParams = {
         get trackRadius() { return objectTracker?.trackRadius ?? 30; },
         set trackRadius(v) { 
@@ -502,6 +707,40 @@ export function addObjectTrackingMenu() {
     radiusController = trackingFolder.add(radiusParams, 'trackRadius', 10, 100, 1)
         .name("Track Radius")
         .tooltip("Size of the tracking region")
+        .perm();
+
+    const centerOnBrightParams = {
+        get centerOnBright() { return objectTracker?.centerOnBright ?? false; },
+        set centerOnBright(v) {
+            if (objectTracker) {
+                objectTracker.centerOnBright = v;
+                // Clear track when switching modes to avoid confusion
+                if (objectTracker.tracking) {
+                    objectTracker.clearTrack();
+                }
+                setRenderOne(true);
+            }
+        }
+    };
+
+    trackingFolder.add(centerOnBrightParams, 'centerOnBright')
+        .name("Center on Bright")
+        .tooltip("Track centroid of bright pixels (better for stars/point lights)")
+        .perm();
+
+    const brightnessParams = {
+        get brightnessThreshold() { return objectTracker?.brightnessThreshold ?? 128; },
+        set brightnessThreshold(v) {
+            if (objectTracker) {
+                objectTracker.brightnessThreshold = v;
+                setRenderOne(true);
+            }
+        }
+    };
+
+    trackingFolder.add(brightnessParams, 'brightnessThreshold', 0, 255, 1)
+        .name("Brightness Threshold")
+        .tooltip("Minimum brightness to consider (0-255). Only used in Center on Bright mode")
         .perm();
 }
 

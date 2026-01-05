@@ -675,7 +675,7 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
         if (foundFrame && bestFrame >= 0 && bestFrame < this.imageCache.length) {
             const image = this.imageCache[bestFrame];
             if (image && image.width && image.width > 0) {
-                return image;
+                return this.getStabilizedImage(frame, image);
             }
         }
 
