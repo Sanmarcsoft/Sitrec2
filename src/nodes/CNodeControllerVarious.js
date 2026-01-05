@@ -58,8 +58,7 @@ export class CNodeControllerHumanHorizon extends CNodeController {
     apply(f, objectNode) {
         const humanHorizon = get_real_horizon_angle_for_frame(f);
         const camera = objectNode.camera;
-        camera.rotateZ(radians(humanHorizon));
-
+        camera.rotateZ(radians(-humanHorizon));
     }
 }
 

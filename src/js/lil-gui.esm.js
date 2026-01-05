@@ -953,6 +953,7 @@ class NumberController extends Controller {
         const onWheel = e => {
             if ( this._inputFocused ) {
                 e.preventDefault();
+                e.stopPropagation();
                 increment( this._step * this._normalizeMouseWheel( e ) );
             }
         };
@@ -1283,6 +1284,7 @@ class NumberController extends Controller {
             if ( isVertical && this._hasScrollBar ) return;
 
             e.preventDefault();
+            e.stopPropagation();
 
             // set value
             const delta = this._normalizeMouseWheel( e ) * this._step;
@@ -2142,6 +2144,9 @@ class GUI {
 
         this.domElement.appendChild( this.$title );
         this.domElement.appendChild( this.$children );
+
+        // MICK: stop wheel events from propagating to the underlying application
+        this.domElement.addEventListener( 'wheel', e => e.stopPropagation(), { passive: true } );
 
         this.title( title );
 
