@@ -10,6 +10,7 @@ sitrec-upload
 sitrecServer/vendor
 sitrecServer/config.php
 config/config.php
+CLAUDE.md
 debug/
 __image_snapshots__/
 tests/__image_snapshots__/
