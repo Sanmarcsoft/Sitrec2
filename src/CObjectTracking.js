@@ -168,6 +168,10 @@ class ObjectTracker {
             return;
         }
 
+        // Target 25 FPS for visual updates (40ms per render)
+        const targetRenderInterval = 40; // ms
+        let lastRenderTime = performance.now();
+
         for (let frame = startFrame; frame <= bFrame; frame++) {
             if (!this.tracking) break;
 
@@ -181,14 +185,23 @@ class ObjectTracker {
             // Track this frame
             this.trackFrame(frame);
 
-            // Render only the video viewport
-            if (this.videoView && this.videoView.renderCanvas) {
-                this.videoView.renderCanvas(frame);
-            }
+            // Only render and yield if enough time has passed (target 25 FPS visual updates)
+            const now = performance.now();
+            const shouldRender = (now - lastRenderTime >= targetRenderInterval) || (frame === bFrame);
 
-            // Yield to browser every frame to keep UI responsive
-            // Using setTimeout(0) allows maximum speed while still being interruptible
-            await new Promise(resolve => setTimeout(resolve, 0));
+            if (shouldRender) {
+                // Render the video viewport
+                if (this.videoView && this.videoView.renderCanvas) {
+                    this.videoView.renderCanvas(frame);
+                }
+                // Update slider status
+                this.updateSliderStatus();
+
+                lastRenderTime = now;
+
+                // Only yield to browser when we render (keep UI responsive)
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
         }
 
         // Tracking complete
@@ -228,16 +241,27 @@ class ObjectTracker {
     // Calculate centroid (center of mass) of bright pixels within radius
     // Returns {x, y} or null if no bright pixels found
     calculateBrightCentroid(image, centerX, centerY, radius) {
-        const width = image.width || image.videoWidth;
-        const height = image.height || image.videoHeight;
+        const imgWidth = image.width || image.videoWidth;
+        const imgHeight = image.height || image.videoHeight;
 
-        // Create canvas to extract image data
+        // Define ROI bounds (rectangle that contains the circle)
+        const minX = Math.max(0, Math.floor(centerX - radius));
+        const maxX = Math.min(imgWidth - 1, Math.ceil(centerX + radius));
+        const minY = Math.max(0, Math.floor(centerY - radius));
+        const maxY = Math.min(imgHeight - 1, Math.ceil(centerY + radius));
+
+        const roiWidth = maxX - minX + 1;
+        const roiHeight = maxY - minY + 1;
+
+        // Extract ONLY the ROI pixels
         const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
+        canvas.width = imgWidth;
+        canvas.height = imgHeight;
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(image, 0, 0, width, height);
-        const imageData = ctx.getImageData(0, 0, width, height);
+        ctx.drawImage(image, 0, 0, imgWidth, imgHeight);
+
+        // Only get pixels from the ROI rectangle
+        const imageData = ctx.getImageData(minX, minY, roiWidth, roiHeight);
         const data = imageData.data;
 
         let totalBrightness = 0;
@@ -245,23 +269,23 @@ class ObjectTracker {
         let weightedY = 0;
         let pixelCount = 0;
 
-        // Define search region (square around center)
-        const minX = Math.max(0, Math.floor(centerX - radius));
-        const maxX = Math.min(width - 1, Math.ceil(centerX + radius));
-        const minY = Math.max(0, Math.floor(centerY - radius));
-        const maxY = Math.min(height - 1, Math.ceil(centerY + radius));
-
         const radiusSquared = radius * radius;
 
-        // Scan all pixels within the circular region
-        for (let y = minY; y <= maxY; y++) {
-            for (let x = minX; x <= maxX; x++) {
+        // Scan pixels within the circular region
+        // Note: coordinates are relative to ROI, need to convert to image coordinates
+        for (let roiY = 0; roiY < roiHeight; roiY++) {
+            for (let roiX = 0; roiX < roiWidth; roiX++) {
+                // Convert ROI coordinates to image coordinates
+                const imgX = minX + roiX;
+                const imgY = minY + roiY;
+
                 // Check if pixel is within circular radius
-                const dx = x - centerX;
-                const dy = y - centerY;
+                const dx = imgX - centerX;
+                const dy = imgY - centerY;
                 if (dx * dx + dy * dy > radiusSquared) continue;
 
-                const index = (y * width + x) * 4;
+                // Index into the ROI data (not full image)
+                const index = (roiY * roiWidth + roiX) * 4;
                 const r = data[index];
                 const g = data[index + 1];
                 const b = data[index + 2];
@@ -273,8 +297,8 @@ class ObjectTracker {
                     // Weight by brightness for better centering on bright core
                     const weight = brightness - this.brightnessThreshold;
                     totalBrightness += weight;
-                    weightedX += x * weight;
-                    weightedY += y * weight;
+                    weightedX += imgX * weight;
+                    weightedY += imgY * weight;
                     pixelCount++;
                 }
             }
@@ -304,19 +328,19 @@ class ObjectTracker {
             this.trackY = pos.y;
             return;
         }
-        
+
         let prevFrame = frame - 1;
         while (prevFrame >= 0 && !this.trackedPositions.has(prevFrame)) {
             prevFrame--;
         }
-        
+
         if (prevFrame < 0) return;
-        
+
         const prevPos = this.trackedPositions.get(prevFrame);
-        
+
         const videoData = this.videoView?.videoData;
         if (!videoData) return;
-        
+
         const currImage = videoData.getImage(frame);
 
         if (!currImage || !currImage.width) return;
