@@ -63,7 +63,9 @@ jobs:
       run: npm test
 
   playwright:
-    if: false
+    # Run Playwright tests on PRs to validate before merge
+    # Disabled by default for regular pushes (use workflow_dispatch for full test)
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     needs: build_web  # Run after build succeeds
     strategy:
       matrix:
