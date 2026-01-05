@@ -17,9 +17,9 @@ import {CNodeVelocityFromMotion} from "./nodes/CNodeVelocityFromMotion";
 import {CNodeTrackFromVelocity} from "./nodes/CNodeTrackFromVelocity";
 import {CNodeDisplayTrack} from "./nodes/CNodeDisplayTrack";
 import {Color} from "three";
+import {getCV, loadOpenCV} from "./openCVLoader";
 
 let cv = null;
-let cvLoadPromise = null;
 
 const MOTION_TECHNIQUES = {
     SPARSE_CONSENSUS: 'Sparse + Consensus',
@@ -28,103 +28,6 @@ const MOTION_TECHNIQUES = {
     ECC_EUCLIDEAN: 'ECC Euclidean',
     AFFINE_RANSAC: 'Affine RANSAC',
 };
-
-function loadOpenCV() {
-    if (cv) return Promise.resolve();
-    if (cvLoadPromise) return cvLoadPromise;
-
-    cvLoadPromise = new Promise((resolve, reject) => {
-        let done = false;
-
-        const fail = (err) => {
-            if (done) return;
-            done = true;
-            cvLoadPromise = null;
-            reject(err);
-        };
-
-        const succeed = () => {
-            if (done) return;
-            done = true;
-            cv = window.cv;
-            resolve();
-        };
-
-        const timeout = setTimeout(() => {
-            fail(new Error("OpenCV.js load timeout (60s)"));
-        }, 60000);
-
-        if (window.cv && window.cv.onRuntimeInitialized == null && window.cv.Mat) {
-            clearTimeout(timeout);
-            succeed();
-            return;
-        }
-
-        window.cv = window.cv || {};
-        if (typeof window.cv.locateFile !== "function") {
-            window.cv.locateFile = (file) => "./libs/" + file;
-        }
-
-        const existing = document.querySelector('script[data-opencvjs="1"]');
-        if (existing) {
-            clearTimeout(timeout);
-            if (window.cv && typeof window.cv.onRuntimeInitialized === "function") {
-                const prev = window.cv.onRuntimeInitialized;
-                window.cv.onRuntimeInitialized = () => {
-                    try { if (typeof prev === "function") prev(); } catch {}
-                    succeed();
-                };
-            } else if (window.cv && window.cv.Mat) {
-                succeed();
-            } else {
-                fail(new Error("OpenCV.js present but not initialized"));
-            }
-            return;
-        }
-
-        const script = document.createElement("script");
-        script.src = "./libs/opencv.js";
-        script.async = true;
-        script.dataset.opencvjs = "1";
-
-        script.onload = () => {
-            if (window.cv && typeof window.cv.onRuntimeInitialized === "function") {
-                const prev = window.cv.onRuntimeInitialized;
-                window.cv.onRuntimeInitialized = () => {
-                    try { if (typeof prev === "function") prev(); } catch {}
-                    clearTimeout(timeout);
-                    succeed();
-                };
-            } else {
-                const start = performance.now();
-                const poll = () => {
-                    if (done) return;
-                    if (window.cv && window.cv.Mat) {
-                        clearTimeout(timeout);
-                        succeed();
-                        return;
-                    }
-                    if (performance.now() - start > 60000) {
-                        clearTimeout(timeout);
-                        fail(new Error("OpenCV.js init timeout (no onRuntimeInitialized)"));
-                        return;
-                    }
-                    setTimeout(poll, 50);
-                };
-                poll();
-            }
-        };
-
-        script.onerror = () => {
-            clearTimeout(timeout);
-            fail(new Error("Failed to load OpenCV.js script"));
-        };
-
-        document.head.appendChild(script);
-    });
-
-    return cvLoadPromise;
-}
 
 class MotionAnalyzer {
     constructor(videoView) {
@@ -1933,7 +1836,8 @@ export function toggleMotionAnalysis() {
         analyzeMenuItem.name("Loading OpenCV...");
     }
     
-    loadOpenCV().then(() => {
+    loadOpenCV().then((cvModule) => {
+        cv = cvModule;
         startAnalysis(videoView);
     }).catch(e => {
         console.error("Failed to load OpenCV:", e);
@@ -2010,7 +1914,7 @@ async function createTrackFromMotion() {
     if (!cv) {
         if (createTrackMenuItem) createTrackMenuItem.name("Loading OpenCV...");
         try {
-            await loadOpenCV();
+            cv = await loadOpenCV();
         } catch (e) {
             alert("Failed to load OpenCV: " + e.message);
             if (createTrackMenuItem) createTrackMenuItem.name("Create Track from Motion");
@@ -2118,7 +2022,7 @@ async function exportMotionPanorama() {
     if (!cv) {
         if (exportPanoMenuItem) exportPanoMenuItem.name("Loading OpenCV...");
         try {
-            await loadOpenCV();
+            cv = await loadOpenCV();
         } catch (e) {
             alert("Failed to load OpenCV: " + e.message);
             if (exportPanoMenuItem) exportPanoMenuItem.name("Export Motion Panorama");
@@ -2366,7 +2270,7 @@ async function exportPanoVideo() {
     if (!cv) {
         if (exportPanoVideoMenuItem) exportPanoVideoMenuItem.name("Loading OpenCV...");
         try {
-            await loadOpenCV();
+            cv = await loadOpenCV();
         } catch (e) {
             alert("Failed to load OpenCV: " + e.message);
             if (exportPanoVideoMenuItem) exportPanoVideoMenuItem.name("Export Animated Pano");
@@ -2909,7 +2813,7 @@ export function serializeMotionAnalysis() {
     };
 }
 
-export function deserializeMotionAnalysis(data) {
+export async function deserializeMotionAnalysis(data) {
     if (!data) return;
     
     const videoView = NodeMan.get("video", false);
@@ -2973,14 +2877,10 @@ export function deserializeMotionAnalysis(data) {
             setRenderOne(true);
         };
         
-        if (cv) {
-            doRestore();
-        } else {
-            loadOpenCV().then(() => {
-                doRestore();
-            }).catch(e => {
-                console.error("Failed to restore motion analysis:", e);
-            });
+        if (!cv) {
+            await loadOpenCV();
+            cv = getCV();
         }
+        doRestore();
     }
 }

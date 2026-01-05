@@ -3476,7 +3476,7 @@ export class CCustomManager {
      * Complete the deserialization process after mods have been applied
      * @param {Object} sitchData - The complete sitch data
      */
-    finishDeserialization(sitchData) {
+    async finishDeserialization(sitchData) {
         // apply the pars
         if (sitchData.pars) {
             for (let key in sitchData.pars) {
@@ -3508,7 +3508,7 @@ export class CCustomManager {
         }
 
         if (sitchData.motionAnalysis) {
-            deserializeMotionAnalysis(sitchData.motionAnalysis);
+            await deserializeMotionAnalysis(sitchData.motionAnalysis);
         }
 
         Globals.dontRecalculate = false;

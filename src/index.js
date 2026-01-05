@@ -105,6 +105,7 @@ import {
     resetMotionAnalysis,
     toggleMotionAnalysis
 } from "./CMotionAnalysis";
+import {addObjectTrackingMenu, resetObjectTracking} from "./CObjectTracking";
 import {QuadTreeTile} from "./QuadTreeTile";
 import {showError} from "./showError";
 import {destroyGlobalProfiler, globalProfiler, initGlobalProfiler} from "./VisualProfiler";
@@ -1387,6 +1388,7 @@ async function initializeOnce() {
     // legacy accessor variables. can also use guiMenus.physics, etc
     setupGUIGlobals(_gui,_guiShowHide,_guiTweaks, _guiShowHideViews, _guiPhysics)
     addMotionAnalysisMenu();
+    addObjectTrackingMenu();
     setUnits(new CUnits("Nautical"));
     setFileManager(new CFileManager())
 
@@ -2517,6 +2519,7 @@ function disposeEverything() {
 
     // reset motion analysis state (must be after NodeMan.disposeAll since it references the video node)
     resetMotionAnalysis();
+    resetObjectTracking();
 
     // dispose of any remaining GUI, except for the permanent folders and items
     Globals.menuBar.destroy(false);
