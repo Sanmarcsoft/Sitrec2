@@ -39,20 +39,64 @@ class ObjectTracker {
         this.overlay.style.left = '0';
         this.overlay.style.width = '100%';
         this.overlay.style.height = '100%';
-        this.overlay.style.pointerEvents = 'auto';
+        this.overlay.style.pointerEvents = 'none';
         this.overlay.style.zIndex = '100';
-        this.overlay.style.cursor = 'crosshair';
         this.videoView.div.appendChild(this.overlay);
         this.overlayCtx = this.overlay.getContext('2d');
         
-        this.overlay.addEventListener('mousedown', (e) => this.onMouseDown(e));
-        this.overlay.addEventListener('mousemove', (e) => this.onMouseMove(e));
-        this.overlay.addEventListener('mouseup', (e) => this.onMouseUp(e));
-        this.overlay.addEventListener('mouseleave', (e) => this.onMouseUp(e));
+        this.hookMouseHandler();
         
         const {width, height} = this.getImageDimensions();
         this.trackX = width / 2;
         this.trackY = height / 2;
+    }
+    
+    hookMouseHandler() {
+        const mouse = this.videoView.mouse;
+        if (!mouse) return;
+        
+        const originalDrag = mouse.handlers.drag;
+        
+        mouse.handlers.down = (e) => {
+            if (this.enabled) {
+                const x = mouse.x;
+                const y = mouse.y;
+                const [vX, vY] = this.videoView.canvasToVideoCoords(x, y);
+                
+                if (this.isWithinTrackPoint(vX, vY)) {
+                    this.isDragging = true;
+                    this.lastMouseX = vX;
+                    this.lastMouseY = vY;
+                }
+            }
+        };
+        
+        mouse.handlers.drag = (e) => {
+            if (this.enabled && this.isDragging) {
+                const x = mouse.x;
+                const y = mouse.y;
+                const [vX, vY] = this.videoView.canvasToVideoCoords(x, y);
+                
+                this.trackX = vX;
+                this.trackY = vY;
+                
+                const frame = Math.floor(par.frame);
+                this.trackedPositions.set(frame, {x: this.trackX, y: this.trackY});
+                
+                setRenderOne(true);
+                return;
+            }
+            if (originalDrag) originalDrag(e);
+        };
+        
+        mouse.handlers.up = (e) => {
+            if (this.isDragging) {
+                this.isDragging = false;
+                if (this.tracking) {
+                    this.initializeTracker();
+                }
+            }
+        };
     }
     
     getImageDimensions() {
@@ -109,69 +153,10 @@ class ObjectTracker {
         this.trackedPositions.set(frame, {x: this.trackX, y: this.trackY});
     }
     
-    getMouseVideoCoords(e) {
-        const rect = this.overlay.getBoundingClientRect();
-        const canvasX = e.clientX - rect.left;
-        const canvasY = e.clientY - rect.top;
-        
-        const scaleX = this.overlay.width / rect.width;
-        const scaleY = this.overlay.height / rect.height;
-        const cx = canvasX * scaleX;
-        const cy = canvasY * scaleY;
-        
-        return this.videoView.canvasToVideoCoords(cx, cy);
-    }
-    
     isWithinTrackPoint(vX, vY) {
         const dx = vX - this.trackX;
         const dy = vY - this.trackY;
         return (dx * dx + dy * dy) <= (this.trackRadius * this.trackRadius);
-    }
-    
-    onMouseDown(e) {
-        if (!this.enabled) return;
-        
-        const [vX, vY] = this.getMouseVideoCoords(e);
-        
-        if (this.isWithinTrackPoint(vX, vY)) {
-            this.isDragging = true;
-            this.lastMouseX = vX;
-            this.lastMouseY = vY;
-            this.overlay.style.cursor = 'grabbing';
-        }
-    }
-    
-    onMouseMove(e) {
-        if (!this.enabled) return;
-        
-        const [vX, vY] = this.getMouseVideoCoords(e);
-        
-        if (this.isDragging) {
-            this.trackX = vX;
-            this.trackY = vY;
-            
-            const frame = Math.floor(par.frame);
-            this.trackedPositions.set(frame, {x: this.trackX, y: this.trackY});
-            
-            setRenderOne(true);
-        } else {
-            if (this.isWithinTrackPoint(vX, vY)) {
-                this.overlay.style.cursor = 'grab';
-            } else {
-                this.overlay.style.cursor = 'crosshair';
-            }
-        }
-    }
-    
-    onMouseUp(e) {
-        if (this.isDragging) {
-            this.isDragging = false;
-            this.overlay.style.cursor = 'grab';
-            
-            if (this.tracking) {
-                this.initializeTracker();
-            }
-        }
     }
     
     trackFrame(frame) {
