@@ -1,6 +1,16 @@
-import {Globals, guiMenus, NodeMan, registerFrameBlocker, setRenderOne, Sit, unregisterFrameBlocker} from "./Globals";
+import {
+    GlobalDateTimeNode,
+    Globals,
+    guiMenus,
+    NodeMan,
+    registerFrameBlocker,
+    setRenderOne,
+    Sit,
+    unregisterFrameBlocker
+} from "./Globals";
 import {isLocal} from "./configUtils";
 import {par} from "./par";
+import {ExportProgressWidget} from "./utils";
 
 import {CNodeMaskOverlay} from "./nodes/CNodeMaskOverlay";
 import {CNodeVelocityFromMotion} from "./nodes/CNodeVelocityFromMotion";
@@ -2084,7 +2094,10 @@ async function createTrackFromMotion() {
 }
 
 const MAX_PANORAMA_WIDTH = 20000;
+const PANO_VIDEO_4K_WIDTH = 3840;
+const PANO_VIDEO_4K_HEIGHT = 2160;
 let exportPanoMenuItem = null;
+let exportPanoVideoMenuItem = null;
 let panoCrop = 10;
 let useMaskInPano = true;
 
@@ -2333,6 +2346,317 @@ async function exportMotionPanorama() {
     }, 'image/png');
 }
 
+async function exportPanoVideo() {
+    const videoView = NodeMan.get("video", false);
+    if (!videoView) {
+        alert("No video view found.");
+        return;
+    }
+
+    const videoData = videoView.videoData;
+    if (!videoData) {
+        alert("No video data found.");
+        return;
+    }
+
+    if (!cv) {
+        if (exportPanoVideoMenuItem) exportPanoVideoMenuItem.name("Loading OpenCV...");
+        try {
+            await loadOpenCV();
+        } catch (e) {
+            alert("Failed to load OpenCV: " + e.message);
+            if (exportPanoVideoMenuItem) exportPanoVideoMenuItem.name("Export Pano Video");
+            return;
+        }
+    }
+
+    if (!motionAnalyzer) {
+        motionAnalyzer = new MotionAnalyzer(videoView);
+    }
+    motionAnalyzer.active = true;
+    motionAnalyzer.createOverlays();
+
+    if (!motionAnalyzer.isCacheFull()) {
+        if (exportPanoVideoMenuItem) exportPanoVideoMenuItem.name("Analyzing... 0%");
+        await analyzeAllFrames((current, total) => {
+            const pct = Math.round(100 * current / total);
+            if (exportPanoVideoMenuItem) exportPanoVideoMenuItem.name(`Analyzing... ${pct}%`);
+        });
+    }
+
+    if (exportPanoVideoMenuItem) exportPanoVideoMenuItem.name("Building panorama...");
+
+    const startFrame = Sit.aFrame;
+    const endFrame = Sit.bFrame;
+    const totalFrames = endFrame - startFrame + 1;
+
+    const motionData = motionAnalyzer.getMotionDataForAllFrames();
+
+    const frameData = [];
+    let cumX = 0, cumY = 0;
+    
+    for (let i = 0; i < totalFrames; i++) {
+        const frame = startFrame + i;
+        if (i > 0) {
+            const md = motionData[frame];
+            cumX -= md.dx;
+            cumY -= md.dy;
+        }
+        frameData.push({frame, px: cumX, py: cumY});
+    }
+
+    let minPx = Infinity, maxPx = -Infinity;
+    let minPy = Infinity, maxPy = -Infinity;
+
+    for (const fd of frameData) {
+        minPx = Math.min(minPx, fd.px);
+        maxPx = Math.max(maxPx, fd.px);
+        minPy = Math.min(minPy, fd.py);
+        maxPy = Math.max(maxPy, fd.py);
+    }
+
+    const firstImage = videoData.getImage(startFrame);
+    const frameWidth = firstImage.width || firstImage.videoWidth || 1920;
+    const frameHeight = firstImage.height || firstImage.videoHeight || 1080;
+
+    const crop = panoCrop;
+    const croppedWidth = frameWidth - 2 * crop;
+    const croppedHeight = frameHeight - 2 * crop;
+
+    const pxRange = maxPx - minPx;
+    const pyRange = maxPy - minPy;
+
+    let panoWidthPx = Math.ceil(pxRange + croppedWidth);
+    let panoHeightPx = Math.ceil(pyRange + croppedHeight);
+
+    let panoScale = 1;
+    if (panoWidthPx > MAX_PANORAMA_WIDTH) {
+        panoScale = MAX_PANORAMA_WIDTH / panoWidthPx;
+        panoWidthPx = MAX_PANORAMA_WIDTH;
+        panoHeightPx = Math.ceil(panoHeightPx * panoScale);
+    }
+
+    const scaledFrameWidth = Math.ceil(croppedWidth * panoScale);
+    const scaledFrameHeight = Math.ceil(croppedHeight * panoScale);
+
+    const panoCanvas = document.createElement('canvas');
+    panoCanvas.width = panoWidthPx;
+    panoCanvas.height = panoHeightPx;
+    const panoCtx = panoCanvas.getContext('2d');
+
+    panoCtx.fillStyle = 'black';
+    panoCtx.fillRect(0, 0, panoWidthPx, panoHeightPx);
+
+    const useMask = useMaskInPano && motionAnalyzer.maskEnabled && motionAnalyzer.maskOverlayNode && motionAnalyzer.maskOverlayNode.maskCanvas;
+    let tempCanvas = null;
+    let tempCtx = null;
+    let maskImageData = null;
+    
+    if (useMask) {
+        tempCanvas = document.createElement('canvas');
+        tempCanvas.width = frameWidth;
+        tempCanvas.height = frameHeight;
+        tempCtx = tempCanvas.getContext('2d', {willReadFrequently: true});
+        motionAnalyzer.maskOverlayNode.updateMaskImageData();
+        maskImageData = motionAnalyzer.maskOverlayNode.maskImageData;
+    }
+
+    Globals.justVideoAnalysis = true;
+    const savedPaused = par.paused;
+    par.paused = true;
+    
+    for (let i = 0; i < totalFrames; i++) {
+        const fd = frameData[i];
+        
+        const loaded = await videoData.requestFrameSequential(fd.frame);
+        if (!loaded) continue;
+        
+        const image = videoData.getImageNoPurge(fd.frame);
+        if (!image || !image.width) continue;
+
+        const x = (fd.px - minPx) * panoScale;
+        const y = (fd.py - minPy) * panoScale;
+
+        if (useMask && maskImageData) {
+            tempCtx.clearRect(0, 0, frameWidth, frameHeight);
+            tempCtx.drawImage(image, 0, 0);
+            const frameImgData = tempCtx.getImageData(crop, crop, croppedWidth, croppedHeight);
+            const framePixels = frameImgData.data;
+            const maskPixels = maskImageData.data;
+            const maskWidth = maskImageData.width;
+            
+            for (let py = 0; py < croppedHeight; py++) {
+                for (let px = 0; px < croppedWidth; px++) {
+                    const maskX = px + crop;
+                    const maskY = py + crop;
+                    if (maskX < maskWidth && maskY < maskImageData.height) {
+                        const maskIdx = (maskY * maskWidth + maskX) * 4;
+                        if (maskPixels[maskIdx + 3] > 128) {
+                            const frameIdx = (py * croppedWidth + px) * 4;
+                            framePixels[frameIdx + 3] = 0;
+                        }
+                    }
+                }
+            }
+            
+            tempCtx.putImageData(frameImgData, crop, crop);
+            panoCtx.drawImage(
+                tempCanvas,
+                crop, crop, croppedWidth, croppedHeight,
+                x, y, scaledFrameWidth, scaledFrameHeight
+            );
+        } else {
+            panoCtx.drawImage(
+                image,
+                crop, crop, croppedWidth, croppedHeight,
+                x, y, scaledFrameWidth, scaledFrameHeight
+            );
+        }
+
+        if (i % 20 === 0) {
+            const pct = Math.round(100 * i / totalFrames);
+            if (exportPanoVideoMenuItem) exportPanoVideoMenuItem.name(`Pano... ${pct}%`);
+            await new Promise(r => setTimeout(r, 0));
+        }
+    }
+
+    if (exportPanoVideoMenuItem) exportPanoVideoMenuItem.name("Rendering video...");
+
+    const outputWidth = PANO_VIDEO_4K_WIDTH;
+    const outputHeight = PANO_VIDEO_4K_HEIGHT;
+
+    const panoAspect = panoWidthPx / panoHeightPx;
+    const outputAspect = outputWidth / outputHeight;
+
+    let fitWidth, fitHeight, offsetX, offsetY;
+    if (panoAspect > outputAspect) {
+        fitWidth = outputWidth;
+        fitHeight = Math.round(outputWidth / panoAspect);
+        offsetX = 0;
+        offsetY = Math.round((outputHeight - fitHeight) / 2);
+    } else {
+        fitHeight = outputHeight;
+        fitWidth = Math.round(outputHeight * panoAspect);
+        offsetX = Math.round((outputWidth - fitWidth) / 2);
+        offsetY = 0;
+    }
+
+    const videoFrameScaleInPano = fitWidth / panoWidthPx;
+    const videoFrameWidth = Math.round(scaledFrameWidth * videoFrameScaleInPano);
+    const videoFrameHeight = Math.round(scaledFrameHeight * videoFrameScaleInPano);
+
+    const {createVideoExporter, getVideoExtension, getBestFormatForResolution, checkVideoEncodingSupport} = await import("./VideoExporter");
+
+    const encodingSupport = await checkVideoEncodingSupport();
+    if (!encodingSupport.supported) {
+        alert("Video encoding not supported in this browser");
+        Globals.justVideoAnalysis = false;
+        par.paused = savedPaused;
+        if (exportPanoVideoMenuItem) exportPanoVideoMenuItem.name("Export Pano Video");
+        return;
+    }
+
+    const formatId = encodingSupport.h264 ? 'mp4-h264' : 'webm-vp8';
+    const bestFormat = await getBestFormatForResolution(formatId, outputWidth, outputHeight);
+    if (!bestFormat.formatId) {
+        alert(`Video export failed: ${bestFormat.reason}`);
+        Globals.justVideoAnalysis = false;
+        par.paused = savedPaused;
+        if (exportPanoVideoMenuItem) exportPanoVideoMenuItem.name("Export Pano Video");
+        return;
+    }
+
+    const extension = getVideoExtension(bestFormat.formatId);
+    const fps = Sit.fps;
+
+    const progress = new ExportProgressWidget('Exporting pano video...', totalFrames);
+
+    const compositeCanvas = document.createElement('canvas');
+    compositeCanvas.width = outputWidth;
+    compositeCanvas.height = outputHeight;
+    const compositeCtx = compositeCanvas.getContext('2d');
+
+    const savedFrame = par.frame;
+
+    try {
+        const exporter = await createVideoExporter(bestFormat.formatId, {
+            width: outputWidth,
+            height: outputHeight,
+            fps,
+            bitrate: 20_000_000,
+            keyFrameInterval: 30,
+            hardwareAcceleration: bestFormat.hardwareAcceleration,
+        });
+
+        await exporter.initialize();
+
+        for (let i = 0; i < totalFrames; i++) {
+            if (progress.shouldStop()) break;
+
+            const fd = frameData[i];
+            par.frame = fd.frame;
+            GlobalDateTimeNode.update(fd.frame);
+
+            const loaded = await videoData.requestFrameSequential(fd.frame);
+            if (!loaded) continue;
+
+            const image = videoData.getImageNoPurge(fd.frame);
+            if (!image || !image.width) continue;
+
+            compositeCtx.fillStyle = 'black';
+            compositeCtx.fillRect(0, 0, outputWidth, outputHeight);
+
+            compositeCtx.drawImage(panoCanvas, offsetX, offsetY, fitWidth, fitHeight);
+
+            const frameX = offsetX + (fd.px - minPx) * panoScale * videoFrameScaleInPano;
+            const frameY = offsetY + (fd.py - minPy) * panoScale * videoFrameScaleInPano;
+
+            compositeCtx.drawImage(
+                image,
+                crop, crop, croppedWidth, croppedHeight,
+                frameX, frameY, videoFrameWidth, videoFrameHeight
+            );
+
+            await exporter.addFrame(compositeCanvas, fd.frame);
+
+            if (i % 10 === 0) {
+                progress.update(i + 1);
+                const pct = Math.round(100 * i / totalFrames);
+                if (exportPanoVideoMenuItem) exportPanoVideoMenuItem.name(`Video... ${pct}%`);
+                await new Promise(r => setTimeout(r, 0));
+            }
+        }
+
+        if (progress.shouldSave()) {
+            const blob = await exporter.finalize(
+                (current, total) => progress.setFinalizeProgress(current, total),
+                (status) => progress.setStatus(status)
+            );
+
+            const filename = `pano_video_${Sit.name || 'export'}_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.${extension}`;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            console.log(`Pano video exported: ${filename}`);
+        }
+
+    } catch (e) {
+        console.error('Pano video export failed:', e);
+        alert('Pano video export failed: ' + e.message);
+    } finally {
+        progress.remove();
+        par.frame = savedFrame;
+        Globals.justVideoAnalysis = false;
+        par.paused = savedPaused;
+        if (exportPanoVideoMenuItem) exportPanoVideoMenuItem.name("Export Pano Video");
+        setRenderOne(true);
+    }
+}
+
 export function addMotionAnalysisMenu() {
     if (!guiMenus.view) return;
     
@@ -2342,6 +2666,7 @@ export function addMotionAnalysisMenu() {
         analyzeMotion: toggleMotionAnalysis,
         createTrack: createTrackFromMotion,
         exportPanorama: exportMotionPanorama,
+        exportPanoVideo: exportPanoVideo,
     };
 
     analyzeMenuItem = motionFolder.add(menuActions, 'analyzeMotion')
@@ -2357,6 +2682,11 @@ export function addMotionAnalysisMenu() {
     exportPanoMenuItem = motionFolder.add(menuActions, 'exportPanorama')
         .name("Export Motion Panorama")
         .tooltip("Create a panorama image from video frames using motion tracking offsets")
+        .perm();
+
+    exportPanoVideoMenuItem = motionFolder.add(menuActions, 'exportPanoVideo')
+        .name("Export Pano Video")
+        .tooltip("Create a 4K video showing the panorama with video frame overlay")
         .perm();
 
     const panoParams = {

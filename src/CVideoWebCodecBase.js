@@ -585,6 +585,18 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
             return this.createBlankFrame();
         }
 
+        // Detect concurrent frame requests from different timeline positions (thrashing)
+        // Skip if this is just normal playback (frame === par.frame)
+        const now = performance.now();
+        if (this.lastGetImageFrame !== undefined && this.lastGetImageTime !== undefined && frame !== par.frame) {
+            const frameDelta = Math.abs(frame - this.lastGetImageFrame);
+            const timeDelta = now - this.lastGetImageTime;
+            if (frameDelta > 100 && timeDelta < 100) {
+                console.warn(`[Video thrashing] Large frame jump: ${this.lastGetImageFrame} -> ${frame} (delta=${frameDelta}) in ${timeDelta.toFixed(0)}ms. Multiple systems may be requesting different frames.`);
+            }
+        }
+        this.lastGetImageTime = now;
+
         let cacheWindow = 30; // how much we seek ahead (and keep behind)
         const mem = navigator.deviceMemory;
         if (mem !== undefined && mem >= 8) {
