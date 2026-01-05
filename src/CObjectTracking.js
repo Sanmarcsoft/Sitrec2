@@ -1,4 +1,4 @@
-import {Globals, guiMenus, NodeMan, registerFrameBlocker, setRenderOne, Sit, unregisterFrameBlocker} from "./Globals";
+import {Globals, guiMenus, NodeMan, setRenderOne, Sit, unregisterFrameBlocker} from "./Globals";
 import {par} from "./par";
 import {getCV, loadOpenCV} from "./openCVLoader";
 
@@ -32,6 +32,7 @@ class ObjectTracker {
 
         this.guiFolder = null;
         this.savedPaused = true;
+        this.savedFrame = undefined;
     }
     
     createOverlay() {
@@ -149,32 +150,62 @@ class ObjectTracker {
         this.updateSliderStatus();
 
         this.savedPaused = par.paused;
+        this.savedFrame = par.frame;
         Globals.justVideoAnalysis = true;
-        par.paused = false;
+        par.paused = true;  // Pause the animation loop
 
-        // Register frame blocker to prevent skipping frames
-        registerFrameBlocker('objectTracking', {
-            check: (currentFrame, nextFrame) => {
-                if (!this.tracking) return false;
-                const current = Math.floor(currentFrame);
-                if (current < 0 || current >= Sit.frames) return false;
-                // Block if current frame hasn't been tracked yet
-                return !this.trackedPositions.has(current);
-            },
-            requiresSingleFrame: () => {
-                return this.tracking;
-            }
-        });
+        // Start fast tracking loop
+        this.runFastTrackingLoop();
     }
     
+    async runFastTrackingLoop() {
+        const startFrame = Math.floor(par.frame);
+        const bFrame = Sit.bFrame ?? (Sit.frames - 1);
+        const videoData = this.videoView?.videoData;
+
+        if (!videoData) {
+            this.onTrackingComplete();
+            return;
+        }
+
+        for (let frame = startFrame; frame <= bFrame; frame++) {
+            if (!this.tracking) break;
+
+            // Set current frame
+            par.frame = frame;
+
+            // Wait for video frame to be loaded (with timeout)
+            videoData.getImage(frame);
+            await videoData.waitForFrame(frame, 5000);
+
+            // Track this frame
+            this.trackFrame(frame);
+
+            // Render only the video viewport
+            if (this.videoView && this.videoView.renderCanvas) {
+                this.videoView.renderCanvas(frame);
+            }
+
+            // Yield to browser every frame to keep UI responsive
+            // Using setTimeout(0) allows maximum speed while still being interruptible
+            await new Promise(resolve => setTimeout(resolve, 0));
+        }
+
+        // Tracking complete
+        this.onTrackingComplete();
+    }
+
     stopTracking() {
         this.tracking = false;
         if (this.tracker) {
             this.tracker = null;
         }
         par.paused = this.savedPaused;
+        if (this.savedFrame !== undefined) {
+            par.frame = this.savedFrame;
+        }
         Globals.justVideoAnalysis = false;
-        unregisterFrameBlocker('objectTracking');
+        setRenderOne(true);
     }
     
     onTrackingComplete() {
@@ -264,15 +295,9 @@ class ObjectTracker {
         if (!this.tracking || !this.enabled) return;
         // Only require OpenCV for template matching mode
         if (!this.centerOnBright && !cv) return;
-        
+
         frame = Math.floor(frame);
-        
-        const bFrame = Sit.bFrame ?? (Sit.frames - 1);
-        if (frame >= bFrame) {
-            this.onTrackingComplete();
-            return;
-        }
-        
+
         if (this.trackedPositions.has(frame)) {
             const pos = this.trackedPositions.get(frame);
             this.trackX = pos.x;
