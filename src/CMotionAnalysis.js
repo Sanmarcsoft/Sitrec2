@@ -2826,6 +2826,7 @@ function createParamSliders() {
     }
     
     const maskFolder = motionFolder.addFolder("Masking").close();
+    paramControllers.push(maskFolder);
     
     const maskControls = {
         editMask: false,
