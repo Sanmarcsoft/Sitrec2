@@ -223,6 +223,37 @@ function createTube(A, B, C, R, K) {
 }
 
 /**
+ * Compute the local bounding box for an Object3D by temporarily resetting its transform.
+ * This helper detaches the object, resets to identity, computes bounds, then restores.
+ * @param {Object3D} object - The Three.js object to compute bounding box for
+ * @returns {Box3} A bounding box in local coordinates
+ */
+function computeLocalBoundingBox(object) {
+    const box = new Box3();
+    
+    const parent = object.parent;
+    if (parent) {
+        parent.remove(object);
+    }
+    
+    const originalMatrix = object.matrix.clone();
+    
+    object.matrix.identity();
+    object.updateMatrixWorld(true);
+    
+    box.setFromObject(object);
+    
+    object.matrix.copy(originalMatrix);
+    object.updateMatrixWorld(true);
+    
+    if (parent) {
+        parent.add(object);
+    }
+    
+    return box;
+}
+
+/**
  * Compute a bounding sphere for an entire Object3D (including all children)
  * This works for complex hierarchies like loaded GLTF models
  * The bounding sphere is computed in local coordinates (relative to the object's position)
@@ -230,38 +261,9 @@ function createTube(A, B, C, R, K) {
  * @returns {Sphere} A bounding sphere in local coordinates
  */
 function computeGroupBoundingSphere(object) {
-    // Create a bounding box that encompasses all children
-    const box = new Box3();
-    
-    // Temporarily detach from parent and reset transform to get local bounds
-    const parent = object.parent;
-    if (parent) {
-        parent.remove(object);
-    }
-    
-    // Store original matrix
-    const originalMatrix = object.matrix.clone();
-    
-    // Set to identity to get local bounds
-    object.matrix.identity();
-    object.updateMatrixWorld(true);
-    
-    // Compute bounding box from all children
-    box.setFromObject(object);
-    
-    // Restore original matrix
-    object.matrix.copy(originalMatrix);
-    object.updateMatrixWorld(true);
-    
-    // Re-attach to parent
-    if (parent) {
-        parent.add(object);
-    }
-    
-    // Create bounding sphere from the box
+    const box = computeLocalBoundingBox(object);
     const sphere = new Sphere();
     box.getBoundingSphere(sphere);
-    
     return sphere;
 }
 
@@ -272,41 +274,8 @@ function computeGroupBoundingSphere(object) {
  * @returns {number} The distance from the object's center to its lowest point
  */
 function computeCenterToLowestPoint(object) {
-    // Create a bounding box that encompasses all children
-    const box = new Box3();
-    
-    // Temporarily detach from parent and reset transform to get local bounds
-    const parent = object.parent;
-    if (parent) {
-        parent.remove(object);
-    }
-    
-    // Store original matrix
-    const originalMatrix = object.matrix.clone();
-    
-    // Set to identity to get local bounds
-    object.matrix.identity();
-    object.updateMatrixWorld(true);
-    
-    // Compute bounding box from all children
-    box.setFromObject(object);
-    
-    // Restore original matrix
-    object.matrix.copy(originalMatrix);
-    object.updateMatrixWorld(true);
-    
-    // Re-attach to parent
-    if (parent) {
-        parent.add(object);
-    }
-
-    // these are relative to the objects local coordinate system
-    // min.y will be negative as it's below the center of the object, and we are y-up
-    // so just negate it to make it positive, and that's the distance from the object origin
-    // to the lowest point of the object.
-    const centerToLowest = - box.min.y;
-    
-    return centerToLowest;
+    const box = computeLocalBoundingBox(object);
+    return -box.min.y;
 }
 
 
