@@ -364,9 +364,9 @@ class MotionAnalyzer {
                 const isGoodFrame = cached.flowData?.isGoodFrame ?? true;
                 if (isGoodFrame) {
                     data.push({
-                        dx: cached.smoothedDirection.x,
-                        dy: cached.smoothedDirection.y,
-                        confidence: cached.smoothedDirection.confidence,
+                        dx: cached.flowData?.consensus?.dx ?? cached.smoothedDirection.x,
+                        dy: cached.flowData?.consensus?.dy ?? cached.smoothedDirection.y,
+                        confidence: cached.flowData?.consensus?.confidence ?? cached.smoothedDirection.confidence,
                         isGood: true,
                     });
                     goodFrameIndices.push(f);
@@ -2420,9 +2420,10 @@ async function exportPanoVideo() {
         offsetY = 0;
     }
 
-    const videoFrameScaleInPano = fitWidth / panoWidthPx;
-    const videoFrameWidth = Math.round(scaledFrameWidth * videoFrameScaleInPano);
-    const videoFrameHeight = Math.round(scaledFrameHeight * videoFrameScaleInPano);
+    const videoFrameScaleX = fitWidth / panoWidthPx;
+    const videoFrameScaleY = fitHeight / panoHeightPx;
+    const videoFrameWidth = Math.round(scaledFrameWidth * videoFrameScaleX);
+    const videoFrameHeight = Math.round(scaledFrameHeight * videoFrameScaleY);
 
     const {createVideoExporter, getVideoExtension, getBestFormatForResolution, checkVideoEncodingSupport} = await import("./VideoExporter");
 
@@ -2486,8 +2487,8 @@ async function exportPanoVideo() {
 
             compositeCtx.drawImage(panoCanvas, offsetX, offsetY, fitWidth, fitHeight);
 
-            const frameX = offsetX + (fd.px - minPx) * panoScale * videoFrameScaleInPano;
-            const frameY = offsetY + (fd.py - minPy) * panoScale * videoFrameScaleInPano;
+            const frameX = offsetX + (fd.px - minPx) * panoScale * videoFrameScaleX;
+            const frameY = offsetY + (fd.py - minPy) * panoScale * videoFrameScaleY;
 
             let overlayImage = image;
             if (exportWithEffects) {
