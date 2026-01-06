@@ -1842,8 +1842,8 @@ export function toggleMotionAnalysis() {
         analyzeMenuItem.name("Loading OpenCV...");
     }
     
-    loadOpenCV().then((cvModule) => {
-        cv = cvModule;
+    loadOpenCV().then(() => {
+        cv = getCV();
         startAnalysis(videoView);
     }).catch(e => {
         console.error("Failed to load OpenCV:", e);
@@ -1920,7 +1920,8 @@ async function createTrackFromMotion() {
     if (!cv) {
         if (createTrackMenuItem) createTrackMenuItem.name("Loading OpenCV...");
         try {
-            cv = await loadOpenCV();
+            await loadOpenCV();
+            cv = getCV();
         } catch (e) {
             alert("Failed to load OpenCV: " + e.message);
             if (createTrackMenuItem) createTrackMenuItem.name("Create Track from Motion");
@@ -2030,7 +2031,8 @@ async function exportMotionPanorama() {
     if (!cv) {
         if (exportPanoMenuItem) exportPanoMenuItem.name("Loading OpenCV...");
         try {
-            cv = await loadOpenCV();
+            await loadOpenCV();
+            cv = getCV();
         } catch (e) {
             alert("Failed to load OpenCV: " + e.message);
             if (exportPanoMenuItem) exportPanoMenuItem.name("Export Motion Panorama");
@@ -2278,7 +2280,8 @@ async function exportPanoVideo() {
     if (!cv) {
         if (exportPanoVideoMenuItem) exportPanoVideoMenuItem.name("Loading OpenCV...");
         try {
-            cv = await loadOpenCV();
+            await loadOpenCV();
+            cv = getCV();
         } catch (e) {
             alert("Failed to load OpenCV: " + e.message);
             if (exportPanoVideoMenuItem) exportPanoVideoMenuItem.name("Export Animated Pano");
@@ -2589,7 +2592,8 @@ async function stabilizeVideoFromMotion() {
     if (!cv) {
         if (stabilizeMenuItem) stabilizeMenuItem.name("Loading OpenCV...");
         try {
-            cv = await loadOpenCV();
+            await loadOpenCV();
+            cv = getCV();
         } catch (e) {
             alert("Failed to load OpenCV: " + e.message);
             if (stabilizeMenuItem) stabilizeMenuItem.name("Stabilize Video");
