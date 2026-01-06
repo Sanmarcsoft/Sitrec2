@@ -104,7 +104,9 @@ class MotionAnalyzer {
     getCacheStatusArray() {
         const status = new Array(Sit.frames).fill(0);
         for (let f = 0; f < Sit.frames; f++) {
-            if (this.resultCache.has(f)) {
+            const cached = this.resultCache.get(f);
+            // Only show as cached if complete (not incomplete)
+            if (cached && !cached.incomplete) {
                 status[f] = 1;
             }
         }
@@ -115,7 +117,9 @@ class MotionAnalyzer {
         const aFrame = Sit.aFrame || 0;
         const bFrame = Sit.bFrame ?? (Sit.frames - 1);
         for (let f = aFrame; f <= bFrame; f++) {
-            if (!this.resultCache.has(f)) {
+            const cached = this.resultCache.get(f);
+            // Check that frame is cached AND not incomplete
+            if (!cached || cached.incomplete) {
                 return false;
             }
         }
@@ -533,7 +537,9 @@ class MotionAnalyzer {
                 if (!this.active) return false;
                 const current = Math.floor(currentFrame);
                 if (current < 0 || current >= Sit.frames) return false;
-                return !this.resultCache.has(current);
+                // Block if frame is not cached OR if it's cached but incomplete
+                const cached = this.resultCache.get(current);
+                return !cached || cached.incomplete;
             },
             requiresSingleFrame: () => {
                 return this.active && !this.isCacheFull();
