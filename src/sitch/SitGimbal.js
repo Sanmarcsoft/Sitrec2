@@ -1,4 +1,5 @@
 import {AlwaysDepth, Color} from "three";
+import * as LAYER from "../LayerMasks";
 import {par} from "../par";
 import {arrayColumn, ExpandKeyframes, RollingAverage, scaleF2M} from "../utils";
 import {CNodeCurveEditor} from "../nodes/CNodeCurveEdit";
@@ -457,7 +458,7 @@ export const SitGimbal = {
                 track: "LOSTraverseSelect",
                 size: "sizeScaled",
             },
-
+            layers: LAYER.MASK_TARGET,
         })
 
 
@@ -579,7 +580,7 @@ export const SitGimbalNear = {
                 track: "LOSTraverseSelect",
                 size: "sizeScaled",
             },
-
+            layers: LAYER.MASK_TARGET,
         })
 
 
