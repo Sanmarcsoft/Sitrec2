@@ -19,6 +19,7 @@ import {CNodeDisplayTrack} from "./nodes/CNodeDisplayTrack";
 import {Color} from "three";
 import {getCV, loadOpenCV} from "./openCVLoader";
 import {applyConvolution} from "./nodes/CNodeVideoView";
+import {isAlignWithFlowEnabled, setAlignWithFlow, setMotionAnalyzerRef} from "./FlowAlignment";
 
 let cv = null;
 let analyzeWithEffects = false;
@@ -88,29 +89,37 @@ async function ensureOpenCVAndAnalyzer(menuItem, loadingText, defaultText) {
     if (!motionAnalyzer) {
         motionAnalyzer = new MotionAnalyzer(videoView);
     }
+    setMotionAnalyzerRef(motionAnalyzer);
     motionAnalyzer.active = true;
     motionAnalyzer.createOverlays();
 
     return {videoView, videoData};
 }
 
-function calculateFrameOffsets(motionData, startFrame, endFrame, frameStep = 1) {
+function calculateFrameOffsets(motionData, startFrame, endFrame, frameStep = 1, rotationAngle = 0) {
     const totalFrames = Math.ceil((endFrame - startFrame + 1) / frameStep);
     const frameData = [];
     let cumX = 0, cumY = 0;
+    
+    const cos = Math.cos(rotationAngle);
+    const sin = Math.sin(rotationAngle);
     
     for (let i = 0; i < totalFrames; i++) {
         const frame = startFrame + i * frameStep;
         if (i > 0) {
             if (frameStep === 1) {
                 const md = motionData[frame];
-                cumX -= md.dx;
-                cumY -= md.dy;
+                const dx = -md.dx;
+                const dy = -md.dy;
+                cumX += dx * cos - dy * sin;
+                cumY += dx * sin + dy * cos;
             } else {
                 for (let f = frame - frameStep + 1; f <= frame; f++) {
                     const md = motionData[f];
-                    cumX -= md.dx;
-                    cumY -= md.dy;
+                    const dx = -md.dx;
+                    const dy = -md.dy;
+                    cumX += dx * cos - dy * sin;
+                    cumY += dx * sin + dy * cos;
                 }
             }
         }
@@ -127,6 +136,19 @@ function calculateFrameOffsets(motionData, startFrame, endFrame, frameStep = 1) 
     }
 
     return {frameData, totalFrames, minPx, maxPx, minPy, maxPy};
+}
+
+function calculateOverallMotionAngle(motionData, startFrame, endFrame) {
+    let totalDx = 0, totalDy = 0;
+    for (let f = startFrame; f <= endFrame; f++) {
+        const md = motionData[f];
+        if (md && md.isGood) {
+            totalDx += md.dx;
+            totalDy += md.dy;
+        }
+    }
+    if (Math.abs(totalDx) < 0.001 && Math.abs(totalDy) < 0.001) return 0;
+    return Math.atan2(totalDy, totalDx);
 }
 
 function calculatePanoDimensions(videoData, startFrame, minPx, maxPx, minPy, maxPy, crop) {
@@ -317,6 +339,15 @@ class MotionAnalyzer {
         this.lastAFrame = null;
         this.lastBFrame = null;
         this.lastVideoDataId = null;
+        
+        this.optimizing = false;
+        this.optimizeAborted = false;
+        this.optimizePopulation = [];
+        this.optimizeBestParams = null;
+        this.optimizeBestFitness = -Infinity;
+        this.optimizeGeneration = 0;
+        this.optimizeNoImproveCount = 0;
+        this.optimizeParamsBeforeStart = null;
     }
     
     invalidateCache() {
@@ -1979,9 +2010,208 @@ class MotionAnalyzer {
         ctx.fillText('+180°', w - 30, 12);
         ctx.fillText('-180°', w - 30, h - 3);
     }
+    
+    createRandomIndividual() {
+        return {
+            frameSkip: Math.floor(Math.random() * 10) + 1,
+            blurSize: (Math.floor(Math.random() * 8) * 2) + 1,
+            maxFeatures: Math.floor(Math.random() * 46) * 10 + 50,
+            minQuality: Math.floor(Math.random() * 11) * 0.05,
+        };
+    }
+    
+    mutateIndividual(individual) {
+        const mutated = {...individual};
+        const paramToMutate = Math.floor(Math.random() * 4);
+        switch (paramToMutate) {
+            case 0:
+                mutated.frameSkip = Math.max(1, Math.min(10, individual.frameSkip + (Math.random() < 0.5 ? -1 : 1)));
+                break;
+            case 1:
+                mutated.blurSize = Math.max(1, Math.min(15, individual.blurSize + (Math.random() < 0.5 ? -2 : 2)));
+                if (mutated.blurSize % 2 === 0) mutated.blurSize++;
+                break;
+            case 2:
+                mutated.maxFeatures = Math.max(50, Math.min(500, individual.maxFeatures + (Math.random() < 0.5 ? -10 : 10)));
+                break;
+            case 3:
+                mutated.minQuality = Math.max(0, Math.min(0.5, individual.minQuality + (Math.random() < 0.5 ? -0.05 : 0.05)));
+                mutated.minQuality = Math.round(mutated.minQuality * 20) / 20;
+                break;
+        }
+        return mutated;
+    }
+    
+    crossover(parent1, parent2) {
+        return {
+            frameSkip: Math.random() < 0.5 ? parent1.frameSkip : parent2.frameSkip,
+            blurSize: Math.random() < 0.5 ? parent1.blurSize : parent2.blurSize,
+            maxFeatures: Math.random() < 0.5 ? parent1.maxFeatures : parent2.maxFeatures,
+            minQuality: Math.random() < 0.5 ? parent1.minQuality : parent2.minQuality,
+        };
+    }
+    
+    async evaluateFitness(individual) {
+        this.params.frameSkip = individual.frameSkip;
+        this.params.blurSize = individual.blurSize;
+        this.params.maxFeatures = individual.maxFeatures;
+        this.params.minQuality = individual.minQuality;
+        
+        if (updateGuiValues) updateGuiValues();
+        
+        this.invalidateCache();
+        
+        const frame = Math.floor(par.frame);
+        const videoData = this.videoView?.videoData;
+        if (!videoData) return 0;
+        
+        const image = videoData.getImage(frame);
+        if (!image || !image.width) return 0;
+        
+        const {gray, width, height} = imageToGrayscale(image, this.params.blurSize);
+        
+        this.frameBuffer = [];
+        this.frameBuffer.push({gray: gray.clone(), frame, width, height});
+        
+        const skipFrames = Math.max(1, Math.round(this.params.frameSkip));
+        for (let i = 1; i <= skipFrames; i++) {
+            const prevFrame = frame - i;
+            if (prevFrame < 0) break;
+            const prevImage = videoData.getImage(prevFrame);
+            if (!prevImage || !prevImage.width) break;
+            const {gray: prevGray} = imageToGrayscale(prevImage, this.params.blurSize);
+            this.frameBuffer.unshift({gray: prevGray.clone(), frame: prevFrame, width, height});
+            prevGray.delete();
+        }
+        
+        if (this.params.technique === MOTION_TECHNIQUES.LINEAR_TRACKLET) {
+            this.computeOpticalFlowLinearTracklet(frame, width, height, skipFrames);
+        }
+        
+        gray.delete();
+        for (const fb of this.frameBuffer) {
+            if (fb.gray) fb.gray.delete();
+        }
+        this.frameBuffer = [];
+        
+        const confidence = this.lastFlowData?.consensus?.confidence ?? 0;
+        const vectorCount = this.lastFlowData?.vectors?.length ?? 0;
+        const inlierCount = this.lastFlowData?.consensus?.inlierCount ?? 0;
+        
+        const fitness = confidence * 0.6 + (Math.min(vectorCount, 100) / 100) * 0.2 + (Math.min(inlierCount, 50) / 50) * 0.2;
+        
+        return fitness;
+    }
+    
+    async runOptimizationStep() {
+        if (!this.optimizing || this.optimizeAborted) return false;
+        
+        const POPULATION_SIZE = 8;
+        const ELITE_COUNT = 2;
+        const MAX_NO_IMPROVE = 5;
+        
+        if (this.optimizePopulation.length === 0) {
+            for (let i = 0; i < POPULATION_SIZE; i++) {
+                this.optimizePopulation.push({
+                    individual: this.createRandomIndividual(),
+                    fitness: 0,
+                });
+            }
+        }
+        
+        for (const member of this.optimizePopulation) {
+            if (this.optimizeAborted) return false;
+            member.fitness = await this.evaluateFitness(member.individual);
+            
+            this.drawOverlay(this.overlay.width, this.overlay.height, 
+                this.videoView.videoData?.getImage(0)?.width ?? 1920, 
+                this.videoView.videoData?.getImage(0)?.height ?? 1080);
+            await new Promise(r => setTimeout(r, 50));
+        }
+        
+        this.optimizePopulation.sort((a, b) => b.fitness - a.fitness);
+        
+        const bestThisGen = this.optimizePopulation[0];
+        if (bestThisGen.fitness > this.optimizeBestFitness) {
+            this.optimizeBestFitness = bestThisGen.fitness;
+            this.optimizeBestParams = {...bestThisGen.individual};
+            this.optimizeNoImproveCount = 0;
+        } else {
+            this.optimizeNoImproveCount++;
+        }
+        
+        if (updateOptimizeStatus) {
+            updateOptimizeStatus(this.optimizeGeneration, this.optimizeBestFitness, this.optimizeBestParams);
+        }
+        
+        if (this.optimizeNoImproveCount >= MAX_NO_IMPROVE) {
+            return false;
+        }
+        
+        const newPopulation = [];
+        for (let i = 0; i < ELITE_COUNT; i++) {
+            newPopulation.push(this.optimizePopulation[i]);
+        }
+        
+        while (newPopulation.length < POPULATION_SIZE) {
+            const parent1 = this.optimizePopulation[Math.floor(Math.random() * ELITE_COUNT)].individual;
+            const parent2 = this.optimizePopulation[Math.floor(Math.random() * Math.min(4, POPULATION_SIZE))].individual;
+            let child = this.crossover(parent1, parent2);
+            if (Math.random() < 0.3) {
+                child = this.mutateIndividual(child);
+            }
+            newPopulation.push({individual: child, fitness: 0});
+        }
+        
+        this.optimizePopulation = newPopulation;
+        this.optimizeGeneration++;
+        
+        return true;
+    }
+    
+    startOptimization() {
+        this.optimizing = true;
+        this.optimizeAborted = false;
+        this.optimizePopulation = [];
+        this.optimizeBestParams = null;
+        this.optimizeBestFitness = -Infinity;
+        this.optimizeGeneration = 0;
+        this.optimizeNoImproveCount = 0;
+        this.optimizeParamsBeforeStart = {
+            frameSkip: this.params.frameSkip,
+            blurSize: this.params.blurSize,
+            maxFeatures: this.params.maxFeatures,
+            minQuality: this.params.minQuality,
+        };
+    }
+    
+    abortOptimization() {
+        this.optimizeAborted = true;
+        this.optimizing = false;
+        if (this.optimizeParamsBeforeStart) {
+            this.params.frameSkip = this.optimizeParamsBeforeStart.frameSkip;
+            this.params.blurSize = this.optimizeParamsBeforeStart.blurSize;
+            this.params.maxFeatures = this.optimizeParamsBeforeStart.maxFeatures;
+            this.params.minQuality = this.optimizeParamsBeforeStart.minQuality;
+        }
+        this.invalidateCache();
+    }
+    
+    acceptOptimization() {
+        this.optimizing = false;
+        if (this.optimizeBestParams) {
+            this.params.frameSkip = this.optimizeBestParams.frameSkip;
+            this.params.blurSize = this.optimizeBestParams.blurSize;
+            this.params.maxFeatures = this.optimizeBestParams.maxFeatures;
+            this.params.minQuality = this.optimizeBestParams.minQuality;
+        }
+        this.invalidateCache();
+    }
 }
 
 let motionAnalyzer = null;
+let updateOptimizeStatus = null;
+let updateGuiValues = null;
 let analyzeMenuItem = null;
 let renderHooked = false;
 
@@ -2044,6 +2274,7 @@ function startAnalysis(videoView) {
     if (!motionAnalyzer) {
         motionAnalyzer = new MotionAnalyzer(videoView);
     }
+    setMotionAnalyzerRef(motionAnalyzer);
     motionAnalyzer.start();
     
     if (analyzeMenuItem) {
@@ -2198,9 +2429,13 @@ async function exportMotionPanorama() {
     const crop = panoCrop;
     const motionData = motionAnalyzer.getMotionDataForAllFrames();
 
-    const {frameData, totalFrames, minPx, maxPx, minPy, maxPy} = calculateFrameOffsets(motionData, startFrame, endFrame, panoFrameStep);
+    const panoRotation = isAlignWithFlowEnabled() ? -calculateOverallMotionAngle(motionData, startFrame, endFrame) : 0;
+    const {frameData, totalFrames, minPx, maxPx, minPy, maxPy} = calculateFrameOffsets(motionData, startFrame, endFrame, panoFrameStep, panoRotation);
     const {frameWidth, frameHeight, croppedWidth, croppedHeight, panoWidthPx, panoHeightPx, scale, scaledFrameWidth, scaledFrameHeight} = calculatePanoDimensions(videoData, startFrame, minPx, maxPx, minPy, maxPy, crop);
 
+    if (isAlignWithFlowEnabled()) {
+        console.log(`Motion Panorama: Aligned with flow, rotation=${(panoRotation * 180 / Math.PI).toFixed(1)}°`);
+    }
     console.log(`Motion Panorama: X range ${minPx.toFixed(1)} to ${maxPx.toFixed(1)} px (${(maxPx-minPx).toFixed(1)}px)`);
     console.log(`Motion Panorama: Y range ${minPy.toFixed(1)} to ${maxPy.toFixed(1)} px (${(maxPy-minPy).toFixed(1)}px)`);
     console.log(`Motion Panorama: ${panoWidthPx}x${panoHeightPx}px, scale=${scale.toFixed(3)}`);
@@ -2344,7 +2579,8 @@ async function exportPanoVideo() {
     const crop = panoCrop;
     const motionData = motionAnalyzer.getMotionDataForAllFrames();
 
-    const {frameData, totalFrames, minPx, maxPx, minPy, maxPy} = calculateFrameOffsets(motionData, startFrame, endFrame, 1);
+    const panoRotation = isAlignWithFlowEnabled() ? -calculateOverallMotionAngle(motionData, startFrame, endFrame) : 0;
+    const {frameData, totalFrames, minPx, maxPx, minPy, maxPy} = calculateFrameOffsets(motionData, startFrame, endFrame, 1, panoRotation);
     const {frameWidth, frameHeight, croppedWidth, croppedHeight, panoWidthPx, panoHeightPx, scale: panoScale, scaledFrameWidth, scaledFrameHeight} = calculatePanoDimensions(videoData, startFrame, minPx, maxPx, minPy, maxPy, crop);
 
     const panoCanvas = document.createElement('canvas');
@@ -2635,17 +2871,31 @@ export function addMotionAnalysisMenu() {
         .tooltip("Analyze all frames and create a ground track from motion vectors")
         .perm();
 
-    exportPanoMenuItem = motionFolder.add(menuActions, 'exportPanorama')
+    const flowParams = {
+        get alignWithFlow() { return isAlignWithFlowEnabled(); }, 
+        set alignWithFlow(v) { 
+            setAlignWithFlow(v); 
+            setRenderOne(true);
+        }
+    };
+    motionFolder.add(flowParams, 'alignWithFlow')
+        .name("Align with Flow")
+        .tooltip("Rotate image so motion direction is horizontal")
+        .perm();
+
+    const panoFolder = motionFolder.addFolder("Panorama").close().perm();
+    
+    exportPanoMenuItem = panoFolder.add(menuActions, 'exportPanorama')
         .name("Export Motion Panorama")
         .tooltip("Create a panorama image from video frames using motion tracking offsets")
         .perm();
 
-    exportPanoVideoMenuItem = motionFolder.add(menuActions, 'exportPanoVideo')
+    exportPanoVideoMenuItem = panoFolder.add(menuActions, 'exportPanoVideo')
         .name("Export Pano Video")
         .tooltip("Create a 4K video showing the panorama with video frame overlay")
         .perm();
 
-    stabilizeMenuItem = motionFolder.add(menuActions, 'stabilizeVideo')
+    stabilizeMenuItem = panoFolder.add(menuActions, 'stabilizeVideo')
         .name("Stabilize Video")
         .tooltip("Stabilize video using global motion analysis (removes camera shake)")
         .perm();
@@ -2657,23 +2907,23 @@ export function addMotionAnalysisMenu() {
         get analyzeWithEffects() { return analyzeWithEffects; }, set analyzeWithEffects(v) { analyzeWithEffects = v; },
         get exportWithEffects() { return exportWithEffects; }, set exportWithEffects(v) { exportWithEffects = v; }
     };
-    motionFolder.add(panoParams, 'panoFrameStep', 1, 60, 1)
+    panoFolder.add(panoParams, 'panoFrameStep', 1, 60, 1)
         .name("Pano Frame Step")
         .tooltip("How many frames to step between each panorama frame (1 = every frame)")
         .perm();
-    motionFolder.add(panoParams, 'panoCrop', 0, 100, 1)
+    panoFolder.add(panoParams, 'panoCrop', 0, 100, 1)
         .name("Panorama Crop")
         .tooltip("Pixels to crop from each edge of video frames")
         .perm();
-    motionFolder.add(panoParams, 'useMaskInPano')
+    panoFolder.add(panoParams, 'useMaskInPano')
         .name("Use Mask in Pano")
         .tooltip("Apply motion tracking mask as transparency when rendering panorama")
         .perm();
-    motionFolder.add(panoParams, 'analyzeWithEffects')
+    panoFolder.add(panoParams, 'analyzeWithEffects')
         .name("Analyze With Effects")
         .tooltip("Apply video adjustments (contrast, etc.) to frames used for motion analysis")
         .perm();
-    motionFolder.add(panoParams, 'exportWithEffects')
+    panoFolder.add(panoParams, 'exportWithEffects')
         .name("Export With Effects")
         .tooltip("Apply video adjustments to panorama exports")
         .perm();
@@ -2704,9 +2954,12 @@ function createParamSliders() {
     const invalidate = () => motionAnalyzer.onParamChange();
     const update = () => setRenderOne(true);
     
+    const trackingFolder = motionFolder.addFolder("Tracking Parameters").close();
+    paramControllers.push(trackingFolder);
+    
     if (isLocal || Globals.userID === 1) {
         const techniqueOptions = Object.values(MOTION_TECHNIQUES);
-        paramControllers.push(motionFolder.add(p, 'technique', techniqueOptions).name("Technique").onChange((newTechnique) => {
+        paramControllers.push(trackingFolder.add(p, 'technique', techniqueOptions).name("Technique").onChange((newTechnique) => {
             console.log("Technique changed to:", newTechnique);
             invalidate();
             removeParamSliders();
@@ -2715,72 +2968,207 @@ function createParamSliders() {
     }
     
     const isTracklet = p.technique === MOTION_TECHNIQUES.LINEAR_TRACKLET;
-    paramControllers.push(motionFolder.add(p, 'frameSkip', 1, 10, 1)
+    paramControllers.push(trackingFolder.add(p, 'frameSkip', 1, 10, 1)
         .name(isTracklet ? "Tracklet Length" : "Frame Skip")
         .onChange(invalidate)
         .tooltip(isTracklet ? "Number of frames in tracklet (longer = stricter coherence)" : "Frames between comparisons (higher = detect slower motion)"));
-    paramControllers.push(motionFolder.add(p, 'blurSize', 1, 15, 2).name("Blur Size").onChange(invalidate)
+    paramControllers.push(trackingFolder.add(p, 'blurSize', 1, 15, 2).name("Blur Size").onChange(invalidate)
         .tooltip("Gaussian blur for macro features (odd numbers)"));
-    paramControllers.push(motionFolder.add(p, 'minMotion', 0, 2, 0.1).name("Min Motion").onChange(invalidate)
+    paramControllers.push(trackingFolder.add(p, 'minMotion', 0, 2, 0.1).name("Min Motion").onChange(invalidate)
         .tooltip("Minimum motion magnitude (pixels/frame)"));
-    paramControllers.push(motionFolder.add(p, 'maxMotion', 10, 200, 5).name("Max Motion").onChange(invalidate)
+    paramControllers.push(trackingFolder.add(p, 'maxMotion', 10, 200, 5).name("Max Motion").onChange(invalidate)
         .tooltip("Maximum motion magnitude"));
-    paramControllers.push(motionFolder.add(p, 'smoothingAlpha', 0.5, 0.99, 0.01).name("Smoothing").onChange(invalidate)
+    paramControllers.push(trackingFolder.add(p, 'smoothingAlpha', 0.5, 0.99, 0.01).name("Smoothing").onChange(invalidate)
         .tooltip("Direction smoothing (higher = more smoothing)"));
-    paramControllers.push(motionFolder.add(p, 'minVectorCount', 1, 50, 1).name("Min Vector Count").onChange(invalidate)
+    paramControllers.push(trackingFolder.add(p, 'minVectorCount', 1, 50, 1).name("Min Vector Count").onChange(invalidate)
         .tooltip("Minimum number of motion vectors for a valid frame"));
-    paramControllers.push(motionFolder.add(p, 'minConsensusConfidence', 0, 0.5, 0.01).name("Min Confidence").onChange(invalidate)
+    paramControllers.push(trackingFolder.add(p, 'minConsensusConfidence', 0, 0.5, 0.01).name("Min Confidence").onChange(invalidate)
         .tooltip("Minimum consensus confidence for a valid frame"));
     
     const usesFeatures = p.technique === MOTION_TECHNIQUES.SPARSE_CONSENSUS || p.technique === MOTION_TECHNIQUES.AFFINE_RANSAC || p.technique === MOTION_TECHNIQUES.LINEAR_TRACKLET;
     if (usesFeatures) {
-        paramControllers.push(motionFolder.add(p, 'maxFeatures', 50, 500, 10).name("Max Features").onChange(invalidate)
+        paramControllers.push(trackingFolder.add(p, 'maxFeatures', 50, 500, 10).name("Max Features").onChange(invalidate)
             .tooltip("Maximum tracked features"));
-        paramControllers.push(motionFolder.add(p, 'minDistance', 5, 50, 1).name("Min Distance").onChange(invalidate)
+        paramControllers.push(trackingFolder.add(p, 'minDistance', 5, 50, 1).name("Min Distance").onChange(invalidate)
             .tooltip("Minimum distance between features"));
-        paramControllers.push(motionFolder.add(p, 'qualityLevel', 0.001, 0.1, 0.001).name("Quality Level").onChange(invalidate)
+        paramControllers.push(trackingFolder.add(p, 'qualityLevel', 0.001, 0.1, 0.001).name("Quality Level").onChange(invalidate)
             .tooltip("Feature detection quality threshold"));
-        paramControllers.push(motionFolder.add(p, 'maxTrackError', 5, 50, 1).name("Max Track Error").onChange(invalidate)
+        paramControllers.push(trackingFolder.add(p, 'maxTrackError', 5, 50, 1).name("Max Track Error").onChange(invalidate)
             .tooltip("Maximum tracking error threshold"));
     }
     
     if (p.technique === MOTION_TECHNIQUES.SPARSE_CONSENSUS) {
-        paramControllers.push(motionFolder.add(p, 'minQuality', 0, 1, 0.05).name("Min Quality").onChange(invalidate)
+        paramControllers.push(trackingFolder.add(p, 'minQuality', 0, 1, 0.05).name("Min Quality").onChange(invalidate)
             .tooltip("Minimum quality to display arrow"));
-        paramControllers.push(motionFolder.add(p, 'staticThreshold', 0.1, 2, 0.1).name("Static Threshold").onChange(invalidate)
+        paramControllers.push(trackingFolder.add(p, 'staticThreshold', 0.1, 2, 0.1).name("Static Threshold").onChange(invalidate)
             .tooltip("Motion below this is considered static (HUD)"));
-        paramControllers.push(motionFolder.add(p, 'staticFrames', 5, 30, 1).name("Static Frames").onChange(invalidate)
+        paramControllers.push(trackingFolder.add(p, 'staticFrames', 5, 30, 1).name("Static Frames").onChange(invalidate)
             .tooltip("Frames to confirm static detection"));
-        paramControllers.push(motionFolder.add(p, 'inlierThreshold', 0.3, 0.9, 0.05).name("Inlier Threshold").onChange(invalidate)
+        paramControllers.push(trackingFolder.add(p, 'inlierThreshold', 0.3, 0.9, 0.05).name("Inlier Threshold").onChange(invalidate)
             .tooltip("Threshold for consensus direction agreement"));
     }
     
     if (p.technique === MOTION_TECHNIQUES.ECC_EUCLIDEAN) {
-        paramControllers.push(motionFolder.add(p, 'eccIterations', 10, 200, 10).name("ECC Iterations").onChange(invalidate)
+        paramControllers.push(trackingFolder.add(p, 'eccIterations', 10, 200, 10).name("ECC Iterations").onChange(invalidate)
             .tooltip("Maximum iterations for ECC convergence"));
-        paramControllers.push(motionFolder.add(p, 'eccEpsilon', 0.0001, 0.01, 0.0001).name("ECC Epsilon").onChange(invalidate)
+        paramControllers.push(trackingFolder.add(p, 'eccEpsilon', 0.0001, 0.01, 0.0001).name("ECC Epsilon").onChange(invalidate)
             .tooltip("Convergence threshold for ECC"));
     }
     
     if (p.technique === MOTION_TECHNIQUES.AFFINE_RANSAC) {
-        paramControllers.push(motionFolder.add(p, 'ransacThreshold', 1, 10, 0.5).name("RANSAC Threshold").onChange(invalidate)
+        paramControllers.push(trackingFolder.add(p, 'ransacThreshold', 1, 10, 0.5).name("RANSAC Threshold").onChange(invalidate)
             .tooltip("Maximum reprojection error for inliers (pixels)"));
     }
     
     if (p.technique === MOTION_TECHNIQUES.LINEAR_TRACKLET) {
-        paramControllers.push(motionFolder.add(p, 'minQuality', 0, 1, 0.05).name("Min Quality").onChange(invalidate)
+        paramControllers.push(trackingFolder.add(p, 'minQuality', 0, 1, 0.05).name("Min Quality").onChange(invalidate)
             .tooltip("Minimum quality to display arrow"));
-        paramControllers.push(motionFolder.add(p, 'staticThreshold', 0.1, 2, 0.1).name("Static Threshold").onChange(invalidate)
+        paramControllers.push(trackingFolder.add(p, 'staticThreshold', 0.1, 2, 0.1).name("Static Threshold").onChange(invalidate)
             .tooltip("Motion below this is considered static (HUD)"));
-        paramControllers.push(motionFolder.add(p, 'staticFrames', 5, 30, 1).name("Static Frames").onChange(invalidate)
+        paramControllers.push(trackingFolder.add(p, 'staticFrames', 5, 30, 1).name("Static Frames").onChange(invalidate)
             .tooltip("Frames to confirm static detection"));
-        paramControllers.push(motionFolder.add(p, 'inlierThreshold', 0.3, 0.9, 0.05).name("Inlier Threshold").onChange(invalidate)
+        paramControllers.push(trackingFolder.add(p, 'inlierThreshold', 0.3, 0.9, 0.05).name("Inlier Threshold").onChange(invalidate)
             .tooltip("Threshold for consensus direction agreement"));
-        paramControllers.push(motionFolder.add(p, 'linearityThreshold', 0.5, 1, 0.05).name("Linearity Threshold").onChange(invalidate)
+        paramControllers.push(trackingFolder.add(p, 'linearityThreshold', 0.5, 1, 0.05).name("Linearity Threshold").onChange(invalidate)
             .tooltip("Min trajectory straightness (1=perfect line)"));
-        paramControllers.push(motionFolder.add(p, 'spacingThreshold', 0, 1, 0.05).name("Spacing Threshold").onChange(invalidate)
+        paramControllers.push(trackingFolder.add(p, 'spacingThreshold', 0, 1, 0.05).name("Spacing Threshold").onChange(invalidate)
             .tooltip("Min step spacing consistency (1=perfectly even)"));
     }
+    
+    let optimizeBtn = null;
+    let enoughBtn = null;
+    let abortBtn = null;
+    let statusText = {value: "Ready"};
+    let statusCtrl = null;
+    
+    const showOptimizeButtons = (show) => {
+        if (optimizeBtn) optimizeBtn.show(!show);
+        if (enoughBtn) enoughBtn.show(show);
+        if (abortBtn) abortBtn.show(show);
+    };
+    
+    updateGuiValues = () => {
+        for (const ctrl of paramControllers) {
+            if (ctrl && ctrl.updateDisplay) {
+                try { ctrl.updateDisplay(); } catch (e) {}
+            }
+        }
+    };
+    
+    updateOptimizeStatus = (gen, fitness, bestParams) => {
+        if (bestParams) {
+            statusText.value = `Gen ${gen}: fit=${fitness.toFixed(3)} [fs=${bestParams.frameSkip} blur=${bestParams.blurSize} feat=${bestParams.maxFeatures} qual=${bestParams.minQuality.toFixed(2)}]`;
+        } else {
+            statusText.value = `Gen ${gen}: fit=${fitness.toFixed(3)}`;
+        }
+        if (statusCtrl) statusCtrl.updateDisplay();
+    };
+    
+    const buildReport = (original, final, accepted) => {
+        const changes = [];
+        if (original.frameSkip !== final.frameSkip) {
+            changes.push(`Tracklet Length: ${original.frameSkip} → ${final.frameSkip}`);
+        }
+        if (original.blurSize !== final.blurSize) {
+            changes.push(`Blur Size: ${original.blurSize} → ${final.blurSize}`);
+        }
+        if (original.maxFeatures !== final.maxFeatures) {
+            changes.push(`Max Features: ${original.maxFeatures} → ${final.maxFeatures}`);
+        }
+        if (original.minQuality !== final.minQuality) {
+            changes.push(`Min Quality: ${original.minQuality.toFixed(2)} → ${final.minQuality.toFixed(2)}`);
+        }
+        if (changes.length === 0) {
+            return accepted ? "No changes (already optimal)" : "Aborted - no changes";
+        }
+        return (accepted ? "Changed:\n" : "Restored:\n") + changes.join("\n");
+    };
+    
+    const runOptimization = async () => {
+        if (!motionAnalyzer) return;
+        motionAnalyzer.startOptimization();
+        const originalParams = {...motionAnalyzer.optimizeParamsBeforeStart};
+        showOptimizeButtons(true);
+        statusText.value = "Optimizing...";
+        if (statusCtrl) statusCtrl.updateDisplay();
+        
+        while (motionAnalyzer.optimizing && !motionAnalyzer.optimizeAborted) {
+            const continueOpt = await motionAnalyzer.runOptimizationStep();
+            if (!continueOpt) break;
+        }
+        
+        let reportText = "";
+        if (!motionAnalyzer.optimizeAborted && motionAnalyzer.optimizeBestParams) {
+            motionAnalyzer.acceptOptimization();
+            reportText = buildReport(originalParams, motionAnalyzer.params, true);
+            statusText.value = reportText;
+            console.log("Optimization complete:\n" + reportText);
+        } else if (motionAnalyzer.optimizeAborted) {
+            reportText = buildReport(originalParams, motionAnalyzer.params, false);
+            statusText.value = reportText;
+        }
+        
+        showOptimizeButtons(false);
+        if (statusCtrl) statusCtrl.updateDisplay();
+        updateGuiValues();
+        removeParamSliders();
+        createParamSliders();
+        setRenderOne(true);
+    };
+    
+    const enoughOptimization = () => {
+        if (motionAnalyzer) {
+            const originalParams = {...motionAnalyzer.optimizeParamsBeforeStart};
+            motionAnalyzer.acceptOptimization();
+            const reportText = buildReport(originalParams, motionAnalyzer.params, true);
+            statusText.value = reportText;
+            console.log("Optimization accepted:\n" + reportText);
+        }
+        showOptimizeButtons(false);
+        if (statusCtrl) statusCtrl.updateDisplay();
+        updateGuiValues();
+        removeParamSliders();
+        createParamSliders();
+        setRenderOne(true);
+    };
+    
+    const abortOptimization = () => {
+        if (motionAnalyzer) {
+            const originalParams = {...motionAnalyzer.optimizeParamsBeforeStart};
+            motionAnalyzer.abortOptimization();
+            const reportText = buildReport(motionAnalyzer.optimizeBestParams || originalParams, originalParams, false);
+            statusText.value = reportText;
+        }
+        showOptimizeButtons(false);
+        if (statusCtrl) statusCtrl.updateDisplay();
+        updateGuiValues();
+        removeParamSliders();
+        createParamSliders();
+        setRenderOne(true);
+    };
+    
+    const optimizeControls = {
+        optimize: runOptimization,
+        enough: enoughOptimization,
+        abort: abortOptimization,
+    };
+    
+    optimizeBtn = trackingFolder.add(optimizeControls, 'optimize').name("Optimize")
+        .tooltip("Run genetic algorithm to find optimal params for current frame");
+    paramControllers.push(optimizeBtn);
+    
+    enoughBtn = trackingFolder.add(optimizeControls, 'enough').name("Enough (Accept)")
+        .tooltip("Accept current best parameters and stop optimization");
+    paramControllers.push(enoughBtn);
+    enoughBtn.show(false);
+    
+    abortBtn = trackingFolder.add(optimizeControls, 'abort').name("Abort (Reset)")
+        .tooltip("Cancel optimization and restore original parameters");
+    paramControllers.push(abortBtn);
+    abortBtn.show(false);
+    
+    statusCtrl = trackingFolder.add(statusText, 'value').name("Status").listen().disable();
+    paramControllers.push(statusCtrl);
     
     const maskFolder = motionFolder.addFolder("Masking").close();
     paramControllers.push(maskFolder);
@@ -2888,6 +3276,7 @@ export async function deserializeMotionAnalysis(data) {
             if (!motionAnalyzer) {
                 motionAnalyzer = new MotionAnalyzer(videoView);
             }
+            setMotionAnalyzerRef(motionAnalyzer);
             
             if (data.params) {
                 Object.assign(motionAnalyzer.params, data.params);

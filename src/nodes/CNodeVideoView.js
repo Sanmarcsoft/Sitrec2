@@ -42,6 +42,7 @@ import {CVideoImageData} from "../CVideoImageData";
 import {isAudioOnlyFormat} from "../AudioFormats";
 import {assert} from "../assert";
 import {EventManager} from "../CEventManager";
+import {getFlowAlignRotation} from "../FlowAlignment";
 
 
 export class CNodeVideoView extends CNodeViewCanvas2D {
@@ -461,6 +462,13 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
             const aspectSource = sourceW / sourceH
             const aspectView = this.widthPx / this.heightPx
 
+            const flowRotation = getFlowAlignRotation(frame);
+            if (flowRotation !== 0) {
+                ctx.save();
+                ctx.translate(this.widthPx / 2, this.heightPx / 2);
+                ctx.rotate(flowRotation);
+                ctx.translate(-this.widthPx / 2, -this.heightPx / 2);
+            }
 
             // TODO - combine this zoom input with the mouse zoom
             if (this.in.zoom !== undefined) {
@@ -478,6 +486,10 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
                     this.widthPx*(this.posRight-this.posLeft), this.widthPx*(this.posBot-this.posTop))
                 ctx.imageSmoothingEnabled = true;
 
+            }
+            
+            if (flowRotation !== 0) {
+                ctx.restore();
             }
 
             if (effectsEnabled && this.in.convolutionFilter && this.in.convolutionFilter.value !== 'none') {
