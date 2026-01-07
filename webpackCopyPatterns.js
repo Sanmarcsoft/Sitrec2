@@ -89,4 +89,16 @@ patterns.push({
     to: './libs/opencv.js'
 });
 
+// Copy MediabunnyExporter for tools/flowgen.html
+patterns.push({
+    from: './src/MediabunnyExporter.js',
+    to: './tools/src/MediabunnyExporter.js'
+});
+
+// Copy mediabunny bundle for tools
+patterns.push({
+    from: './node_modules/mediabunny/dist/bundles/mediabunny.min.mjs',
+    to: './tools/libs/mediabunny.min.js'
+});
+
 module.exports = patterns;

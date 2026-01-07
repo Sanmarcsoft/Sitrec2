@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlowGen - Synthetic Motion Video Generator</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: #eee;
+            display: flex;
+            gap: 20px;
+        }
+        #controls {
+            width: 380px;
+            flex-shrink: 0;
+        }
+        #preview-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+            color: #4af;
+        }
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+            background: #2a2a2a;
+            padding: 6px 10px;
+            border-radius: 4px;
+        }
+        .control-group label {
+            font-size: 11px;
+            color: #aaa;
+            min-width: 100px;
+            flex-shrink: 0;
+        }
+        input[type="range"] {
+            flex: 1;
+            height: 4px;
+        }
+        .value-display {
+            min-width: 50px;
+            text-align: right;
+            font-family: monospace;
+            font-size: 11px;
+        }
+        input[type="number"] {
+            width: 60px;
+            padding: 3px;
+            background: #333;
+            border: 1px solid #555;
+            color: #eee;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+        button {
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+        }
+        #exportBtn {
+            width: 100%;
+            background: #4a4;
+            color: white;
+            margin-top: 8px;
+        }
+        #exportBtn:hover { background: #5b5; }
+        #exportBtn:disabled { background: #555; cursor: not-allowed; }
+        #regenerateBtn {
+            background: #44a;
+            color: white;
+        }
+        #regenerateBtn:hover { background: #55b; }
+        #preview {
+            border: 2px solid #444;
+            background: #000;
+        }
+        #status {
+            margin-top: 8px;
+            padding: 8px;
+            background: #2a2a2a;
+            border-radius: 4px;
+            font-size: 11px;
+            min-height: 16px;
+        }
+        #progress-container {
+            display: none;
+            margin-top: 8px;
+        }
+        #progress-bar {
+            width: 100%;
+            height: 16px;
+            background: #333;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        #progress-fill {
+            height: 100%;
+            background: #4a4;
+            width: 0%;
+            transition: width 0.1s;
+        }
+        #progress-text {
+            text-align: center;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+        .section-title {
+            font-size: 12px;
+            color: #4af;
+            margin: 10px 0 6px 0;
+            padding-bottom: 3px;
+            border-bottom: 1px solid #333;
+        }
+        #info {
+            font-size: 10px;
+            color: #888;
+            margin-top: 8px;
+            line-height: 1.4;
+        }
+        .seed-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+            background: #2a2a2a;
+            padding: 6px 10px;
+            border-radius: 4px;
+        }
+        .seed-row label {
+            font-size: 11px;
+            color: #aaa;
+            min-width: 100px;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <h1>FlowGen</h1>
+        
+        <div class="section-title">Video Dimensions</div>
+        <div class="control-group">
+            <label>Width (px)</label>
+            <input type="range" id="width" min="128" max="1920" value="428" step="2">
+            <span class="value-display" id="width-val">428</span>
+        </div>
+        <div class="control-group">
+            <label>Height (px)</label>
+            <input type="range" id="height" min="128" max="1080" value="428" step="2">
+            <span class="value-display" id="height-val">428</span>
+        </div>
+
+        <div class="section-title">Circle Properties</div>
+        <div class="control-group">
+            <label>Number of Circles</label>
+            <input type="range" id="numCircles" min="10" max="5000" value="1000">
+            <span class="value-display" id="numCircles-val">1000</span>
+        </div>
+        <div class="control-group">
+            <label>Min Radius (px)</label>
+            <input type="range" id="minRadius" min="1" max="50" value="5">
+            <span class="value-display" id="minRadius-val">5</span>
+        </div>
+        <div class="control-group">
+            <label>Max Radius (px)</label>
+            <input type="range" id="maxRadius" min="5" max="500" value="35">
+            <span class="value-display" id="maxRadius-val">35</span>
+        </div>
+        <div class="control-group">
+            <label>Max Brightness</label>
+            <input type="range" id="maxBrightness" min="16" max="255" value="64">
+            <span class="value-display" id="maxBrightness-val">64</span>
+        </div>
+        <div class="seed-row">
+            <label>Random Seed</label>
+            <input type="number" id="seed" value="42" min="1" max="999999">
+            <button id="regenerateBtn">Randomize</button>
+        </div>
+
+        <div class="section-title">Motion</div>
+        <div class="control-group">
+            <label>Start Speed (px/s)</label>
+            <input type="range" id="startSpeed" min="0" max="500" value="122.5" step="0.5">
+            <span class="value-display" id="startSpeed-val">122.5</span>
+        </div>
+        <div class="control-group">
+            <label>End Speed (px/s)</label>
+            <input type="range" id="endSpeed" min="0" max="500" value="122.5" step="0.5">
+            <span class="value-display" id="endSpeed-val">122.5</span>
+        </div>
+        <div class="control-group">
+            <label>Angle (degrees)</label>
+            <input type="range" id="angle" min="-180" max="180" value="5" step="0.1">
+            <span class="value-display" id="angle-val">5.0</span>
+        </div>
+
+        <div class="section-title">Timing</div>
+        <div class="control-group">
+            <label>FPS</label>
+            <input type="range" id="fps" min="15" max="60" value="30">
+            <span class="value-display" id="fps-val">30</span>
+        </div>
+        <div class="control-group">
+            <label>Duration (sec)</label>
+            <input type="range" id="duration" min="1" max="60" value="30">
+            <span class="value-display" id="duration-val">30</span>
+        </div>
+
+        <div class="section-title">Noise</div>
+        <div class="control-group">
+            <label>Static Frames (%)</label>
+            <input type="range" id="staticPercent" min="0" max="100" value="0">
+            <span class="value-display" id="staticPercent-val">0</span>
+        </div>
+        <div class="control-group">
+            <label>Base Noise (%)</label>
+            <input type="range" id="baseNoise" min="0" max="100" value="0">
+            <span class="value-display" id="baseNoise-val">0</span>
+        </div>
+
+        <button id="exportBtn">Export Video</button>
+        
+        <div id="progress-container">
+            <div id="progress-bar"><div id="progress-fill"></div></div>
+            <div id="progress-text">0%</div>
+        </div>
+        
+        <div id="status"></div>
+        
+        <div id="info">
+            <strong>Info:</strong>
+            Frames: <span id="totalFrames">900</span> |
+            Per frame: <span id="motionPerFrame">4.07, 0.36</span> px |
+            Total: <span id="totalDisplacement">3675, 321</span> px
+        </div>
+    </div>
+    
+    <div id="preview-container">
+        <canvas id="preview"></canvas>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "mediabunny": "./libs/mediabunny.min.js"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import { MediabunnyExporter } from './src/MediabunnyExporter.js';
+
+        const params = {
+            width: 428,
+            height: 428,
+            numCircles: 1000,
+            minRadius: 5,
+            maxRadius: 35,
+            maxBrightness: 64,
+            seed: 42,
+            startSpeed: 122.5,
+            endSpeed: 122.5,
+            angle: 5,
+            fps: 30,
+            duration: 30,
+            staticPercent: 0,
+            baseNoise: 0
+        };
+
+        function getSpeedAtFrame(frameIdx, totalFrames) {
+            if (totalFrames <= 1) return params.startSpeed;
+            const t = frameIdx / (totalFrames - 1);
+            return params.startSpeed + t * (params.endSpeed - params.startSpeed);
+        }
+
+        function getXVAtFrame(frameIdx, totalFrames) {
+            return getSpeedAtFrame(frameIdx, totalFrames) * Math.cos(params.angle * Math.PI / 180);
+        }
+        function getYVAtFrame(frameIdx, totalFrames) {
+            return getSpeedAtFrame(frameIdx, totalFrames) * Math.sin(params.angle * Math.PI / 180);
+        }
+
+        let circles = [];
+        let staticFrameSet = new Set();
+        const canvas = document.getElementById('preview');
+        const ctx = canvas.getContext('2d');
+
+        function seededRandom(seed) {
+            return function() {
+                seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+                return seed / 0x7fffffff;
+            };
+        }
+
+        function generateCircles() {
+            const rand = seededRandom(params.seed);
+            const margin = 500;
+            circles = [];
+            for (let i = 0; i < params.numCircles; i++) {
+                circles.push({
+                    x: rand() * (params.width + margin * 2) - margin,
+                    y: rand() * (params.height + margin * 2) - margin,
+                    r: params.minRadius + rand() * (params.maxRadius - params.minRadius)
+                });
+            }
+        }
+
+        function generateStaticFrames(totalFrames) {
+            staticFrameSet = new Set();
+            if (params.staticPercent <= 0) return;
+            const rand = seededRandom(params.seed + 1000000);
+            const numStaticFrames = Math.round(totalFrames * params.staticPercent / 100);
+            while (staticFrameSet.size < numStaticFrames && staticFrameSet.size < totalFrames) {
+                const f = Math.floor(rand() * totalFrames);
+                staticFrameSet.add(f);
+            }
+        }
+
+        function renderFrame(frameIdx, targetCanvas, totalFrames, addStatic = false) {
+            const w = params.width;
+            const h = params.height;
+            const margin = 500;
+            const wrapW = w + margin * 2;
+            const wrapH = h + margin * 2;
+
+            targetCanvas.width = w;
+            targetCanvas.height = h;
+            const tctx = targetCanvas.getContext('2d');
+            
+            const imageData = tctx.createImageData(w, h);
+            const data = imageData.data;
+
+            let offsetX = 0;
+            let offsetY = 0;
+            for (let f = 0; f < frameIdx; f++) {
+                const speed = getSpeedAtFrame(f, totalFrames);
+                offsetX -= speed * Math.cos(params.angle * Math.PI / 180) / params.fps;
+                offsetY -= speed * Math.sin(params.angle * Math.PI / 180) / params.fps;
+            }
+
+            for (const c of circles) {
+                let x = c.x + offsetX;
+                let y = c.y + offsetY;
+                x = ((x % wrapW) + wrapW) % wrapW - margin;
+                y = ((y % wrapH) + wrapH) % wrapH - margin;
+
+                const r = c.r;
+                const minX = Math.max(0, Math.floor(x - r));
+                const maxX = Math.min(w - 1, Math.ceil(x + r));
+                const minY = Math.max(0, Math.floor(y - r));
+                const maxY = Math.min(h - 1, Math.ceil(y + r));
+
+                for (let py = minY; py <= maxY; py++) {
+                    for (let px = minX; px <= maxX; px++) {
+                        const dx = px - x;
+                        const dy = py - y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist <= r) {
+                            const t = dist / r;
+                            const gray = Math.round(params.maxBrightness * (1 - t));
+                            const idx = (py * w + px) * 4;
+                            data[idx] = Math.min(255, data[idx] + gray);
+                            data[idx + 1] = Math.min(255, data[idx + 1] + gray);
+                            data[idx + 2] = Math.min(255, data[idx + 2] + gray);
+                            data[idx + 3] = 255;
+                        }
+                    }
+                }
+            }
+
+            if (params.baseNoise > 0) {
+                const rand = seededRandom(params.seed + frameIdx * 7919 + 500000);
+                const scale = params.baseNoise / 100;
+                for (let i = 0; i < w * h * 4; i += 4) {
+                    const noise = (128 - Math.floor(rand() * 256)) * scale;
+                    data[i] = Math.max(0, Math.min(255, data[i] + noise));
+                    data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + noise));
+                    data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + noise));
+                    data[i + 3] = 255;
+                }
+            }
+
+            if (addStatic) {
+                const rand = seededRandom(params.seed + frameIdx * 7919);
+                for (let i = 0; i < w * h * 4; i += 4) {
+                    const noise = Math.floor(rand() * 256);
+                    data[i] = noise;
+                    data[i + 1] = noise;
+                    data[i + 2] = noise;
+                    data[i + 3] = 255;
+                }
+            }
+
+            tctx.putImageData(imageData, 0, 0);
+        }
+
+        function updatePreview() {
+            generateCircles();
+            const totalFrames = params.fps * params.duration;
+            renderFrame(0, canvas, totalFrames, false);
+            updateInfo();
+        }
+
+        function updateInfo() {
+            const totalFrames = params.fps * params.duration;
+            const startXV = params.startSpeed * Math.cos(params.angle * Math.PI / 180);
+            const startYV = params.startSpeed * Math.sin(params.angle * Math.PI / 180);
+            const endXV = params.endSpeed * Math.cos(params.angle * Math.PI / 180);
+            const endYV = params.endSpeed * Math.sin(params.angle * Math.PI / 180);
+            const avgSpeed = (params.startSpeed + params.endSpeed) / 2;
+            const totalX = avgSpeed * Math.cos(params.angle * Math.PI / 180) * params.duration;
+            const totalY = avgSpeed * Math.sin(params.angle * Math.PI / 180) * params.duration;
+            document.getElementById('totalFrames').textContent = totalFrames;
+            document.getElementById('motionPerFrame').textContent = 
+                `${(startXV/params.fps).toFixed(2)}→${(endXV/params.fps).toFixed(2)}, ${(startYV/params.fps).toFixed(2)}→${(endYV/params.fps).toFixed(2)}`;
+            document.getElementById('totalDisplacement').textContent = 
+                `${totalX.toFixed(0)}, ${totalY.toFixed(0)}`;
+        }
+
+        function setupSlider(id, paramName, isFloat = false, decimals = 1) {
+            const slider = document.getElementById(id);
+            const display = document.getElementById(id + '-val');
+            
+            slider.addEventListener('input', () => {
+                const val = isFloat ? parseFloat(slider.value) : parseInt(slider.value);
+                params[paramName] = val;
+                display.textContent = isFloat ? val.toFixed(decimals) : val;
+                updatePreview();
+            });
+        }
+
+        setupSlider('width', 'width');
+        setupSlider('height', 'height');
+        setupSlider('numCircles', 'numCircles');
+        setupSlider('minRadius', 'minRadius');
+        setupSlider('maxRadius', 'maxRadius');
+        setupSlider('maxBrightness', 'maxBrightness');
+        setupSlider('startSpeed', 'startSpeed', true);
+        setupSlider('endSpeed', 'endSpeed', true);
+        setupSlider('angle', 'angle', true);
+        setupSlider('fps', 'fps');
+        setupSlider('duration', 'duration');
+        setupSlider('staticPercent', 'staticPercent');
+        setupSlider('baseNoise', 'baseNoise');
+
+        document.getElementById('seed').addEventListener('change', (e) => {
+            params.seed = parseInt(e.target.value) || 42;
+            updatePreview();
+        });
+
+        document.getElementById('regenerateBtn').addEventListener('click', () => {
+            params.seed = Math.floor(Math.random() * 999999) + 1;
+            document.getElementById('seed').value = params.seed;
+            updatePreview();
+        });
+
+        document.getElementById('exportBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('exportBtn');
+            const progressContainer = document.getElementById('progress-container');
+            const progressFill = document.getElementById('progress-fill');
+            const progressText = document.getElementById('progress-text');
+            const status = document.getElementById('status');
+
+            btn.disabled = true;
+            progressContainer.style.display = 'block';
+
+            try {
+                status.textContent = 'Initializing encoder...';
+                
+                const exporter = new MediabunnyExporter({
+                    width: params.width,
+                    height: params.height,
+                    fps: params.fps,
+                    bitrate: 8_000_000,
+                    format: 'mp4',
+                    codec: 'avc'
+                });
+
+                await exporter.initialize();
+
+                const totalFrames = params.fps * params.duration;
+                const frameCanvas = document.createElement('canvas');
+                frameCanvas.width = params.width;
+                frameCanvas.height = params.height;
+
+                generateCircles();
+                generateStaticFrames(totalFrames);
+
+                for (let f = 0; f < totalFrames; f++) {
+                    const isStaticFrame = staticFrameSet.has(f);
+                    renderFrame(f, frameCanvas, totalFrames, isStaticFrame);
+                    await exporter.addFrame(frameCanvas, f);
+
+                    if (f % 10 === 0) {
+                        const pct = Math.round((f / totalFrames) * 100);
+                        progressFill.style.width = pct + '%';
+                        progressText.textContent = `${pct}% (${f}/${totalFrames} frames)`;
+                        await new Promise(r => setTimeout(r, 0));
+                    }
+                }
+
+                status.textContent = 'Finalizing video...';
+                const blob = await exporter.finalize();
+
+                progressFill.style.width = '100%';
+                progressText.textContent = '100%';
+
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `flowgen_${params.width}x${params.height}_${params.startSpeed}-${params.endSpeed}px_${params.angle}deg_${params.duration}s.mp4`;
+                a.click();
+                URL.revokeObjectURL(url);
+
+                status.textContent = `Exported successfully! (${(blob.size / 1024 / 1024).toFixed(2)} MB)`;
+            } catch (e) {
+                status.textContent = 'Error: ' + e.message;
+                console.error(e);
+            } finally {
+                btn.disabled = false;
+                setTimeout(() => {
+                    progressContainer.style.display = 'none';
+                }, 2000);
+            }
+        });
+
+        updatePreview();
+    </script>
+</body>
+</html>
