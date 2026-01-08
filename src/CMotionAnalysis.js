@@ -195,6 +195,53 @@ function calculatePanoDimensions(videoData, startFrame, minPx, maxPx, minPy, max
     };
 }
 
+function processRemoveOuterBlack(imageData) {
+    const pixels = imageData.data;
+    const width = imageData.width;
+    const height = imageData.height;
+    const BLACK_THRESHOLD = 5;
+    
+    for (let row = 0; row < height; row++) {
+        const rowStart = row * width * 4;
+        
+        const firstIdx = rowStart;
+        const firstR = pixels[firstIdx];
+        const firstG = pixels[firstIdx + 1];
+        const firstB = pixels[firstIdx + 2];
+        if (firstR < BLACK_THRESHOLD && firstG < BLACK_THRESHOLD && firstB < BLACK_THRESHOLD) {
+            for (let col = 0; col < width; col++) {
+                const idx = rowStart + col * 4;
+                const r = pixels[idx];
+                const g = pixels[idx + 1];
+                const b = pixels[idx + 2];
+                if (r < BLACK_THRESHOLD && g < BLACK_THRESHOLD && b < BLACK_THRESHOLD) {
+                    pixels[idx + 3] = 0;
+                } else {
+                    break;
+                }
+            }
+        }
+        
+        const lastIdx = rowStart + (width - 1) * 4;
+        const lastR = pixels[lastIdx];
+        const lastG = pixels[lastIdx + 1];
+        const lastB = pixels[lastIdx + 2];
+        if (lastR < BLACK_THRESHOLD && lastG < BLACK_THRESHOLD && lastB < BLACK_THRESHOLD) {
+            for (let col = width - 1; col >= 0; col--) {
+                const idx = rowStart + col * 4;
+                const r = pixels[idx];
+                const g = pixels[idx + 1];
+                const b = pixels[idx + 2];
+                if (r < BLACK_THRESHOLD && g < BLACK_THRESHOLD && b < BLACK_THRESHOLD) {
+                    pixels[idx + 3] = 0;
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+}
+
 function drawFrameToPano(panoCtx, image, x, y, crop, croppedWidth, croppedHeight, scaledFrameWidth, scaledFrameHeight, useMask, tempCanvas, tempCtx, maskImageData, frameWidth, frameHeight, rotation = 0) {
     let sourceImage = image;
     
@@ -208,6 +255,18 @@ function drawFrameToPano(panoCtx, image, x, y, crop, croppedWidth, croppedHeight
         effectsCtx.filter = 'none';
         applyVideoEffectsToCanvas(effectsCtx, frameWidth, frameHeight);
         sourceImage = effectsCanvas;
+    }
+    
+    if (removeOuterBlack) {
+        const blackCanvas = document.createElement('canvas');
+        blackCanvas.width = frameWidth;
+        blackCanvas.height = frameHeight;
+        const blackCtx = blackCanvas.getContext('2d', {willReadFrequently: true});
+        blackCtx.drawImage(sourceImage, 0, 0);
+        const imgData = blackCtx.getImageData(0, 0, frameWidth, frameHeight);
+        processRemoveOuterBlack(imgData);
+        blackCtx.putImageData(imgData, 0, 0);
+        sourceImage = blackCanvas;
     }
     
     const drawWithRotation = (src, sx, sy, sw, sh, dx, dy, dw, dh) => {
@@ -2440,6 +2499,7 @@ let stabilizationEnabled = false;
 let panoCrop = 0;
 let useMaskInPano = true;
 let panoFrameStep = 1;
+let removeOuterBlack = false;
 
 async function exportMotionPanorama() {
     const result = await ensureOpenCVAndAnalyzer(exportPanoMenuItem, "Loading OpenCV...", "Export Motion Panorama");
@@ -2771,6 +2831,18 @@ async function exportPanoVideo() {
                 overlayImage = effectsCanvas;
             }
 
+            if (removeOuterBlack) {
+                const blackCanvas = document.createElement('canvas');
+                blackCanvas.width = frameWidth;
+                blackCanvas.height = frameHeight;
+                const blackCtx = blackCanvas.getContext('2d', {willReadFrequently: true});
+                blackCtx.drawImage(overlayImage, 0, 0);
+                const imgData = blackCtx.getImageData(0, 0, frameWidth, frameHeight);
+                processRemoveOuterBlack(imgData);
+                blackCtx.putImageData(imgData, 0, 0);
+                overlayImage = blackCanvas;
+            }
+
             if (panoRotation !== 0) {
                 compositeCtx.save();
                 compositeCtx.translate(frameX + videoFrameWidth / 2, frameY + videoFrameHeight / 2);
@@ -2949,7 +3021,8 @@ export function addMotionAnalysisMenu() {
         get useMaskInPano() { return useMaskInPano; }, set useMaskInPano(v) { useMaskInPano = v; },
         get panoFrameStep() { return panoFrameStep; }, set panoFrameStep(v) { panoFrameStep = v; },
         get analyzeWithEffects() { return analyzeWithEffects; }, set analyzeWithEffects(v) { analyzeWithEffects = v; },
-        get exportWithEffects() { return exportWithEffects; }, set exportWithEffects(v) { exportWithEffects = v; }
+        get exportWithEffects() { return exportWithEffects; }, set exportWithEffects(v) { exportWithEffects = v; },
+        get removeOuterBlack() { return removeOuterBlack; }, set removeOuterBlack(v) { removeOuterBlack = v; }
     };
     panoFolder.add(panoParams, 'panoFrameStep', 1, 60, 1)
         .name("Pano Frame Step")
@@ -2970,6 +3043,10 @@ export function addMotionAnalysisMenu() {
     panoFolder.add(panoParams, 'exportWithEffects')
         .name("Export With Effects")
         .tooltip("Apply video adjustments to panorama exports")
+        .perm();
+    panoFolder.add(panoParams, 'removeOuterBlack')
+        .name("Remove Outer Black")
+        .tooltip("Make black pixels at the edges of each row transparent")
         .perm();
 }
 
