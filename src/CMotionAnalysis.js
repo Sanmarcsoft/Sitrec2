@@ -13,6 +13,7 @@ import {par} from "./par";
 import {ExportProgressWidget} from "./utils";
 
 import {CNodeMaskOverlay} from "./nodes/CNodeMaskOverlay";
+import {CNodeSpeedOverlay} from "./nodes/CNodeSpeedOverlay";
 import {CNodeVelocityFromMotion} from "./nodes/CNodeVelocityFromMotion";
 import {CNodeTrackFromVelocity} from "./nodes/CNodeTrackFromVelocity";
 import {CNodeDisplayTrack} from "./nodes/CNodeDisplayTrack";
@@ -406,6 +407,9 @@ class MotionAnalyzer {
         this.maskEnabled = true;
         this.brushSize = 20;
         
+        this.speedOverlayNode = null;
+        this.speedOverlayEnabled = false;
+        
         this.autoMaskWindow = 10;
         this.autoMaskThreshold = 0.9;
         this.autoMaskSpread = 5;
@@ -798,6 +802,13 @@ class MotionAnalyzer {
             onMaskChange: () => this.onMaskChange(),
         });
 
+        this.speedOverlayNode = new CNodeSpeedOverlay({
+            id: "motionSpeedOverlay",
+            overlayView: this.videoView,
+            visible: false,
+        });
+        this.speedOverlayNode.setMotionAnalyzer(this);
+
         this.overlay = document.createElement('canvas');
         this.overlay.style.position = 'absolute';
         this.overlay.style.top = '0';
@@ -839,6 +850,17 @@ class MotionAnalyzer {
         if (this.maskOverlayNode) {
             this.maskOverlayNode.setShowMaskPreview(false);
             this.maskOverlayNode.setEditing(false);
+        }
+        if (this.speedOverlayNode) {
+            this.speedOverlayNode.setEnabled(false);
+        }
+    }
+    
+    setSpeedOverlayEnabled(enabled) {
+        this.speedOverlayEnabled = enabled;
+        if (this.speedOverlayNode) {
+            this.speedOverlayNode.setEnabled(enabled);
+            setRenderOne(true);
         }
     }
 
@@ -3345,6 +3367,10 @@ function createParamSliders() {
     
     paramControllers.push(maskFolder.add(motionAnalyzer, 'autoMaskCloseToTarget', 0, 255, 1).name("Color Tolerance")
         .onChange(runAutoMask).tooltip("How close pixel must be to target color (lower = stricter)"));
+    
+    paramControllers.push(motionFolder.add(motionAnalyzer, 'speedOverlayEnabled').name("Speed Overlay").onChange((v) => {
+        motionAnalyzer.setSpeedOverlayEnabled(v);
+    }).tooltip("Show thermal heat map of optical flow speed"));
     
     motionFolder.open();
 }
