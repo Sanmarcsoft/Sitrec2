@@ -113,6 +113,14 @@ const GimbalDefaults = {
     include_Compasses: true,
 
 
+    sprites: {kind: "FlowOrbs", nSprites:1000, wind: "targetWind",
+        colorMethod: "Hue From Altitude",
+        hueAltitudeMax: 1400,
+        camera: "lookCamera", visible: false,
+        defer: true,  // needed as targetWind is programattic in Gimbal.
+
+    },
+
     setup: function () {
         setupOpts();
 
@@ -623,6 +631,7 @@ export const SitGimbalSR71 = {
     lookView: {left: 0.03, top: 0.45, width: -1, height: 0.5,
         draggable:true,resizable:true,shiftDrag:true,freeAspect:false, noOrbitControls:true,
     },
+
 
     startDistance: 19,
     targetSpeed: 160,

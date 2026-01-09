@@ -39,6 +39,7 @@ const parDefaults = {
     podRollIdeal: 0, // ideal roll from the pod = globalRoll-jetRoll
     podRollPhysical: 0, // physical roll of the pod head = ideal roll or angle from glare
     deroFromGlare: false,
+    horizonMethod: "Human Horizon",
     showPodHead: false,
     showPodsEye: false,
     graphSize: 100,

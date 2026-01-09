@@ -1,7 +1,8 @@
 import {atan, degrees, radians, tan} from "../utils";
+import {par} from "../par";
 import {ECEFToLLAVD_Sphere, EUSToECEF, LLAToEUS, wgs84} from "../LLA-ECEF-ENU";
 import {isKeyHeld} from "../KeyBoardHandler";
-import {gui, NodeMan, Sit} from "../Globals";
+import {gui, guiPhysics, NodeMan, setRenderOne, Sit} from "../Globals";
 import {getLocalEastVector, getLocalNorthVector, getLocalUpVector} from "../SphericalMath";
 import {adjustHeightAboveGround, clampAboveGround, DebugArrow} from "../threeExt";
 import {CNodeController} from "./CNodeController";
@@ -50,10 +51,17 @@ export class CNodeControllerTrackToTrack extends CNodeController {
 // to calculate what the horizon should look like to a human observer
 // Assumes the camera is already pointed correctly, but with a level horizon
 export class CNodeControllerHumanHorizon extends CNodeController {
+    static guiAdded = false;
+
     constructor(v) {
         super(v);
+        if (!CNodeControllerHumanHorizon.guiAdded && guiPhysics) {
+            guiPhysics.add(par, 'horizonMethod', ["Human Horizon", "Horizon Angle"])
+                .name("Horizon Method")
+                .onChange(() => setRenderOne(true));
+            CNodeControllerHumanHorizon.guiAdded = true;
+        }
     }
-
 
     apply(f, objectNode) {
         const humanHorizon = get_real_horizon_angle_for_frame(f);

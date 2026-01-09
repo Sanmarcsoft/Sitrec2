@@ -91,6 +91,10 @@ export function SetupJetGUI() {
 
     }).name('Scale Jet Pitch with Roll')
 
+    guiPhysics.add(par, 'horizonMethod', ["Human Horizon", "Horizon Angle"])
+        .name("Horizon Method")
+        .onChange(curveChanged)
+
     guiTweaks.add(par, 'speed', 1, 10, 0.1).listen().name("Video Speed")
     guiTweaks.add(par, 'podWireframe').listen().name("[B]ack Pod Wireframe").onChange(value => {
         PODBack.traverse(child => {

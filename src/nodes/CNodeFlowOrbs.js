@@ -58,7 +58,8 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
         if (this.wind)
             this.wind = NodeMan.get(this.wind);
 
-        this.lastCameraPosition = this.camera.position.clone();
+        this.lastCameraPosition = new Vector3();
+        this.camera.getWorldPosition(this.lastCameraPosition);
         this.lastFrame = 0;
 
         this.initializeSprites();
@@ -148,6 +149,10 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
         this.rebuildSprites()
     }
 
+    getCameraWorldPosition(target = new Vector3()) {
+        return this.camera.getWorldPosition(target);
+    }
+
     nSpritesChanged() {
         const lookVector = new Vector3();
         this.camera.getWorldDirection(lookVector);
@@ -179,7 +184,8 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
         // to be  given distance from the lookVector
         // and then the corner of the frustum, roated by a random angle (0..2PI)
         // but OUTSIDE the frustum of the camera
-        const centerPos = camera.position.clone().add(lookVector.clone().multiplyScalar(orb.startDistance));
+        const cameraWorldPos = camera.getWorldPosition(new Vector3());
+        const centerPos = cameraWorldPos.clone().add(lookVector.clone().multiplyScalar(orb.startDistance));
         const frustumHeight = Math.tan(radians(camera.fov) / 2) * orb.startDistance;
         const frustumWidth = frustumHeight * camera.aspect;
         const angle = Math.random() * Math.PI * 2;
@@ -187,7 +193,10 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
         var right = new Vector3()
         var up = new Vector3()
         var zAxis = new Vector3()
-        camera.matrix.extractBasis(right, up, zAxis)
+        camera.matrixWorld.extractBasis(right, up, zAxis)
+        right.normalize();
+        up.normalize();
+        zAxis.normalize();
 
         // get newpos as the offset from the center line
         // (i.e. not yet a point)
@@ -225,7 +234,7 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
         orb.lifeTime = 100 + 500 * Math.random();
 
         // get the distance from the look vector ray
-        const ray = new Ray(camera.position, lookVector);
+        const ray = new Ray(cameraWorldPos, lookVector);
         orb.awayDistance = Math.sqrt(ray.distanceSqToPoint(orb.position));
 
 
@@ -378,7 +387,7 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
                 const hue = altitudeAboveSphere(orb.position) / this.hueAltitudeMax;
                 color = new Color().setHSL(hue, 1, 0.5);
             } else if (this.colorMethod === "Hue From Distance") {
-                const distance = orb.position.distanceTo(this.camera.position);
+                const distance = orb.position.distanceTo(this.getCameraWorldPosition());
                 const hue = distance / this.hueAltitudeMax;
                 color = new Color().setHSL(hue, 1, 0.5);
             }
@@ -400,8 +409,9 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
         if (this.spreadMethod === "Altitude") {
             const lookVector = new Vector3();
             this.camera.getWorldDirection(lookVector);
-            const down = getLocalDownVector(this.camera.position);
-            const altitude = altitudeAboveSphere(this.camera.position);
+            const cameraWorldPos = this.getCameraWorldPosition();
+            const down = getLocalDownVector(cameraWorldPos);
+            const altitude = altitudeAboveSphere(cameraWorldPos);
 
             // in the altitude spread method, near and far are ABSOLUTE altitudes
             // (i.e. meters above the ground)
@@ -454,9 +464,10 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
         // now adjust all the distance along the look vector
         const lookVector = new Vector3();
         this.camera.getWorldDirection(lookVector);
+        const cameraWorldPos = this.getCameraWorldPosition();
         for (let i = 0; i < this.nSprites; i++) {
             // get the vector from the camera to the sprite
-            const v = this.orbs[i].position.clone().sub(this.camera.position);
+            const v = this.orbs[i].position.clone().sub(cameraWorldPos);
             // devolve in into parallel and perpendicular components
             const parallel = v.clone().projectOnVector(lookVector);
             const perpendicular = v.clone().sub(parallel);
@@ -466,7 +477,7 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
             // adjust the parallel component
             parallel.normalize().multiplyScalar(newParallel);
             // and add the perpendicular component
-            this.orbs[i].position = this.camera.position.clone().add(parallel).add(perpendicular);
+            this.orbs[i].position = cameraWorldPos.clone().add(parallel).add(perpendicular);
         }
 
 
@@ -490,19 +501,21 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
             return;
         }
 
+        const cameraWorldPos = this.getCameraWorldPosition();
+        
         let inside = false;
         // see if the camera has moved significantly (>1km)
-        if (this.camera.position.distanceTo(this.lastCameraPosition) > 1000) {
-            console.log("camera has moved significantly, resetting all d = " + this.camera.position.distanceTo(this.lastCameraPosition));
+        if (cameraWorldPos.distanceTo(this.lastCameraPosition) > 1000) {
+            console.log("camera has moved significantly, resetting all d = " + cameraWorldPos.distanceTo(this.lastCameraPosition));
             inside = true;
         }
-        this.lastCameraPosition = this.camera.position.clone();
+        this.lastCameraPosition.copy(cameraWorldPos);
 
         // get the camera look vector
         const lookVector = new Vector3();
         this.camera.getWorldDirection(lookVector);
 
-        const ray = new Ray(this.camera.position, lookVector);
+        const ray = new Ray(cameraWorldPos, lookVector);
 
         let wind = new Vector3();
         if (this.wind) {

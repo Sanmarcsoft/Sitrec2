@@ -18,6 +18,16 @@ export function jetPitchFromFrame(f = -1) {
     return jetPitch;
 }
 
+export function horizonAngle(jetPitch, jetRoll, az) {
+    const d2r = Math.PI / 180;
+    const P = jetPitch * d2r;
+    const R = jetRoll  * d2r;
+    const A = az       * d2r;
+    const y = Math.sin(R) * Math.cos(A) + Math.sin(A) * Math.tan(P);
+    const x = Math.cos(R);
+    return Math.atan2(y, x) / d2r;
+}
+
 export function getHumanHorizonFromPitchRollAzEl(jetPitch, jetRoll, az, el) {
 
 
@@ -73,7 +83,10 @@ export function Frame2Az(frame) {
 
 export function Frame2El(frame) {
     return NodeMan.get("el").v(frame)
-} // https://www.metabunk.org/threads/gimbal-derotated-video-using-clouds-as-the-horizon.12552/page-2#post-276183
+}
+
+
+// https://www.metabunk.org/threads/gimbal-derotated-video-using-clouds-as-the-horizon.12552/page-2#post-276183
 //double get_real_horizon_angle_for_frame(int frame, int type = 2) {
 export function get_real_horizon_angle_for_frame(frame) {
     const jetPitch = jetPitchFromFrame(frame) // this will get scaled pitch
@@ -81,6 +94,9 @@ export function get_real_horizon_angle_for_frame(frame) {
     const az = Frame2Az(frame)
     const el = Frame2El(frame);
 
+    if (par.horizonMethod === "Horizon Angle") {
+        return horizonAngle(jetPitch, jetRoll, az);
+    }
     return getHumanHorizonFromPitchRollAzEl(jetPitch, jetRoll, az, el)
 }
 
