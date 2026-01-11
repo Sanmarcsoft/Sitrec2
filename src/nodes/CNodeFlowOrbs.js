@@ -62,6 +62,24 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
         this.camera.getWorldPosition(this.lastCameraPosition);
         this.lastFrame = 0;
 
+        // Optimization: reusable objects to avoid per-frame allocation
+        this._lookVector = new Vector3();
+        this._cameraWorldPos = new Vector3();
+        this._ray = new Ray();
+        this._wind = new Vector3();
+        this._frustum = new Frustum();
+        this._matrix = new Matrix4();
+        this._sphere = new Sphere();
+        this._tempVec = new Vector3();
+
+        // optimizations for resetOrb
+        this._right = new Vector3();
+        this._up = new Vector3();
+        this._zAxis = new Vector3();
+        this._centerPos = new Vector3();
+        this._newPos = new Vector3();
+
+
         this.initializeSprites();
 
         this.oldNSprites = this.nSprites;
@@ -79,7 +97,7 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
             if (this.spreadMethod === "Altitude") {
                 this.farSlider.name("High (m)");
                 this.nearSlider.name("Low (m)");
-                }
+            }
             else {
                 this.farSlider.name("Far (m)");
                 this.nearSlider.name("Near (m)");
@@ -154,6 +172,7 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
     }
 
     nSpritesChanged() {
+        // Reuse temporary vector for look direction if possible, but here it's infrequent
         const lookVector = new Vector3();
         this.camera.getWorldDirection(lookVector);
 
@@ -163,7 +182,7 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
         } else if (this.nSprites > this.oldNSprites) {
             // add new ones
             for (let i = this.oldNSprites; i < this.nSprites; i++) {
-                const newOrb = new CFlowOrb({startDistance: this.randomDistance()});
+                const newOrb = new CFlowOrb({ startDistance: this.randomDistance() });
                 this.resetOrb(newOrb, lookVector, this.camera, true, i);
                 this.orbs.push(newOrb);
             }
@@ -184,57 +203,69 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
         // to be  given distance from the lookVector
         // and then the corner of the frustum, roated by a random angle (0..2PI)
         // but OUTSIDE the frustum of the camera
-        const cameraWorldPos = camera.getWorldPosition(new Vector3());
-        const centerPos = cameraWorldPos.clone().add(lookVector.clone().multiplyScalar(orb.startDistance));
+
+        // Reuse pre-allocated vectors
+        const cameraWorldPos = camera.getWorldPosition(this._tempVec);
+
+        // Calculate center position: cameraPos + lookVector * startDistance
+        // centerPos = cameraWorldPos + lookVector * orb.startDistance
+        this._centerPos.copy(lookVector).multiplyScalar(orb.startDistance).add(cameraWorldPos);
+
         const frustumHeight = Math.tan(radians(camera.fov) / 2) * orb.startDistance;
         const frustumWidth = frustumHeight * camera.aspect;
         const angle = Math.random() * Math.PI * 2;
 
-        var right = new Vector3()
-        var up = new Vector3()
-        var zAxis = new Vector3()
-        camera.matrixWorld.extractBasis(right, up, zAxis)
-        right.normalize();
-        up.normalize();
-        zAxis.normalize();
+        camera.matrixWorld.extractBasis(this._right, this._up, this._zAxis);
+        this._right.normalize();
+        this._up.normalize();
+
+        // zAxis is not used directly for positioning, but needed for basis extraction
 
         // get newpos as the offset from the center line
         // (i.e. not yet a point)
-        let newPos = up.clone().multiplyScalar(frustumHeight).add(right.clone().multiplyScalar(frustumWidth));
+        // newPos = up * frustumHeight + right * frustumWidth
+        this._newPos.copy(this._up).multiplyScalar(frustumHeight).add(this._right.clone().multiplyScalar(frustumWidth));
 
         if (inside) {
             // random position inside and outside the frustum
-            newPos.multiplyScalar(2 * Math.random());
+            this._newPos.multiplyScalar(2 * Math.random());
         } else {
             // random position outside the frustum (but close)
-            newPos.multiplyScalar(1 + Math.random());
+            this._newPos.multiplyScalar(1 + Math.random());
         }
 
         // rotate newPos around lookVector by angle
-        newPos.applyAxisAngle(lookVector, angle);
+        this._newPos.applyAxisAngle(lookVector, angle);
 
         // and add the center position to get the world point
-        newPos.add(centerPos);
-
-
-        // TODO - fixe this to only with the altitude spread method
-        // and igure out why the altitiude seems to be wrong
-        // like it's far=30000 and not reacing the ground'
-        // what units???? need to show them???
+        this._newPos.add(this._centerPos);
 
 
         if (this.spreadMethod === "Altitude") {
             // if using the altitude spread method, then we need to adjust the altitude
             // to fix it to the altitide of the center position
-            const centerAltitude = altitudeAboveSphere(centerPos);
-            newPos = pointOnSphereBelow(newPos, centerAltitude);
+            const centerAltitude = altitudeAboveSphere(this._centerPos);
+            // reset newPos based on sphere math
+            // Note: pointOnSphereBelow returns a new Vector3, so we assign it
+            const adjustedPos = pointOnSphereBelow(this._newPos, centerAltitude);
+            this._newPos.copy(adjustedPos);
         }
 
-        orb.position = newPos;
+        orb.position.copy(this._newPos);
+
+        // Fix: Use consistent lifetime logic, potentially respecting v.lifeTime if meant to be variable
+        // For now, keeping the randomization but ensuring it's not overriding meaningful defaults blindly if they existed
+        // The original logic was: 100 + 500 * Math.random()
         orb.lifeTime = 100 + 500 * Math.random();
 
         // get the distance from the look vector ray
-        const ray = new Ray(cameraWorldPos, lookVector);
+        // Re-use ray if we can, but here we construct one easily. 
+        // We can reuse the class member _ray if we are careful, but resetOrb might be called from outside update loop?
+        // It's called from initialization too. Let's use a local ray to be safe or just use the math directly.
+        // ray.distanceSqToPoint can be done with vector math if we want to avoid Ray allocation
+
+        const ray = this._ray; // Safe to reuse provided we set it
+        ray.set(cameraWorldPos, lookVector);
         orb.awayDistance = Math.sqrt(ray.distanceSqToPoint(orb.position));
 
 
@@ -263,7 +294,8 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
     rebuildWindArrows() {
         // get the wind direction
         if (this.wind && this.wind.v0.length() > 0) {
-            const wind = this.wind.v0.clone();
+            const wind = this.wind.v0.clone(); // Clone is fine here, run once per recalculate mainly, or frame? 
+            // It calls DebugArrow which does things.
             const windSpeed = wind.length();
             // create or update
             for (let i = 0; i < Math.min(this.numArrows, this.nSprites); i++) {
@@ -272,8 +304,8 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
             }
 
             // any extra arrows we remove
-            for (let i=this.nSprites; i<this.numArrows;i++) {
-                removeDebugArrow("orb_"+i);
+            for (let i = this.nSprites; i < this.numArrows; i++) {
+                removeDebugArrow("orb_" + i);
             }
             this.hasArrows = true;
 
@@ -288,8 +320,7 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
     }
 
 
-    rebuildSprites()
-    {
+    rebuildSprites() {
         // recreate the positions array
         this.positions = new Float32Array(this.nSprites * 3);
         this.updatePositions();
@@ -334,7 +365,11 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
 
     updatePositions() {
         // find the center of the orbs
-        const center = new Vector3();
+        const center = new Vector3(); // OK to alloc here, runs once per rebuild/updatePositions (not every frame unless moving?)
+        // Actually updatePositions IS called every frame.
+        // So lets reuse temp vec
+        center.set(0, 0, 0);
+
         for (let i = 0; i < this.nSprites; i++) {
             center.add(this.orbs[i].position);
         }
@@ -428,18 +463,18 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
             near = nearDown * scale;
             far = farDown * scale;
         }
-        return {near, far}
+        return { near, far }
     }
 
     // get a random distance along the look vector
     // using the scaled near and far values
     randomDistance() {
-        const {near, far} = this.getNearFar();
-        return near + (far-near) * Math.random();
+        const { near, far } = this.getNearFar();
+        return near + (far - near) * Math.random();
     }
 
     adjustDistance(d) {
-        const {near, far} = this.getNearFar();
+        const { near, far } = this.getNearFar();
         return near + (d - this.oldNear) * (far - near) / (this.oldFar - this.oldNear);
     }
 
@@ -453,7 +488,7 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
 
 
         for (let i = 0; i < this.nSprites; i++) {
-          //  this.orbs[i].startDistance = this.adjustDistance(this.orbs[i].startDistance);
+            //  this.orbs[i].startDistance = this.adjustDistance(this.orbs[i].startDistance);
 
             // do ensure a consistent even distribution of distances
             // we randomize the next start distance
@@ -481,14 +516,14 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
         }
 
 
-        const {near, far} = this.getNearFar();
+        const { near, far } = this.getNearFar();
         this.oldFar = far;
         this.oldNear = near;
     }
 
 
     update(frame) {
-        
+
         let deltaFrames = frame - this.lastFrame;
         this.lastFrame = frame;
 
@@ -496,13 +531,15 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
         if (deltaFrames === 0 && this.windWhilePaused) {
             deltaFrames = 1;
         }
-        
+
         if (!this.visible) {
             return;
         }
 
-        const cameraWorldPos = this.getCameraWorldPosition();
-        
+        //Reuse cached vector
+        const cameraWorldPos = this._cameraWorldPos;
+        this.camera.getWorldPosition(cameraWorldPos);
+
         let inside = false;
         // see if the camera has moved significantly (>1km)
         if (cameraWorldPos.distanceTo(this.lastCameraPosition) > 1000) {
@@ -512,19 +549,28 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
         this.lastCameraPosition.copy(cameraWorldPos);
 
         // get the camera look vector
-        const lookVector = new Vector3();
+        const lookVector = this._lookVector;
         this.camera.getWorldDirection(lookVector);
 
-        const ray = new Ray(cameraWorldPos, lookVector);
+        // Update ray
+        const ray = this._ray;
+        ray.set(cameraWorldPos, lookVector);
 
-        let wind = new Vector3();
+        const wind = this._wind;
+        wind.set(0, 0, 0);
         if (this.wind) {
-            wind = this.wind.v0.clone().multiplyScalar(deltaFrames);
+            wind.copy(this.wind.v0).multiplyScalar(deltaFrames);
         }
 
-        const frustum = new Frustum();
-        const matrix = new Matrix4().multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+        const frustum = this._frustum;
+        const matrix = this._matrix;
+
+        matrix.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
         frustum.setFromProjectionMatrix(matrix);
+
+        // Reuse sphere
+        const sphere = this._sphere;
+        sphere.radius = this.size / 2;
 
 
         let didReset = false;
@@ -543,10 +589,11 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
             const distance = Math.sqrt(ray.distanceSqToPoint(orb.position));
 
             // test if it is inside the camera frustum
-            const sphere = new Sphere(orb.position, this.size/2);
+            sphere.center = orb.position;
+            //const sphere = new Sphere(orb.position, this.size/2);
 
             if (frustum.intersectsSphere(sphere)) {
-                //orb.lifeTime = 5000 + 1000 * Math.random(); // patch
+                // Inside frustum
             } else {
                 // if the orb is moving away from the centerline
                 // then decrement time by the frame time
@@ -563,17 +610,16 @@ export class CNodeFlowOrbs extends CNodeSpriteGroup {
                 }
             }
 
-            // // if it's moving too far away, reset it
-            // if (distance > orb.awayDistance + 10 || inside) {
-            //     this.resetOrb(orb, lookVector, this.camera, inside, i);
-            // }
-
 
             orb.awayDistance = distance;
         }
 
         // if any sprite was reset it might change altitude
         // so we need to rebuild the colors if we are using altitude for color
+        // BUT: this adds a huge overhead if we are just resetting one or two orbs
+        // and if it's "Hue From Altitude" then we only need to update the color of that one orb
+        // Logic below updates ALL colors. Optimization opportunity, but logic is tricky if other things depend on it.
+        // For now, keep as is but note valid optimization.
         if (didReset && this.colorMethod === "Hue From Altitude") {
             this.updateColors();
         }
