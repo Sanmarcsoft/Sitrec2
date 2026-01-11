@@ -1,13 +1,13 @@
 // Helper functions for lil-gui
-import GUI, {Controller} from "./js/lil-gui.esm";
+import GUI, { Controller } from "./js/lil-gui.esm";
 //import {updateSize} from "./JetStuff";
-import {Globals, setMouseOverGUI, Units} from "./Globals";
-import {Color} from "three";
-import {assert} from "./assert";
-import {ViewMan} from "./CViewManager";
-import {parseBoolean} from "./utils";
+import { Globals, setMouseOverGUI, Units } from "./Globals";
+import { Color } from "three";
+import { assert } from "./assert";
+import { ViewMan } from "./CViewManager";
+import { parseBoolean } from "./utils";
 import Stats from "stats.js";
-import {toggleControlsVisibility} from "./PageStructure";
+import { toggleControlsVisibility } from "./PageStructure";
 
 // Issue with lil-gui, the OptionController options() method adds a
 // _names array to the controller object, and a _values array
@@ -24,7 +24,7 @@ import {toggleControlsVisibility} from "./PageStructure";
 export function addOptionToGUIMenu(controller, optionName, optionValue = optionName) {
     const index = controller._names.indexOf(optionName);
     if (index !== -1) {
-        console.warn("Option "+ optionName +"  already exists in controller, skipping re-add");
+        console.warn("Option " + optionName + "  already exists in controller, skipping re-add");
         return;
     }
     // Update internal arrays
@@ -41,7 +41,7 @@ export function addOptionToGUIMenu(controller, optionName, optionValue = optionN
 
     // Update the display
     controller.updateDisplay();
-    
+
     // Notify menu bar to update visibility
     if (controller.parent) {
         controller.parent._notifyMenuBarChanged();
@@ -62,13 +62,13 @@ export function removeOptionFromGUIMenu(controller, optionName) {
 
         // Update the display
         controller.updateDisplay();
-        
+
         // Notify menu bar to update visibility
         if (controller.parent) {
             controller.parent._notifyMenuBarChanged();
         }
     } else {
-//        console.warn("Option "+ optionName +"  does not exist in controller, skipping remove");
+        //        console.warn("Option "+ optionName +"  does not exist in controller, skipping remove");
     }
 }
 
@@ -84,7 +84,7 @@ export function dumpGUIMenu(controller) {
 }
 
 export function preventDoubleClicks(gui) {
-    gui.domElement.addEventListener('dblclick', function(e) {
+    gui.domElement.addEventListener('dblclick', function (e) {
         e.stopPropagation();
     });
 }
@@ -92,21 +92,28 @@ export function preventDoubleClicks(gui) {
 // Add mouse tracking to GUI elements to disable keyboard shortcuts when mouse is over them
 export function addGUIMouseTracking(gui) {
     // Track mouse enter/leave on the entire GUI element
-    gui.domElement.addEventListener('mouseenter', function(e) {
+    gui.domElement.addEventListener('mouseenter', function (e) {
         setMouseOverGUI(true);
     });
-    
-    gui.domElement.addEventListener('mouseleave', function(e) {
+
+    gui.domElement.addEventListener('mouseleave', function (e) {
         setMouseOverGUI(false);
         if (document.activeElement && gui.domElement.contains(document.activeElement)) {
-            document.activeElement.blur();
+            // Fix: Don't blur text/number inputs when mouse leaves so typing isn't interrupted
+            const tag = document.activeElement.tagName.toLowerCase();
+            const type = document.activeElement.type ? document.activeElement.type.toLowerCase() : '';
+            const isTextInput = tag === 'textarea' || (tag === 'input' && (type === 'text' || type === 'number'));
+
+            if (!isTextInput) {
+                document.activeElement.blur();
+            }
         }
     });
 }
 
 // Extend the GUI prototype to add a method for getting the folder with given title
 //
-GUI.prototype.getFolder = function(title) {
+GUI.prototype.getFolder = function (title) {
     // Find the child GUI with the specified title
     const folder = this.children.find(child => child instanceof GUI && child.$title.innerText === title);
 
@@ -115,7 +122,7 @@ GUI.prototype.getFolder = function(title) {
 }
 
 // Helper to trigger menu bar update when children change
-GUI.prototype._notifyMenuBarChanged = function() {
+GUI.prototype._notifyMenuBarChanged = function () {
     if (Globals.menuBar && typeof Globals.menuBar.hideEmpty === 'function') {
         // Defer the update to avoid excessive calls during rapid changes
         if (!this._hideEmptyTimeout) {
@@ -129,7 +136,7 @@ GUI.prototype._notifyMenuBarChanged = function() {
 
 // Store original add method and wrap it
 const originalAdd = GUI.prototype.add;
-GUI.prototype.add = function(...args) {
+GUI.prototype.add = function (...args) {
     const result = originalAdd.apply(this, args);
     this._notifyMenuBarChanged();
     return result;
@@ -137,7 +144,7 @@ GUI.prototype.add = function(...args) {
 
 // Store original addColor method and wrap it
 const originalAddColor = GUI.prototype.addColor;
-GUI.prototype.addColor = function(...args) {
+GUI.prototype.addColor = function (...args) {
     const result = originalAddColor.apply(this, args);
     this._notifyMenuBarChanged();
     return result;
@@ -145,7 +152,7 @@ GUI.prototype.addColor = function(...args) {
 
 // Store original addFolder method and wrap it
 const originalAddFolder = GUI.prototype.addFolder;
-GUI.prototype.addFolder = function(...args) {
+GUI.prototype.addFolder = function (...args) {
     const result = originalAddFolder.apply(this, args);
     this._notifyMenuBarChanged();
     return result;
@@ -153,7 +160,7 @@ GUI.prototype.addFolder = function(...args) {
 
 // Store original destroy method and wrap it
 const originalDestroy = GUI.prototype.destroy;
-GUI.prototype.destroy = function(recursive = true) {
+GUI.prototype.destroy = function (recursive = true) {
     // Notify before destroying so parent can check its content
     if (this.parent) {
         this.parent._notifyMenuBarChanged();
@@ -162,7 +169,7 @@ GUI.prototype.destroy = function(recursive = true) {
 };
 
 // Extend the lil-gui Controller prototype
-Controller.prototype.setLabelColor = function(color) {
+Controller.prototype.setLabelColor = function (color) {
     // Find the label element within the controller's DOM
     const label = this.$name;
     if (label) {
@@ -189,7 +196,7 @@ Controller.prototype.setLabelColor = function(color) {
 };
 
 // adding a tooltip to a controller
-Controller.prototype.tooltip = function(tooltip) {
+Controller.prototype.tooltip = function (tooltip) {
     // Find the label element within the controller's DOM
     const label = this.$name;
     if (label) {
@@ -200,9 +207,9 @@ Controller.prototype.tooltip = function(tooltip) {
     return this; // Return the controller to allow method chaining
 }
 
-Controller.prototype.setValueQuietly = function(value) {
+Controller.prototype.setValueQuietly = function (value) {
     // Set the value without triggering the onChange event
-    this.object[ this.property ] = value;
+    this.object[this.property] = value;
 
     // Update the display
     this.updateDisplay();
@@ -214,28 +221,28 @@ Controller.prototype.setValueQuietly = function(value) {
 // Usage: controller.setUnitType("small") - for height/distance in m/ft
 // Controller stores values in current display units (feet or meters)
 // External code should use getSIValue()/setSIValue() to interact in SI units
-Controller.prototype.setUnitType = function(unitType) {
+Controller.prototype.setUnitType = function (unitType) {
     // Store the unit type
     this._unitType = unitType;
-    
+
     // Only works for number controllers with $input
     if (!this.$input) {
         console.warn('setUnitType only works on number controllers');
         return this;
     }
-    
+
     // Store the original name (without units)
     if (!this._originalName) {
         this._originalName = this._name;
     }
-    
+
     // Store original min/max/step in SI units (only first time)
     if (this._originalMinSI === undefined) {
         // Assume initial values are in SI units
         this._originalMinSI = this._min;
         this._originalMaxSI = this._max;
         this._originalStepSI = this._step;
-        
+
         // Convert the initial value from SI to current display units
         if (Units) {
             const unitInfo = Units.factors[Units.units][unitType];
@@ -247,59 +254,59 @@ Controller.prototype.setUnitType = function(unitType) {
             }
         }
     }
-    
+
     // Update the display name with units
     const updateName = () => {
         if (!Units) return;
-        
+
         const unitInfo = Units.factors[Units.units][this._unitType];
         if (unitInfo) {
             this._name = this._originalName + ' (' + unitInfo.abbrev + ')';
             this.$name.innerHTML = this._name;
         }
     };
-    
+
     // Convert min/max/step to current display units
     const updateRanges = () => {
         if (!Units) return;
-        
+
         const unitInfo = Units.factors[Units.units][this._unitType];
         if (!unitInfo) return;
-        
+
         this._min = this._originalMinSI / unitInfo.toM;
         this._max = this._originalMaxSI / unitInfo.toM;
         this._step = this._originalStepSI / unitInfo.toM;
         this._onUpdateMinMax();
     };
-    
+
     // Initial setup
     updateName();
     updateRanges();
-    
+
     // Listen for unit changes
     const onUnitsChange = (oldUnits) => {
         if (!Units) return;
-        
+
         const oldUnitInfo = Units.factors[oldUnits][this._unitType];
         const newUnitInfo = Units.factors[Units.units][this._unitType];
         if (!oldUnitInfo || !newUnitInfo) return;
-        
+
         // Convert the stored value from old units to new units
         // old display value * toM = SI value
         // SI value / new toM = new display value
         const conversionFactor = oldUnitInfo.toM / newUnitInfo.toM;
         const oldDisplayValue = this.getValue();
         const newDisplayValue = oldDisplayValue * conversionFactor;
-        
+
         // Update the stored value without triggering onChange
         this.object[this.property] = newDisplayValue;
-        
+
         // Update ranges and display
         updateRanges();
         updateName();
         this.updateDisplay();
     };
-    
+
     // Listen for global units changes
     if (!this._unitsCheckInterval) {
         let lastUnits = Units ? Units.units : null;
@@ -311,23 +318,23 @@ Controller.prototype.setUnitType = function(unitType) {
             }
         }, 500);
     }
-    
+
     this.updateDisplay();
-    
+
     return this; // Return the controller to allow method chaining
 }
 
 // Get value in SI units (meters)
-Controller.prototype.getSIValue = function() {
+Controller.prototype.getSIValue = function () {
     if (!this._unitType || !Units) {
         return this.getValue();
     }
-    
+
     const unitInfo = Units.factors[Units.units][this._unitType];
     if (!unitInfo) {
         return this.getValue();
     }
-    
+
     // Convert from display units to SI units
     const displayValue = this.getValue();
     return displayValue * unitInfo.toM;
@@ -335,14 +342,14 @@ Controller.prototype.getSIValue = function() {
 
 // Set value in SI units (meters) 
 // This updates the controller WITHOUT triggering onChange (used for syncing from model)
-Controller.prototype.setSIValue = function(siValue) {
+Controller.prototype.setSIValue = function (siValue) {
     if (!this._unitType || !Units) {
         // No unit conversion - just update directly without triggering onChange
         this.object[this.property] = siValue;
         this.updateDisplay();
         return this;
     }
-    
+
     const unitInfo = Units.factors[Units.units][this._unitType];
     if (!unitInfo) {
         // No unit info - update directly without triggering onChange
@@ -350,7 +357,7 @@ Controller.prototype.setSIValue = function(siValue) {
         this.updateDisplay();
         return this;
     }
-    
+
     // Convert from SI units to display units and update WITHOUT triggering onChange
     const displayValue = siValue / unitInfo.toM;
     this.object[this.property] = displayValue;
@@ -360,19 +367,19 @@ Controller.prototype.setSIValue = function(siValue) {
 
 // Set this button as the double-click action for its parent GUI/folder
 // Allows chaining: gui.add(obj, 'method').name('Button').setDoubleClickAction()
-Controller.prototype.setDoubleClickAction = function() {
+Controller.prototype.setDoubleClickAction = function () {
     // Find the parent GUI
     const parentGui = this.parent;
     if (parentGui && parentGui.setDoubleClickAction) {
         parentGui.setDoubleClickAction(this);
     }
-    
+
     return this; // Return the controller to allow method chaining
 }
 
 
 // same but for a GUI object (i.e. a folder)
-GUI.prototype.setLabelColor = function(color, min=0) {
+GUI.prototype.setLabelColor = function (color, min = 0) {
     // if color is an obkect, then it's a color object
     // so convert it to a hex string
     if (typeof color === "object") {
@@ -381,7 +388,7 @@ GUI.prototype.setLabelColor = function(color, min=0) {
 
     // convert back to a color object
     const colorObj = new Color(color);
-    if (min>0) {
+    if (min > 0) {
         // if the largest component is less than min, then scale it up
         // and scale the other components up by the same amount
         const max = Math.max(colorObj.r, colorObj.g, colorObj.b);
@@ -401,7 +408,7 @@ GUI.prototype.setLabelColor = function(color, min=0) {
 }
 
 // Folder tooltip
-GUI.prototype.tooltip = function(tooltip) {
+GUI.prototype.tooltip = function (tooltip) {
     this.domElement.title = tooltip;
     return this; // Return the controller to allow method chaining
 }
@@ -409,10 +416,10 @@ GUI.prototype.tooltip = function(tooltip) {
 // Set a button action to fire when the folder title is double-clicked
 // This is useful for context menus where double-clicking should perform a default action
 // If no buttonController is provided, double-clicking will close the menu (same as clicking outside)
-GUI.prototype.setDoubleClickAction = function(buttonController) {
+GUI.prototype.setDoubleClickAction = function (buttonController) {
     // Store the button controller reference
     this._doubleClickButton = buttonController;
-    
+
     // Add the double-click listener to the title if not already added
     if (!this._doubleClickListenerAdded) {
         const handleDoubleClickAction = (event) => {
@@ -430,30 +437,30 @@ GUI.prototype.setDoubleClickAction = function(buttonController) {
             event.preventDefault();
             event.stopPropagation();
         };
-        
+
         // Add dblclick event for mouse users
         this.$title.addEventListener("dblclick", handleDoubleClickAction);
-        
+
         // Add touch-based double-tap detection for Android (dblclick doesn't work reliably on Android)
         let lastTapTime = 0;
         let lastTapX = 0;
         let lastTapY = 0;
         const doubleTapDelay = 300; // ms - maximum time between taps to count as double-tap
         const doubleTapDistance = 30; // px - maximum distance between taps
-        
+
         this.$title.addEventListener("touchend", (event) => {
             const currentTime = Date.now();
             const timeDiff = currentTime - lastTapTime;
-            
+
             // Get touch position
             const touch = event.changedTouches[0];
             const currentX = touch.clientX;
             const currentY = touch.clientY;
             const distance = Math.sqrt(
-                Math.pow(currentX - lastTapX, 2) + 
+                Math.pow(currentX - lastTapX, 2) +
                 Math.pow(currentY - lastTapY, 2)
             );
-            
+
             // Check if this is a double-tap
             if (timeDiff < doubleTapDelay && distance < doubleTapDistance) {
                 // This is a double-tap - trigger the same action as dblclick
@@ -467,25 +474,25 @@ GUI.prototype.setDoubleClickAction = function(buttonController) {
                 lastTapY = currentY;
             }
         });
-        
+
         this._doubleClickListenerAdded = true;
     }
-    
+
     return this; // Return the GUI to allow method chaining
 }
 
 
 // Move a controller to the top of its parent
-Controller.prototype.moveToFirst = function() {
+Controller.prototype.moveToFirst = function () {
     const parentElement = this.domElement.parentElement;
     if (parentElement) {
-       parentElement.insertBefore(this.domElement, parentElement.firstChild);
-       
-       // Find the parent GUI and trigger a refresh of any mirrored GUIs
-       let parentGui = this.parent;
-       if (parentGui && parentGui._triggerMirrorRefresh) {
-           parentGui._triggerMirrorRefresh();
-       }
+        parentElement.insertBefore(this.domElement, parentElement.firstChild);
+
+        // Find the parent GUI and trigger a refresh of any mirrored GUIs
+        let parentGui = this.parent;
+        if (parentGui && parentGui._triggerMirrorRefresh) {
+            parentGui._triggerMirrorRefresh();
+        }
     }
     return this; // Return the controller to allow method chaining
 };
@@ -493,11 +500,11 @@ Controller.prototype.moveToFirst = function() {
 // Move a controller to the end of its parent
 
 
-Controller.prototype.moveToEnd = function() {
+Controller.prototype.moveToEnd = function () {
     const parentElement = this.domElement.parentElement;
     if (parentElement) {
         parentElement.appendChild(this.domElement);
-        
+
         // Find the parent GUI and trigger a refresh of any mirrored GUIs
         let parentGui = this.parent;
         if (parentGui && parentGui._triggerMirrorRefresh) {
@@ -508,11 +515,11 @@ Controller.prototype.moveToEnd = function() {
 };
 
 
-GUI.prototype.moveToEnd = function() {
+GUI.prototype.moveToEnd = function () {
     const parentElement = this.domElement.parentElement;
     if (parentElement) {
         parentElement.appendChild(this.domElement);
-        
+
         // Trigger a refresh of any mirrored GUIs
         this._triggerMirrorRefresh();
     }
@@ -520,7 +527,7 @@ GUI.prototype.moveToEnd = function() {
 }
 
 // Helper method to trigger refresh of mirrored GUIs
-GUI.prototype._triggerMirrorRefresh = function() {
+GUI.prototype._triggerMirrorRefresh = function () {
     // Dispatch a custom event that mirroring systems can listen for
     const event = new CustomEvent('gui-order-changed', {
         detail: { gui: this }
@@ -528,7 +535,7 @@ GUI.prototype._triggerMirrorRefresh = function() {
     document.dispatchEvent(event);
 }
 
-Controller.prototype.moveAfter = function(name) {
+Controller.prototype.moveAfter = function (name) {
     const parentElement = this.domElement.parentElement;
     if (parentElement) {
         // find the child with the name
@@ -536,7 +543,7 @@ Controller.prototype.moveAfter = function(name) {
         const child = children.find(c => c.querySelector('.name').innerText === name);
         if (child) {
             parentElement.insertBefore(this.domElement, child.nextSibling);
-            
+
             // Find the parent GUI and trigger a refresh of any mirrored GUIs
             let parentGui = this.parent;
             if (parentGui && parentGui._triggerMirrorRefresh) {
@@ -554,20 +561,20 @@ Controller.prototype.moveAfter = function(name) {
 
 
 // delete all the children of a GUI
-GUI.prototype.destroyChildren = function() {
-    Array.from( this.children ).forEach( c => c.destroy() );
+GUI.prototype.destroyChildren = function () {
+    Array.from(this.children).forEach(c => c.destroy());
 
     return this; // Return the controller to allow method chaining
 
 }
 
 // Extend the GUI prototype to add a new method
-GUI.prototype.addExternalLink = function(text, url) {
+GUI.prototype.addExternalLink = function (text, url) {
     // Create an object to hold the button action
     const obj = {};
 
     // Add a method to the object that opens the link
-    obj[text] = function() {
+    obj[text] = function () {
         window.open(url, '_blank');
     };
 
@@ -577,34 +584,34 @@ GUI.prototype.addExternalLink = function(text, url) {
 
 // Add a custom HTML element to the GUI
 // This creates a controller-like element that can contain arbitrary HTML
-GUI.prototype.addHTML = function(html, labelText = '') {
+GUI.prototype.addHTML = function (html, labelText = '') {
     // Create a wrapper div that looks like a controller
     const wrapper = document.createElement('div');
     wrapper.classList.add('controller', 'custom-html-controller');
-    
+
     // Create the label part (left side)
     const label = document.createElement('div');
     label.classList.add('name');
     label.textContent = labelText;
-    
+
     // Create the widget part (right side) that will contain the HTML
     const widget = document.createElement('div');
     widget.classList.add('widget');
-    
+
     // If html is a string, set it as innerHTML, otherwise append it as a node
     if (typeof html === 'string') {
         widget.innerHTML = html;
     } else {
         widget.appendChild(html);
     }
-    
+
     // Assemble the controller
     wrapper.appendChild(label);
     wrapper.appendChild(widget);
-    
+
     // Add to the GUI's children container
     this.$children.appendChild(wrapper);
-    
+
     // Return an object with methods for manipulation
     return {
         domElement: wrapper,
@@ -631,7 +638,7 @@ export class CGuiMenuBar {
 
             // For the menu bar, we need to modify the lil-gui code
             // removing the transition logic.
-            GUI.prototype.openAnimated = function(open = true) {
+            GUI.prototype.openAnimated = function (open = true) {
                 if (this.lockOpenClose) return;
 
                 // Set state immediately
@@ -667,13 +674,13 @@ export class CGuiMenuBar {
         this.slots = []; // array of GUI objects
 
         this.barHeight = 25; // height of the menu bar
-        
+
         // Z-index management for bringing clicked menus to front
         this.baseZIndex = 5000; // Base z-index for menu divs
 
         // Track the currently active persistent menu (dismissOnOutsideClick = false)
         this.activePersistentMenu = null;
-        
+
         // Track the currently active context menu (dismissOnOutsideClick = true)
         // Only one context menu should be visible at a time
         this.activeContextMenu = null;
@@ -699,12 +706,12 @@ export class CGuiMenuBar {
         bar.style.position = "absolute";
         bar.style.top = "0px";
         if (parseBoolean(process.env.BANNER_ACTIVE)) {
-            bar.style.top          = process.env.BANNER_HEIGHT + "px";
+            bar.style.top = process.env.BANNER_HEIGHT + "px";
             this.menuBar.style.top = process.env.BANNER_HEIGHT + "px";
         }
 
         bar.style.left = "0px";
-        bar.style.height = this.barHeight+"px"; // one pixel more than the menu title divs
+        bar.style.height = this.barHeight + "px"; // one pixel more than the menu title divs
         bar.style.width = "100%";
         bar.style.backgroundColor = "black";
         bar.style.borderBottom = "1px solid grey";
@@ -740,7 +747,7 @@ export class CGuiMenuBar {
                 this.slots.forEach((gui) => {
                     gui.close();
                 });
-                
+
                 // Close standalone menus (unless locked open)
                 const allContainers = Array.from(this.menuBar.children);
                 allContainers.forEach((container) => {
@@ -760,10 +767,10 @@ export class CGuiMenuBar {
 
         // create numSlots empty divs of width divWidth,
         // each positioned at divWidth * i
-//        for (let i = 0; i < this.numSlots; i++) {
-          for (let i = this.numSlots-1; i >= 0; i--) {
+        //        for (let i = 0; i < this.numSlots; i++) {
+        for (let i = this.numSlots - 1; i >= 0; i--) {
             const div = document.createElement("div");
-            div.id = "menuBarDiv_"+i;
+            div.id = "menuBarDiv_" + i;
             div.style.width = this.divWidth + "px";
             div.style.position = "absolute";
             div.style.left = (i * this.divWidth) + "px";
@@ -774,7 +781,7 @@ export class CGuiMenuBar {
 
             div.style.height = "1px";
 
-       //     div.style.overflowY = "auto"; // Allow scrolling if content overflows
+            //     div.style.overflowY = "auto"; // Allow scrolling if content overflows
             div.style.zIndex = this.baseZIndex;
 
             this.menuBar.appendChild(div);
@@ -796,7 +803,7 @@ export class CGuiMenuBar {
             event.stopPropagation();
         });
 
-         Globals.stats = new Stats();
+        Globals.stats = new Stats();
         // Globals.stats.showPanel( 1 ); // 0: fps, 1: ms, 2: mb, 3+: custom
         // const attach = this.infoGUI.domElement;
         //
@@ -881,17 +888,17 @@ export class CGuiMenuBar {
 
         ViewMan.topPx = 0;
         ViewMan.updateSize();
-      //  updateSize();
+        //  updateSize();
     }
 
     // Helper method to update menu bar position based on current state
     _updateMenuBarPosition() {
         // Check if browser is in full-screen mode
         const isFullScreen = document.fullscreenElement !== null;
-        
+
         // When in browser full-screen mode without banners, add 10px spacing from top
         const topOffset = (isFullScreen && !parseBoolean(process.env.BANNER_ACTIVE)) ? 10 : 0;
-        
+
         if (parseBoolean(process.env.BANNER_ACTIVE)) {
             // With banner, position below it
             this.bar.style.top = process.env.BANNER_HEIGHT + "px";
@@ -903,7 +910,7 @@ export class CGuiMenuBar {
             this.menuBar.style.top = topOffset + "px";
             ViewMan.topPx = this.barHeight + topOffset;
         }
-        
+
         ViewMan.updateSize();
     }
 
@@ -964,7 +971,7 @@ export class CGuiMenuBar {
     // Check if a GUI folder has any actual content (recursively)
     _hasContent(gui) {
         if (!gui) return false;
-        
+
         for (const child of gui.children) {
             // If it's a folder (GUI), recursively check its content
             if (child instanceof GUI) {
@@ -986,7 +993,7 @@ export class CGuiMenuBar {
 
                 // Check if the GUI has any actual content (recursively)
                 const hasContent = this._hasContent(gui);
-                
+
                 if (!hasContent) {
                     // Empty menu - close and hide it
                     gui.close();
@@ -1009,22 +1016,22 @@ export class CGuiMenuBar {
     // and returns it.
     // called addFolder to maintain compatibility with a single gui system under dat.gui
     addFolder(title) {
-        const newGUI = new GUI({container: this.divs[this.nextSlot], autoPlace: false});
+        const newGUI = new GUI({ container: this.divs[this.nextSlot], autoPlace: false });
         //newGUI.title(title);
         newGUI.$title.innerHTML = title;
 
-//        console.log("Adding GUI "+title+" at slot "+this.nextSlot+" with left "+this.totalWidth+"px")
+        //        console.log("Adding GUI "+title+" at slot "+this.nextSlot+" with left "+this.totalWidth+"px")
 
-        assert (this.nextSlot < this.numSlots, "Too many GUIs in the menu bar");
+        assert(this.nextSlot < this.numSlots, "Too many GUIs in the menu bar");
 
         // Store reference to GUI on the positioning container so we can find it later
         this.divs[this.nextSlot]._gui = newGUI;
-        
+
         this.divs[this.nextSlot].style.left = this.totalWidth + "px";
 
         newGUI.originalLeft = this.totalWidth;
         newGUI.originalTop = 0;
-        
+
         // Mark that this menu was originally created in the menubar
         // This flag persists even if the menu is dragged away and detached
         newGUI.wasOriginalllyInMenuBar = true;
@@ -1034,13 +1041,13 @@ export class CGuiMenuBar {
         // this.divs[this.nextSlot].style.border = "1px solid "+ divDebugColor[this.nextSlot % divDebugColor.length];
 
         const width = getTextWidth(newGUI.$title.innerHTML) + 16;
-       // this.divs[this.nextSlot].style.width = width + "px";
-       // this.divs[this.nextSlot].style.height = "1 px";
+        // this.divs[this.nextSlot].style.width = width + "px";
+        // this.divs[this.nextSlot].style.height = "1 px";
         this.totalWidth += width;
 
         let left = this.totalWidth;
         // adjust the position of all subsequent divs to the right
-        for (let i = this.nextSlot+1; i < this.numSlots; i++) {
+        for (let i = this.nextSlot + 1; i < this.numSlots; i++) {
             this.divs[i].style.left = left + "px";
             left += this.divWidth;
         }
@@ -1057,12 +1064,12 @@ export class CGuiMenuBar {
         newGUI.mode = "DOCKED";
 
         // when opened, close the others (keep this for user interactions like clicking)
-        newGUI.onOpenClose( (changedGUI) => {
+        newGUI.onOpenClose((changedGUI) => {
 
             if (!changedGUI._closed) {
                 // Bring this menu to the front when opened
                 this.bringToFront(newGUI);
-                
+
                 this.slots.forEach((gui, index) => {
                     if (gui !== newGUI && !gui._closed) {
                         gui.close();
@@ -1102,20 +1109,20 @@ export class CGuiMenuBar {
         let lastTapY = 0;
         const doubleTapDelay = 300; // ms - maximum time between taps to count as double-tap
         const doubleTapDistance = 30; // px - maximum distance between taps
-        
+
         newGUI.$title.addEventListener("touchend", (event) => {
             const currentTime = Date.now();
             const timeDiff = currentTime - lastTapTime;
-            
+
             // Get touch position
             const touch = event.changedTouches[0];
             const currentX = touch.clientX;
             const currentY = touch.clientY;
             const distance = Math.sqrt(
-                Math.pow(currentX - lastTapX, 2) + 
+                Math.pow(currentX - lastTapX, 2) +
                 Math.pow(currentY - lastTapY, 2)
             );
-            
+
             // Check if this is a double-tap
             if (timeDiff < doubleTapDelay && distance < doubleTapDistance) {
                 // This is a double-tap - trigger the same action as dblclick
@@ -1190,7 +1197,7 @@ export class CGuiMenuBar {
     isMenuOffScreen(newDiv) {
         // If newDiv is a positioning container (1x1), find the tab element (title bar)
         let tabElement = newDiv;
-        
+
         // Try to find the GUI element's title bar (the clickable tab)
         if (newDiv._gui) {
             tabElement = newDiv._gui.$title;
@@ -1201,20 +1208,20 @@ export class CGuiMenuBar {
                 tabElement = titleElement;
             }
         }
-        
+
         const rect = tabElement.getBoundingClientRect();
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
-        
+
         // Calculate how much of the tab is visible
         const visibleWidth = Math.max(0, Math.min(rect.right, viewportWidth) - Math.max(rect.left, 0));
         const visibleHeight = Math.max(0, Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0));
-        
+
         // Calculate the visible area as a percentage of the tab
         const tabArea = rect.width * rect.height;
         const visibleArea = visibleWidth * visibleHeight;
         const visiblePercentage = tabArea > 0 ? (visibleArea / tabArea) * 100 : 0;
-        
+
         // Return true if less than 20% of the tab is visible (i.e., >80% off-screen)
         return visiblePercentage < 20;
     }
@@ -1229,11 +1236,11 @@ export class CGuiMenuBar {
         const rect = containerDiv.getBoundingClientRect();
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
-        
+
         // Parse current position
         let left = parseInt(containerDiv.style.left);
         let top = parseInt(containerDiv.style.top);
-        
+
         // Check and adjust horizontal position
         if (rect.left < 0) {
             // Menu is off screen to the left
@@ -1242,7 +1249,7 @@ export class CGuiMenuBar {
             // Menu is off screen to the right
             left = viewportWidth - rect.width;
         }
-        
+
         // Check and adjust vertical position
         if (rect.top < 0) {
             // Menu is off screen at the top
@@ -1251,7 +1258,7 @@ export class CGuiMenuBar {
             // Menu is off screen at the bottom
             top = viewportHeight - rect.height;
         }
-        
+
         // Apply adjusted position
         containerDiv.style.left = left + "px";
         containerDiv.style.top = top + "px";
@@ -1259,7 +1266,7 @@ export class CGuiMenuBar {
 
     applyModeStyles(gui) {
         const titleElement = gui.$title;
-        
+
         if (gui.mode !== "DOCKED") {
             // Apply styling for dragging or detached menus - only to title bar
             titleElement.style.setProperty('border-top-left-radius', '6px', 'important');
@@ -1297,7 +1304,7 @@ export class CGuiMenuBar {
 
         // Note: We use the persistent wasOriginalllyInMenuBar flag instead of firstDrag
         // This allows us to correctly identify menubar menus even on subsequent drags
-        
+
         newGUI.mode = "DRAGGING"
         this.applyModeStyles(newGUI)
 
@@ -1335,7 +1342,7 @@ export class CGuiMenuBar {
             if (this.isMenuOffScreen(newDiv)) {
                 document.removeEventListener("pointermove", boundHandlePointerMove);
                 document.removeEventListener("pointerup", boundHandlePointerUp);
-                
+
                 // If it was originally created in the menubar, restore it to the bar
                 if (newGUI.wasOriginalllyInMenuBar) {
                     // Was a menubar menu - restore it and close (same as double-click handler)
@@ -1390,7 +1397,7 @@ export class CGuiMenuBar {
             }
             this.applyModeStyles(newGUI)
 
-            
+
             event.preventDefault();
         }
         // Add pointerup listener to document, not just the div
@@ -1405,24 +1412,24 @@ export class CGuiMenuBar {
         // When mousing over a menu bar title, if there's another docked menu open, close it and switch to this one
         // event.target will be the title element we just moused over
         const newGUI = this.slots.find((gui) => gui.$title === event.target);
-        
+
         if (!newGUI) {
             return;
         }
-        
+
         // Only enable hover-to-switch for docked menu bar menus (ignore undocked/floating menus)
         if (newGUI.mode !== "DOCKED" || !newGUI.wasOriginalllyInMenuBar) {
             return;
         }
-        
+
         // Find if there are any other docked menus currently open
-        const otherOpenDockedMenus = this.slots.filter((gui) => 
-            !gui._closed && 
-            gui !== newGUI && 
+        const otherOpenDockedMenus = this.slots.filter((gui) =>
+            !gui._closed &&
+            gui !== newGUI &&
             gui.mode === "DOCKED" &&
             gui.wasOriginalllyInMenuBar
         );
-        
+
         // If there are other docked menus open, close them and open this one
         if (otherOpenDockedMenus.length > 0) {
             otherOpenDockedMenus.forEach((gui) => {
@@ -1433,7 +1440,7 @@ export class CGuiMenuBar {
     }
 
     destroy(all = true) {
-        for (let i = this.numSlots-1; i >= 0; i--) {
+        for (let i = this.numSlots - 1; i >= 0; i--) {
             const gui = this.slots[i];
             if (gui) {
 
@@ -1467,12 +1474,12 @@ export class CGuiMenuBar {
         return this.slots[slot].$title.innerHTML
     }
 
-    modSerialize( ) {
+    modSerialize() {
 
         // serialize the GUIs by index
         // as we have issue with nested structures
         // each entry has a uniquie key
-        const out  = {};
+        const out = {};
         for (let i = 0; i < this.slots.length; i++) {
             const gui = this.slots[i];
             out[this.getSerialID(i)] = {
@@ -1489,7 +1496,7 @@ export class CGuiMenuBar {
     }
 
 
-    modDeserialize( v ) {
+    modDeserialize(v) {
         const guiData = v;
 
         for (let i = 0; i < this.slots.length; i++) {
@@ -1548,14 +1555,14 @@ export class CGuiMenuBar {
             console.log(`Cannot create context menu "${title}" - persistent menu "${this.activePersistentMenu.$title.textContent}" is open`);
             return null;
         }
-        
+
         // Hard rule: only one context menu visible at once
         // If creating a new context menu, dismiss any existing context menu first
         if (dismissOnOutsideClick && this.activeContextMenu) {
             this.activeContextMenu.destroy();
             this.activeContextMenu = null;
         }
-        
+
         // Create a container div for the standalone menu
         const containerDiv = document.createElement("div");
         containerDiv.style.position = "absolute";
@@ -1564,24 +1571,24 @@ export class CGuiMenuBar {
         containerDiv.style.zIndex = this.baseZIndex + 1000; // Higher than menu bar items
         containerDiv.style.width = "240px"; // Default lil-gui width
         containerDiv.style.height = "auto";
-        
+
         // Add to the menu bar container so it's managed by the same system
         this.menuBar.appendChild(containerDiv);
-        
+
         // Create the GUI with the container
-        const gui = new GUI({container: containerDiv, autoPlace: false});
+        const gui = new GUI({ container: containerDiv, autoPlace: false });
         gui.$title.innerHTML = title;
-        
+
         // Set up the standalone menu properties
         gui.mode = "DETACHED";
         // Lock standalone menus open - they should only be closed by dragging back to menubar or other explicit actions
         gui.lockOpenClose = true;
         gui.originalLeft = x;
         gui.originalTop = y;
-        
+
         // Mark if this is a persistent menu (doesn't dismiss on outside click)
         gui.isPersistent = !dismissOnOutsideClick;
-        
+
         // If this is a persistent menu, track it as the active persistent menu
         if (gui.isPersistent) {
             // Close any existing persistent menu before opening a new one
@@ -1593,29 +1600,29 @@ export class CGuiMenuBar {
             // If this is a context menu, track it as the active context menu
             this.activeContextMenu = gui;
         }
-        
+
         // Apply detached styling
         this.applyModeStyles(gui);
-        
+
         // Prevent double clicks
         preventDoubleClicks(gui);
-        
+
         // Add mouse tracking to disable keyboard shortcuts
         addGUIMouseTracking(gui);
-        
+
         // Enable double-click on title to close menu (can be overridden with setDoubleClickAction)
         gui.setDoubleClickAction();
-        
+
         // Add drag functionality to the title
         gui.$title.addEventListener("mousedown", (event) => {
             this.bringToFront(gui);
-            
+
             let mouseX = event.clientX;
             let mouseY = event.clientY;
-            
+
             gui.mode = "DRAGGING";
             this.applyModeStyles(gui);
-            
+
             const boundHandleMouseMove = (event) => {
                 // Ensure it stays open while dragging
                 if (gui._closed) {
@@ -1623,48 +1630,48 @@ export class CGuiMenuBar {
                     gui.open();
                 }
                 gui.lockOpenClose = true;
-                
+
                 containerDiv.style.left = (parseInt(containerDiv.style.left) + event.clientX - mouseX) + "px";
                 containerDiv.style.top = (parseInt(containerDiv.style.top) + event.clientY - mouseY) + "px";
                 mouseX = event.clientX;
                 mouseY = event.clientY;
-                
+
                 event.preventDefault();
             };
-            
+
             const boundHandleMouseUp = (event) => {
                 document.removeEventListener("mousemove", boundHandleMouseMove);
                 document.removeEventListener("mouseup", boundHandleMouseUp);
-                
+
                 gui.mode = "DETACHED";
                 this.applyModeStyles(gui);
                 // Keep locked open after drag
                 gui.lockOpenClose = true;
-                
+
                 event.preventDefault();
             };
-            
+
             document.addEventListener("mousemove", boundHandleMouseMove);
             document.addEventListener("mouseup", boundHandleMouseUp);
-            
+
             event.preventDefault();
         });
-        
+
         // Add click listener to bring to front when any part is clicked
         gui.domElement.addEventListener("mousedown", (event) => {
             this.bringToFront(gui);
         });
-        
+
         // Prevent browser context menu on right-click
         gui.domElement.addEventListener("contextmenu", (event) => {
             event.preventDefault();
             event.stopPropagation();
         });
-        
+
         // Store method to bring this standalone menu to front
         gui._bringToFront = () => {
             let maxZIndex = this.baseZIndex + 1000;
-            
+
             // Check all standalone menus and regular menu bar items
             const allContainers = Array.from(this.menuBar.children);
             for (const container of allContainers) {
@@ -1675,16 +1682,16 @@ export class CGuiMenuBar {
                     }
                 }
             }
-            
+
             containerDiv.style.zIndex = maxZIndex + 1;
         };
-        
+
         // Store reference to container for cleanup
         gui._standaloneContainer = containerDiv;
-        
+
         // Store reference from container to GUI for click-outside detection
         containerDiv._gui = gui;
-        
+
         // Add destroy method override to clean up the container
         const originalDestroy = gui.destroy.bind(gui);
         gui.destroy = (all = true) => {
@@ -1715,7 +1722,7 @@ export class CGuiMenuBar {
             setMouseOverGUI(false);
             originalDestroy(all);
         };
-        
+
         // Add Escape key handler to close the menu
         gui._escapeKeyHandler = (event) => {
             if (event.key === 'Escape' && containerDiv.parentElement) {
@@ -1732,7 +1739,7 @@ export class CGuiMenuBar {
                         }
                     }
                 }
-                
+
                 // Only close if this is the topmost menu
                 if (topmostMenu === gui) {
                     gui.destroy();
@@ -1740,7 +1747,7 @@ export class CGuiMenuBar {
             }
         };
         document.addEventListener('keydown', gui._escapeKeyHandler);
-        
+
         // Add outside click handler if requested (for context menus)
         if (dismissOnOutsideClick) {
             // Helper function to check if click is outside the menu
@@ -1760,14 +1767,14 @@ export class CGuiMenuBar {
                 }
                 return true;
             };
-            
+
             // Left-click handler: dismiss on outside click
             gui._outsideClickHandler = (event) => {
                 if (isClickOutside(event) && containerDiv.parentElement) {
                     gui.destroy();
                 }
             };
-            
+
             // Right-click handler: dismiss on outside right-click (allows new context menu to be created)
             gui._outsideContextMenuHandler = (event) => {
                 if (isClickOutside(event) && containerDiv.parentElement) {
@@ -1775,17 +1782,17 @@ export class CGuiMenuBar {
                     // Don't preventDefault - let the application handle the right-click to create new menu
                 }
             };
-            
+
             // Use setTimeout to avoid immediately triggering on the same click that created the menu
             setTimeout(() => {
                 document.addEventListener('click', gui._outsideClickHandler);
                 document.addEventListener('contextmenu', gui._outsideContextMenuHandler);
             }, 100);
         }
-        
+
         // Ensure the menu is fully on screen
         this.ensureMenuOnScreen(containerDiv);
-        
+
         return gui;
     }
 
