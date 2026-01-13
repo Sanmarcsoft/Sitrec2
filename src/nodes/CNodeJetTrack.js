@@ -1,6 +1,6 @@
 import {degrees, metersPerSecondFromKnots, radians} from "../utils";
 import {getLocalNorthVector, getLocalUpVector} from "../SphericalMath";
-import {Sit, Units} from "../Globals";
+import {NodeMan, Sit, Units} from "../Globals";
 import {CNode} from "./CNode";
 import {CNodeTrack} from "./CNodeTrack";
 import {assert} from "../assert.js";
@@ -30,6 +30,12 @@ export class CNodeJetTrack extends CNodeTrack {
         this.requireInputs(["speed", "turnRate", "wind", "heading", "origin"])
         this.isNumber = false;
         this.recalculate()
+
+        this.exportable = v.exportable ?? false;
+        if (this.exportable) {
+            NodeMan.addExportButton(this, "exportTrackCSV")
+            NodeMan.addExportButton(this, "exportMISBCompliantCSV")
+        }
     }
 
     recalculate() {

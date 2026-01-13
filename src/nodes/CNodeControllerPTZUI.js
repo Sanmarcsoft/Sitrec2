@@ -13,6 +13,21 @@ const pszUIColor = "#C0C0FF";
 
 // Generic controller that has azimuth, elevation, and zoom
 export class CNodeControllerAzElZoom extends CNodeController {
+    _az = 0;
+    _el = 0;
+
+    get az() { return this._az; }
+    set az(value) {
+        assert(!isNaN(value), "CNodeControllerAzElZoom: setting az to NaN, id=" + this.id);
+        this._az = value;
+    }
+
+    get el() { return this._el; }
+    set el(value) {
+        assert(!isNaN(value), "CNodeControllerAzElZoom: setting el to NaN, id=" + this.id);
+        this._el = value;
+    }
+
     constructor(v) {
         super(v);
     }
@@ -36,7 +51,9 @@ export class CNodeControllerAzElZoom extends CNodeController {
         var toNorth = northPoleEUS.clone().sub(camera.position).normalize()
         // take only the component perpendicular
         let dot = toNorth.dot(up)
-        let north = toNorth.clone().sub(up.clone().multiplyScalar(dot)).normalize()
+        let north = toNorth.clone().sub(up.clone().multiplyScalar(dot))
+        assert(north.lengthSq() >= 1e-10, "CNodeControllerAzElZoom: north vector is zero (at pole?), camera.position=" + camera.position.toArray());
+        north.normalize()
         let south = north.clone().negate()
         let east = V3().crossVectors(up, south)
 
@@ -95,6 +112,8 @@ export class CNodeControllerAzElZoom extends CNodeController {
 export class CNodeControllerPTZUI extends CNodeControllerAzElZoom {
     constructor(v) {
         super(v);
+        assert(v.az !== undefined, "CNodeControllerPTZUI: initial az is undefined")
+        assert(v.el !== undefined, "CNodeControllerPTZUI: initial el is undefined")
         this.az = v.az;
         this.el = v.el
         this.fov = v.fov
@@ -136,6 +155,8 @@ export class CNodeControllerPTZUI extends CNodeControllerAzElZoom {
 
     modDeserialize(v) {
         super.modDeserialize(v);
+        assert(v.az !== undefined, "CNodeControllerPTZUI.modDeserialize: az is undefined");
+        assert(v.el !== undefined, "CNodeControllerPTZUI.modDeserialize: el is undefined");
         this.az = v.az;
         this.el = v.el;
         this.fov = v.fov;
@@ -152,7 +173,7 @@ export class CNodeControllerPTZUI extends CNodeControllerAzElZoom {
 
         const fovSwitch = NodeMan.get("fovSwitch",false)
         if (fovSwitch) {
-            this.fov = fovSwitch.getValue(f);
+            this.fov = extractFOV(fovSwitch.getValue(f));
         }
 
         super.apply(f, objectNode);

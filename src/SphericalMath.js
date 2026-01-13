@@ -304,7 +304,11 @@ export function getAzElFromPositionAndForward(position, forward) {
     const north = getLocalNorthVector(position);
 
     // get the forward vector projected onto the horizontal plane defined by up
-    const forwardH = forward.clone().sub(up.clone().multiplyScalar(forward.dot(up))).normalize();
+    const forwardH = forward.clone().sub(up.clone().multiplyScalar(forward.dot(up)));
+    if (forwardH.lengthSq() < 1e-10) {
+        return [0, forward.dot(up) > 0 ? 90 : -90];
+    }
+    forwardH.normalize();
 
     // same with the north vector (should already be horizontal, but ensure it)
     const northH = north.clone().sub(up.clone().multiplyScalar(north.dot(up))).normalize();

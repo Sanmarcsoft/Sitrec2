@@ -7,6 +7,7 @@
 // Now with optional wind to adjust the position over time
 import {ECEFToLLAVD_Sphere, EUSToECEF, EUSToLLA, LLAToEUS} from "../LLA-ECEF-ENU";
 import {CNode} from "./CNode";
+import {CNodeTrack} from "./CNodeTrack";
 import {V3} from "../threeUtils";
 import {CNodeGUIValue} from "./CNodeGUIValue";
 import {isKeyHeld} from "../KeyBoardHandler";
@@ -20,12 +21,12 @@ import {customAltitudeFunction, customLocationFunction} from "../../config/confi
 import {showError} from "../showError";
 import {f2m} from "../utils";
 
-export class CNodePositionLLA extends CNode {
+export class CNodePositionLLA extends CNodeTrack {
     constructor(v) {
+        v.frames = v.frames ?? Sit.frames;
         super(v);
 
         this.input("wind", true)
-        this.frames = Sit.frames;
         this.useSitFrames = true; // use sit frames for the LLA
 
         this.agl = (v.agl !== undefined) ? v.agl : false; // above ground level, default to false
@@ -214,6 +215,12 @@ export class CNodePositionLLA extends CNode {
         })
 
         this.recalculate()
+
+        this.exportable = v.exportable ?? false;
+        if (this.exportable) {
+            NodeMan.addExportButton(this, "exportTrackCSV")
+            NodeMan.addExportButton(this, "exportMISBCompliantCSV")
+        }
     }
 
     getAltitude() {
@@ -367,6 +374,7 @@ export class CNodePositionLLA extends CNode {
 
 
     recalculate() {
+        this.array = [];
         if (this._LLA !== undefined) {
 
             this.updateGroundLevel();
@@ -374,11 +382,27 @@ export class CNodePositionLLA extends CNode {
             let alt = this.guiAlt.getValue();
 
             if (this.agl) {
-                // optionally adjust the altitude based on the ground level
                 alt += this.groundLevel;
             }
 
             this.EUS = LLAToEUS(this._LLA[0], this._LLA[1], alt)
+
+            for (let f = 0; f < this.frames; f++) {
+                const time = f * Sit.simSpeed;
+                let pos = this.EUS.clone();
+                if (this.in.wind) {
+                    const wind = this.in.wind.v0.multiplyScalar(time);
+                    pos.add(wind);
+                    if (this.agl) {
+                        pos = adjustHeightAboveGround(pos, this._LLA[2]);
+                    }
+                }
+                const lla = EUSToLLA(pos);
+                this.array.push({
+                    position: pos,
+                    lla: [lla.x, lla.y, lla.z],
+                });
+            }
         }
     }
 

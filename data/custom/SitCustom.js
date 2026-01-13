@@ -616,7 +616,7 @@ sitch = {
     // for other uses, such as a target track generated for LOS traversal
    // recordLos: {kind: "RecordLOS"},
 
-    JetLOSCameraCenter: {kind: "LOSFromCamera", cameraNode: "lookCamera", useRecorded: false},
+    JetLOSCameraCenter: {kind: "LOSFromCamera", cameraNode: "lookCamera", useRecorded: false, exportable: true, force: true},
    // JetLOS: {kind: "LOSFromCamera", cameraNode: "lookCamera", useRecorded: true},
 
 

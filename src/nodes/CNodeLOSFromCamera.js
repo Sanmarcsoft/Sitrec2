@@ -3,7 +3,7 @@
 // assumes the camera does not move per frame
 // but will update based on changed to the camera node
 import {PerspectiveCamera, Vector3} from "three";
-import {Sit} from "../Globals";
+import {NodeMan, Sit} from "../Globals";
 import {CNodeEmptyArray} from "./CNodeArray";
 import {assert} from "../assert.js";
 import {getAzElFromPositionAndForward} from "../SphericalMath";
@@ -23,6 +23,11 @@ export class CNodeLOSFromCamera extends CNodeLOS {
 
         // we'll be using a dummy camera to get the position and heading
         this.dummyCamera = new PerspectiveCamera();
+
+        this.exportable = v.exportable ?? false;
+        if (this.exportable) {
+            NodeMan.addExportButton(this, "exportMISBCompliantCSV")
+        }
     }
 
     getValueFrame(f) {
@@ -54,6 +59,14 @@ export class CNodeLOSFromCamera extends CNodeLOS {
         camera.updateMatrixWorld()
         assert(camera !== undefined, "CNodeLOSFromCamera has Missing Camera = " + this.cameraName)
         var position = camera.position.clone()
+        if (isNaN(position.x) || isNaN(position.y) || isNaN(position.z)) {
+            console.error("CNodeLOSFromCamera: Camera position is NaN after applying controllers, id=" + this.id + ", f=" + f);
+            console.error("Camera position:", camera.position);
+            console.error("Controllers on cameraNode:", Object.keys(cameraNode.inputs).filter(k => cameraNode.inputs[k].isController));
+        }
+        if (position.x === 0 && position.y === 0 && position.z === 0) {
+            console.warn("CNodeLOSFromCamera: Camera position is at origin (0,0,0), controllers may not have been applied, id=" + this.id + ", f=" + f);
+        }
         var fwd = new Vector3();
         fwd.setFromMatrixColumn(camera.matrixWorld, 2);
         // AZELISSUE: CORRECT - manually negating camera's +Z (backward) to get forward vector
@@ -63,7 +76,14 @@ export class CNodeLOSFromCamera extends CNodeLOS {
         up.setFromMatrixColumn(camera.matrixWorld, 1);
         var right = new Vector3();
         right.setFromMatrixColumn(camera.matrixWorld, 0);
-        return {position: position, heading: fwd, up: up, right: right};
+        const vFOV = camera.fov;
+        if (isNaN(fwd.x) || isNaN(fwd.y) || isNaN(fwd.z)) {
+            console.error("CNodeLOSFromCamera: heading (fwd) is NaN, id=" + this.id + ", f=" + f);
+            console.error("Camera matrixWorld:", camera.matrixWorld.elements);
+            console.error("Camera position:", camera.position);
+            console.error("Camera quaternion:", camera.quaternion);
+        }
+        return {position: position, heading: fwd, up: up, right: right, vFOV: vFOV};
     }
 }
 

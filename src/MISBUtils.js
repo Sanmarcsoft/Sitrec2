@@ -311,7 +311,7 @@ export function parseMISB1CSV(csv) {
                 // we use MISB[field] to get the index in the MISBArray
                 let value = csv[row][col];
                 // handle missing values
-                if (value === "null" || value === null || value === "") {
+                if (value === "null" || value === null || value === "" || value === "NaN") {
                     // convert or leave it as the null object, so all missing fields are consistent
                     value = null;
                 } else {
@@ -319,6 +319,9 @@ export function parseMISB1CSV(csv) {
                     // so we need to convert them to numbers, if a number is expected.
                     if (isNumber) {
                         value = Number(value);
+                        if (isNaN(value)) {
+                            value = null;
+                        }
                     }
                 }
 

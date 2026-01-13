@@ -1,9 +1,12 @@
 import {CNodeEmptyArray} from "./CNodeArray";
-import {NodeMan} from "../Globals";
+import {GlobalDateTimeNode, NodeMan} from "../Globals";
 import {EUSToLLA, LLAToEUS} from "../LLA-ECEF-ENU";
 import {EventManager} from "../CEventManager";
-import {pointOnSphereBelow} from "../SphericalMath";
+import {getAzElFromPositionAndForward, getLocalUpVector, pointOnSphereBelow} from "../SphericalMath";
 import {showError} from "../showError";
+import {MISB} from "../MISBUtils";
+import {saveAs} from "file-saver";
+import {degrees} from "../utils";
 
 export class CNodeTrack extends CNodeEmptyArray {
     constructor(v) {
@@ -19,6 +22,91 @@ export class CNodeTrack extends CNodeEmptyArray {
 
     exportTrackCSV(inspect=false) {
         return this.exportArray(inspect);
+    }
+
+    exportMISBCompliantCSV(inspect=false) {
+        const headers = [
+            "UnixTimeStamp",
+            "SensorLatitude",
+            "SensorLongitude",
+            "SensorTrueAltitude",
+            "SensorHorizontalFieldofView",
+            "SensorVerticalFieldofView",
+            "PlatformHeadingAngle",
+            "PlatformPitchAngle",
+            "PlatformRollAngle",
+            "SensorRelativeAzimuthAngle",
+            "SensorRelativeElevationAngle",
+            "SensorRelativeRollAngle",
+        ];
+        let csv = headers.join(",") + "\n";
+
+        for (let f = 0; f < this.frames; f++) {
+            const frameData = this.v(f);
+            const timeMS = GlobalDateTimeNode.frameToMS(f);
+
+            let lla;
+            if (frameData.lla) {
+                lla = frameData.lla;
+            } else if (frameData.position) {
+                const llaVec = EUSToLLA(frameData.position);
+                lla = [llaVec.x, llaVec.y, llaVec.z];
+            } else {
+                lla = ["", "", ""];
+            }
+
+            const misbRow = frameData.misbRow;
+            let vFOV = frameData.vFOV ?? (misbRow ? misbRow[MISB.SensorVerticalFieldofView] : "") ?? "";
+            let hFOV = misbRow ? (misbRow[MISB.SensorHorizontalFieldofView] ?? "") : "";
+
+            let platformHeading = misbRow ? (misbRow[MISB.PlatformHeadingAngle] ?? "") : "";
+            let platformPitch = misbRow ? (misbRow[MISB.PlatformPitchAngle] ?? "") : "";
+            let platformRoll = misbRow ? (misbRow[MISB.PlatformRollAngle] ?? "") : "";
+
+            let sensorAz = misbRow ? (misbRow[MISB.SensorRelativeAzimuthAngle] ?? "") : "";
+            let sensorEl = misbRow ? (misbRow[MISB.SensorRelativeElevationAngle] ?? "") : "";
+            let sensorRoll = misbRow ? (misbRow[MISB.SensorRelativeRollAngle] ?? "") : "";
+
+            if (frameData.heading && frameData.up && frameData.right && frameData.position) {
+                const [az, el] = getAzElFromPositionAndForward(frameData.position, frameData.heading);
+                sensorAz = az;
+                sensorEl = el;
+
+                const localUp = getLocalUpVector(frameData.position);
+                const rightProjection = localUp.clone().cross(frameData.heading).normalize();
+                const cosRoll = frameData.up.dot(localUp);
+                const sinRoll = frameData.up.dot(rightProjection);
+                sensorRoll = degrees(Math.atan2(sinRoll, cosRoll));
+
+                platformHeading = 0;
+                platformPitch = 0;
+                platformRoll = 0;
+            }
+
+            csv += [
+                timeMS,
+                lla[0],
+                lla[1],
+                lla[2],
+                hFOV,
+                vFOV,
+                platformHeading,
+                platformPitch,
+                platformRoll,
+                sensorAz,
+                sensorEl,
+                sensorRoll,
+            ].join(",") + "\n";
+        }
+
+        if (inspect) {
+            return {
+                desc: "MISB Compliant CSV",
+                csv: csv,
+            }
+        } else {
+            saveAs(new Blob([csv]), "MISB-" + this.id + ".csv")
+        }
     }
 
     // calculate min and max LLA extents of the track

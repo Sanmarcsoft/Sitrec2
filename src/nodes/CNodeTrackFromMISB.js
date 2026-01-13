@@ -37,6 +37,7 @@ export class CNodeTrackFromMISB extends CNodeTrack {
         this.exportable = exportable;
         if (this.exportable) {
             NodeMan.addExportButton(this, "exportTrackCSV")
+            NodeMan.addExportButton(this, "exportMISBCompliantCSV")
             if (isLocal) {
                 if (Sit.isCustom) {
                     // limited to local custom use, as it triggers "more than one export button" warning
