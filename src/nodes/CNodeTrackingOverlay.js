@@ -145,6 +145,8 @@ export class CNodeActiveOverlay extends CNodeViewUI {
 
     renderCanvas(frame) {
         super.renderCanvas(frame)
+
+        if (!this.showTracking) return;
         
         const ctx = this.ctx
         ctx.strokeStyle = '#FFFFFF';
@@ -265,9 +267,11 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
 
         this.showTracking = true;
 
+        this.manualTrackingFolder.add(this, "showTracking").name("Show Tracking").listen()
+            .tooltip("Show or hide the tracking points and curve overlay")
+
         this.manualTrackingFolder.add(this, "resetDraggable").name("Reset")
             .tooltip("Reset manual tracking to an empty state, removing all keyframes and draggable items")
-      //  this.manualTrackingFolder.add(this, "showTracking").name("Show Manual Tracking").listen();
 
 
         this.limitAB = true;
@@ -293,12 +297,17 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
                     traverseSelect.selectOption("Perspective");
                     traverseSelect.controller.updateDisplay();
                 }
+                this.minimizeGroundSpeed();
             }
             this.recalculateCascade();
         })
             .tooltip("Spline uses smooth cubic spline interpolation. Linear uses straight line segments. Perspective requires exactly 3 keyframes and models linear motion with perspective projection.")
 
+        this.manualTrackingFolder.add(this, "minimizeGroundSpeed").name("Minimize Ground Speed")
+            .tooltip("Find the Tgt Start Dist that minimizes the ground distance traveled by the traverse path")
 
+        this.manualTrackingFolder.add(this, "minimizeAirSpeed").name("Minimize Air Speed")
+            .tooltip("Find the Tgt Start Dist that minimizes the air distance traveled (accounting for target wind)")
 
         this.separateVisibility = true; // don't propagate visibility to the overlaid view
 
@@ -330,6 +339,79 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
         // check for limits
         if (Sit.aFrame < 0) Sit.aFrame = 0;
         if (Sit.bFrame >= Sit.frames) Sit.bFrame = Sit.frames - 1;
+    }
+
+    minimizeGroundSpeed() {
+        this.minimizeTraverseSpeed(false);
+    }
+
+    minimizeAirSpeed() {
+        this.minimizeTraverseSpeed(true);
+    }
+
+    minimizeTraverseSpeed(useAirSpeed = false) {
+        const traverseNode = NodeMan.get("LOSTraversePerspective", false);
+        const startDistNode = NodeMan.get("startDistance", false);
+        if (!traverseNode || !startDistNode) {
+            console.warn("minimizeTraverseSpeed: required nodes not found");
+            return;
+        }
+
+        if (this.keyframes.length < 3) {
+            console.warn("minimizeTraverseSpeed: need at least 3 keyframes");
+            return;
+        }
+
+        const windNode = useAirSpeed ? NodeMan.get("targetWind", false) : null;
+        if (useAirSpeed && !windNode) {
+            console.warn("minimizeTraverseSpeed: targetWind node not found for air speed calculation");
+            return;
+        }
+
+        const minDistNM = 0.01;
+        const maxDistNM = 200;
+
+        const calcTraverseDistance = (distNM) => {
+            startDistNode.value = distNM;
+            startDistNode.recalculate();
+            traverseNode.recalculate();
+            const Ta = this.keyframes[0].frame;
+            const Tc = this.keyframes[this.keyframes.length - 1].frame;
+            const P_A = traverseNode.getValueFrame(Ta).position;
+            const P_C = traverseNode.getValueFrame(Tc).position;
+
+            if (!useAirSpeed) {
+                return P_A.distanceTo(P_C);
+            }
+
+            const groundDisplacement = P_C.clone().sub(P_A);
+            const numFrames = Tc - Ta;
+            const windPerFrame = windNode.getValueFrame(0, P_A);
+            const totalWindDisplacement = windPerFrame.clone().multiplyScalar(numFrames);
+            const airDisplacement = groundDisplacement.clone().sub(totalWindDisplacement);
+            return airDisplacement.length();
+        };
+
+        const phi = (1 + Math.sqrt(5)) / 2;
+        let a = minDistNM, b = maxDistNM;
+        let c = b - (b - a) / phi;
+        let d = a + (b - a) / phi;
+        const tol = 0.001;
+
+        while (Math.abs(b - a) > tol) {
+            if (calcTraverseDistance(c) < calcTraverseDistance(d)) {
+                b = d;
+            } else {
+                a = c;
+            }
+            c = b - (b - a) / phi;
+            d = a + (b - a) / phi;
+        }
+
+        const optimalDistNM = (a + b) / 2;
+        startDistNode.setValue(optimalDistNM);
+        startDistNode.guiEntry.updateDisplay();
+        NodeMan.recalculateAllRootFirst();
     }
 
     getValueFrame(f) {
@@ -789,6 +871,8 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
 
     renderCanvas(frame) {
         super.renderCanvas(frame) // will be CNodeViewCanvas2D
+
+        if (!this.showTracking) return;
 
         // The tracking overlay is based on integer frames
         frame = Math.floor(frame);
