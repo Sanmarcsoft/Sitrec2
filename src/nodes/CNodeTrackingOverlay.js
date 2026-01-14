@@ -10,6 +10,7 @@ import {radians} from "../utils";
 import {extractFOV} from "./CNodeControllerVarious";
 import {mouseToCanvas} from "../ViewUtils";
 import {CNodeVideoView} from "./CNodeVideoView";
+import {EventManager} from "../CEventManager";
 
 /*
     the intent of a tracking overlay is to track point on a video
@@ -39,7 +40,7 @@ export class CDraggableItem {
         this.video = this.view.overlayView;
 
 
-        const [vX, vY] = this.video.canvasToVideoCoords(v.x, v.y);
+        const [vX, vY] = this.video.canvasToVideoCoordsOriginal(v.x, v.y);
 
         console.log(`Adding draggable item at canvas (${v.x}, ${v.y}) which is video (${vX}, ${vY})`)
 
@@ -55,13 +56,13 @@ export class CDraggableItem {
     // cX and cY gettors will convert internal video coordinates to canvas coordinates
     // canvas X
     get cX() {
-        const [cX, cY] = this.video.videoToCanvasCoords(this.x, this.y);
+        const [cX, cY] = this.video.videoToCanvasCoordsOriginal(this.x, this.y);
         return cX;
     }
 
     // canvas Y
     get cY() {
-        const [cX, cY] = this.video.videoToCanvasCoords(this.x, this.y);
+        const [cX, cY] = this.video.videoToCanvasCoordsOriginal(this.x, this.y);
         return cY;
     }
 
@@ -219,8 +220,8 @@ export class CNodeActiveOverlay extends CNodeViewUI {
                 // now add the delta to the canvas coordinates
                 cX += dx;
                 cY += dy;
-                // and convert back to video coordinates
-                const [vX, vY] = d.video.canvasToVideoCoords(cX, cY);
+                // and convert back to video coordinates (original coords for storage)
+                const [vX, vY] = d.video.canvasToVideoCoordsOriginal(cX, cY);
                 // set the x and y of the draggable item to the new video coordinates
                 d.x = vX;
                 d.y = vY;
@@ -321,6 +322,7 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
         this.keyframes = [];
 
         this.updateCurve();
+
 
 
     }
@@ -430,11 +432,11 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
         // and the vertical FOV, and the width and height of the video
         // and modify the heading to pass through the XY position
 
-        // x and y are in video coordinates, which are pixels
+        // x and y are in original video coordinates, which are pixels
         const [vx, vy] = this.pointsXY[f];
 
-        // convert to canvas coordinates
-        const [x, y] = this.overlayView.videoToCanvasCoords(vx, vy);
+        // convert to canvas coordinates (from original video coords)
+        const [x, y] = this.overlayView.videoToCanvasCoordsOriginal(vx, vy);
 
         // make it relative to the center of the screen
         let yoff = y - this.heightPx/2;
@@ -500,8 +502,8 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
             // get the center of the overlay view in view coordinates
             const viewWidth = this.overlayView.widthPx;
             const viewHeight = this.overlayView.heightPx;
-            // convert center to video coordinates
-            const [centerX, centerY] = this.overlayView.canvasToVideoCoords(viewWidth / 2, viewHeight / 2);
+            // convert center to original video coordinates
+            const [centerX, centerY] = this.overlayView.canvasToVideoCoordsOriginal(viewWidth / 2, viewHeight / 2);
 
             for (let i = 0; i < this.frames; i++) {
                 this.pointsXY[i] = [centerX, centerY];
@@ -830,7 +832,7 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
 
         const [x, y] = mouseToCanvas(this, mouseX, mouseY)
 
-        const [vX, vY] = this.overlayView.canvasToVideoCoords(x, y);
+        const [vX, vY] = this.overlayView.canvasToVideoCoordsOriginal(x, y);
 
          if (e.ctrlKey) {
             // control key means we add a new one at this frame
@@ -889,13 +891,13 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
         ctx.lineWidth = 2.5
         ctx.beginPath();
         const [x0, y0] = this.pointsXY[0]
-        // convert to canvas coordinates
-        const [cX0, cY0] = this.overlayView.videoToCanvasCoords(x0, y0);
+        // convert to canvas coordinates (from original video coords)
+        const [cX0, cY0] = this.overlayView.videoToCanvasCoordsOriginal(x0, y0);
 
         ctx.moveTo(cX0, cY0);
         for (let i = 0; i < this.frames; i++) {
             const [vx, vy] = this.pointsXY[i]
-            const [x, y] = this.overlayView.videoToCanvasCoords(vx, vy);
+            const [x, y] = this.overlayView.videoToCanvasCoordsOriginal(vx, vy);
             ctx.lineTo(x, y)
         }
         ctx.stroke();
@@ -905,7 +907,7 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
         // find the XY position for the current frame
         // and render a circle there
         const [vx, vy] = this.pointsXY[frame];
-        const [x, y] = this.overlayView.videoToCanvasCoords(vx, vy);
+        const [x, y] = this.overlayView.videoToCanvasCoordsOriginal(vx, vy);
         ctx.strokeStyle = '#FFFFFF';
         ctx.lineWidth = 1.5
         ctx.beginPath();
@@ -971,6 +973,12 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
             }
             return newKeyframe;
         })
+
+        const onVideoLoaded = () => {
+            EventManager.removeEventListener("videoLoaded", onVideoLoaded);
+            this.recalculateCascade();
+        };
+        EventManager.addEventListener("videoLoaded", onVideoLoaded);
     }
 
 }

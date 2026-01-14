@@ -248,6 +248,9 @@ export class CVideoH264Data extends CVideoWebCodecBase {
             if (analysis.width && analysis.height) {
                 this.videoWidth = analysis.width;
                 this.videoHeight = analysis.height;
+                // Store original dimensions (never changed, used for tracking/analysis)
+                this.originalVideoWidth = analysis.width;
+                this.originalVideoHeight = analysis.height;
                 console.log(`✓ Video dimensions from SPS: ${this.videoWidth}x${this.videoHeight}`);
             } else {
                 console.warn("⚠️ Could not parse dimensions from SPS, will use default 100x100 until first frame is decoded");

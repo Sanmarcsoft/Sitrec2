@@ -160,6 +160,10 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
             // it's set for the Image objects created below, but at the start we use the config
             this.videoWidth = config.codedWidth;
             this.videoHeight = config.codedHeight;
+            
+            // Store original dimensions (never changed, used for tracking/analysis)
+            this.originalVideoWidth = config.codedWidth;
+            this.originalVideoHeight = config.codedHeight;
 
             console.log("🍿Setting Video width and height to ", config.codedWidth, "x", config.codedHeight )
 

@@ -99,6 +99,14 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         return this.videoData?.videoHeight || 0;
     }
 
+    get originalVideoWidth() {
+        return this.videoData?.originalVideoWidth || this.videoWidth;
+    }
+
+    get originalVideoHeight() {
+        return this.videoData?.originalVideoHeight || this.videoHeight;
+    }
+
     newVideo(fileName, clearFrames = true) {
         if (clearFrames) {
             Sit.frames = undefined; // need to recalculate this
@@ -675,8 +683,38 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         return [cX, cY];
     }
 
+    /**
+     * Convert canvas coordinates to ORIGINAL video coordinates.
+     * Used for tracking/analysis to ensure coordinates are resolution-independent.
+     * Keyframes should be stored in original video coordinates.
+     */
+    canvasToVideoCoordsOriginal(x, y) {
+        // First convert to display video coordinates
+        const [displayX, displayY] = this.canvasToVideoCoords(x, y);
+        
+        // Scale from display to original coordinates
+        const scaleX = this.originalVideoWidth / this.videoWidth;
+        const scaleY = this.originalVideoHeight / this.videoHeight;
+        
+        return [displayX * scaleX, displayY * scaleY];
+    }
 
-
+    /**
+     * Convert ORIGINAL video coordinates to canvas coordinates.
+     * Used for tracking/analysis to render overlays and calculate LOS.
+     * Keyframes stored in original coordinates are converted for display.
+     */
+    videoToCanvasCoordsOriginal(vX, vY) {
+        // Scale from original to display coordinates
+        const scaleX = this.videoWidth / this.originalVideoWidth;
+        const scaleY = this.videoHeight / this.originalVideoHeight;
+        
+        const displayX = vX * scaleX;
+        const displayY = vY * scaleY;
+        
+        // Then convert display video coordinates to canvas
+        return this.videoToCanvasCoords(displayX, displayY);
+    }
 
 
 }

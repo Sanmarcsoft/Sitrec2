@@ -10,6 +10,8 @@ export class CVideoImageData extends CVideoData {
 
         this.videoWidth = this.img.width;
         this.videoHeight = this.img.height;
+        this.originalVideoWidth = this.img.width;
+        this.originalVideoHeight = this.img.height;
 
         this.filename = v.filename;
         this.deleteAfterUsing = v.deleteAfterUsing ?? true;

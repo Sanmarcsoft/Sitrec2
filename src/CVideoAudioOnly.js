@@ -39,6 +39,8 @@ export class CVideoAudioOnly extends CVideoAndAudio {
         // Set default video dimensions for black frame
         this.videoWidth = 640;
         this.videoHeight = 360;
+        this.originalVideoWidth = 640;
+        this.originalVideoHeight = 360;
         
         // Initialize based on source type
         if (v.dropFile) {

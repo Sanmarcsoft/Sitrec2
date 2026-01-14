@@ -17,6 +17,12 @@ export class CVideoData {
         // just give some defaults. actual images will override
         this.videoWidth = 100
         this.videoHeight = 100
+        
+        // Original video dimensions (before any resizing due to videoMaxSize setting)
+        // These are set once when the video is first loaded and never changed
+        // Used for tracking/analysis coordinate conversion
+        this.originalVideoWidth = 0
+        this.originalVideoHeight = 0
 
         // Stabilization support
         this.stabilizationEnabled = false;

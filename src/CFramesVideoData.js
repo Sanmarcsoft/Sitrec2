@@ -18,6 +18,10 @@ export class CFramesVideoData extends CVideoData {
 
                 this.videoWidth = this.imageCache[f].width
                 this.videoHeight = this.imageCache[f].height
+                if (this.originalVideoWidth === 0) {
+                    this.originalVideoWidth = this.imageCache[f].width
+                    this.originalVideoHeight = this.imageCache[f].height
+                }
             }
         }
         this.videoPercentLoaded = Math.floor(100 * count / this.frames);
