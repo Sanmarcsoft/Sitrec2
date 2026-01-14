@@ -175,28 +175,55 @@ export class MediabunnyExporter {
                 await new Promise(r => setTimeout(r, 0));
             }
 
-            const sampleRate = this.audioBuffer.sampleRate;
-            const startSample = Math.floor(this.audioStartTime * sampleRate);
+            const srcSampleRate = this.audioBuffer.sampleRate;
+            const startSample = Math.floor(this.audioStartTime * srcSampleRate);
             const totalSamples = this.audioDuration !== null 
-                ? Math.floor(this.audioDuration * sampleRate)
+                ? Math.floor(this.audioDuration * srcSampleRate)
                 : this.audioBuffer.length - startSample;
             const endSample = Math.min(startSample + totalSamples, this.audioBuffer.length);
             const samplesToUse = endSample - startSample;
 
             if (samplesToUse > 0) {
                 const numChannels = this.audioBuffer.numberOfChannels;
-                const offlineCtx = new OfflineAudioContext(numChannels, samplesToUse, sampleRate);
-                const trimmedBuffer = offlineCtx.createBuffer(numChannels, samplesToUse, sampleRate);
                 
-                for (let ch = 0; ch < numChannels; ch++) {
-                    const srcData = this.audioBuffer.getChannelData(ch);
-                    const dstData = trimmedBuffer.getChannelData(ch);
-                    for (let i = 0; i < samplesToUse; i++) {
-                        dstData[i] = srcData[startSample + i];
-                    }
-                }
+                const supportedRates = [48000, 44100];
+                const needsResample = !supportedRates.includes(srcSampleRate);
+                const targetSampleRate = needsResample ? 48000 : srcSampleRate;
+                
+                const trimDuration = samplesToUse / srcSampleRate;
+                const targetSamples = needsResample 
+                    ? Math.ceil(trimDuration * targetSampleRate)
+                    : samplesToUse;
 
-                await this.audioSource.add(trimmedBuffer, 0);
+                const offlineCtx = new OfflineAudioContext(numChannels, targetSamples, targetSampleRate);
+                
+                if (needsResample) {
+                    const srcBuffer = offlineCtx.createBuffer(numChannels, samplesToUse, srcSampleRate);
+                    for (let ch = 0; ch < numChannels; ch++) {
+                        const srcData = this.audioBuffer.getChannelData(ch);
+                        const dstData = srcBuffer.getChannelData(ch);
+                        for (let i = 0; i < samplesToUse; i++) {
+                            dstData[i] = srcData[startSample + i];
+                        }
+                    }
+                    const srcNode = offlineCtx.createBufferSource();
+                    srcNode.buffer = srcBuffer;
+                    srcNode.connect(offlineCtx.destination);
+                    srcNode.start(0);
+                    const resampledBuffer = await offlineCtx.startRendering();
+                    console.log(`Resampled audio from ${srcSampleRate}Hz to ${targetSampleRate}Hz`);
+                    await this.audioSource.add(resampledBuffer, 0);
+                } else {
+                    const trimmedBuffer = offlineCtx.createBuffer(numChannels, samplesToUse, srcSampleRate);
+                    for (let ch = 0; ch < numChannels; ch++) {
+                        const srcData = this.audioBuffer.getChannelData(ch);
+                        const dstData = trimmedBuffer.getChannelData(ch);
+                        for (let i = 0; i < samplesToUse; i++) {
+                            dstData[i] = srcData[startSample + i];
+                        }
+                    }
+                    await this.audioSource.add(trimmedBuffer, 0);
+                }
             }
             this.audioSource.close();
         }
