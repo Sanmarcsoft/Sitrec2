@@ -398,7 +398,7 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
         let a = minDistNM, b = maxDistNM;
         let c = b - (b - a) / phi;
         let d = a + (b - a) / phi;
-        const tol = 0.001;
+        const tol = 0.00001;
 
         while (Math.abs(b - a) > tol) {
             if (calcTraverseDistance(c) < calcTraverseDistance(d)) {
