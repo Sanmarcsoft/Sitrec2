@@ -2568,7 +2568,7 @@ export class CCustomManager {
             .setUnitType('small')
             .onChange(() => {
                 clouds.altitude = clouds.altitudeController.getSIValue();
-                clouds.buildCloudMesh();
+                clouds.updateGroupPosition();
                 if (clouds.editMode) clouds.createControlHandles();
                 setRenderOne(true);
                 this.saveGlobalSettings();

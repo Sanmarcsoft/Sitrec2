@@ -86,6 +86,12 @@ export class CNodeSynthClouds extends CNode3DGroup {
         this.createGUIFolder();
     }
     
+    updateGroupPosition() {
+        const centerEUS = LLAToEUS(this.centerLat, this.centerLon, this.altitude);
+        this.group.position.copy(centerEUS);
+        this.localUp = getLocalUpVector(centerEUS);
+    }
+    
     buildCloudMesh() {
         if (this.cloudMesh) {
             this.group.remove(this.cloudMesh);
@@ -94,10 +100,11 @@ export class CNodeSynthClouds extends CNode3DGroup {
         }
         
         const centerEUS = LLAToEUS(this.centerLat, this.centerLon, this.altitude);
-        const localUp = getLocalUpVector(centerEUS);
+        this.localUp = getLocalUpVector(centerEUS);
+        this.group.position.copy(centerEUS);
         
-        const east = new Vector3(1, 0, 0).cross(localUp).normalize();
-        const north = new Vector3().crossVectors(localUp, east).normalize();
+        const east = new Vector3(1, 0, 0).cross(this.localUp).normalize();
+        const north = new Vector3().crossVectors(this.localUp, east).normalize();
         
         rng = seedrandom(this.seed.toString());
         
@@ -118,10 +125,9 @@ export class CNodeSynthClouds extends CNode3DGroup {
         const hVar = h * 0.3;
         const halfDepth = this.depth / 2;
         
-        const cx = centerEUS.x, cy = centerEUS.y, cz = centerEUS.z;
         const ex = east.x, ey = east.y, ez = east.z;
         const nx = north.x, ny = north.y, nz = north.z;
-        const ux = localUp.x, uy = localUp.y, uz = localUp.z;
+        const ux = this.localUp.x, uy = this.localUp.y, uz = this.localUp.z;
         
         let vi = 0, ni = 0, ui = 0, ii = 0;
         
@@ -136,9 +142,9 @@ export class CNodeSynthClouds extends CNode3DGroup {
             const depthOffset = halfDepth > 0 ? (rng() * this.depth - halfDepth) : 0;
             const heightVariation = (rng() * hVar * 2 - hVar) + depthOffset - drop;
             
-            const px = cx + ex * offsetX + nx * offsetZ + ux * heightVariation;
-            const py = cy + ey * offsetX + ny * offsetZ + uy * heightVariation;
-            const pz = cz + ez * offsetX + nz * offsetZ + uz * heightVariation;
+            const px = ex * offsetX + nx * offsetZ + ux * heightVariation;
+            const py = ey * offsetX + ny * offsetZ + uy * heightVariation;
+            const pz = ez * offsetX + nz * offsetZ + uz * heightVariation;
             
             const edx = ex * xzHalf, edy = ey * xzHalf, edz = ez * xzHalf;
             const ndx = nx * xzFull, ndy = ny * xzFull, ndz = nz * xzFull;
@@ -312,7 +318,7 @@ export class CNodeSynthClouds extends CNode3DGroup {
                     
                     if (newAltitude > 100 && newAltitude < 50000) {
                         this.altitude = newAltitude;
-                        this.buildCloudMesh();
+                        this.updateGroupPosition();
                         this.createControlHandles();
                         this.updateGUIControllers();
                     }
@@ -331,7 +337,7 @@ export class CNodeSynthClouds extends CNode3DGroup {
                     const lla = EUSToLLA(newCenterEUS);
                     this.centerLat = lla.x;
                     this.centerLon = lla.y;
-                    this.buildCloudMesh();
+                    this.updateGroupPosition();
                     this.createControlHandles();
                 }
             }
@@ -350,8 +356,13 @@ export class CNodeSynthClouds extends CNode3DGroup {
     
     onPointerUp(event) {
         if (this.isDragging) {
+            const wasMoveHandle = this.draggingHandle === 'move';
             this.isDragging = false;
             this.draggingHandle = null;
+            
+            if (wasMoveHandle) {
+                this.buildCloudMesh();
+            }
             
             // Re-enable camera controls
             const view = ViewMan.get("mainView");
@@ -420,20 +431,19 @@ export class CNodeSynthClouds extends CNode3DGroup {
         
         const altitudeMaterial = new MeshBasicMaterial({color: 0xffff00, depthTest: false, transparent: true, opacity: 0.8});
         this.altitudeHandle = new Mesh(handleGeometry.clone(), altitudeMaterial);
-        this.altitudeHandle.position.copy(centerEUS);
+        this.altitudeHandle.position.set(0, 0, 0);
         this.altitudeHandle.layers.mask = LAYER.MASK_HELPERS;
         this.group.add(this.altitudeHandle);
         
         const radiusMaterial = new MeshBasicMaterial({color: 0x00ffff, depthTest: false, transparent: true, opacity: 0.8});
         this.radiusHandle = new Mesh(handleGeometry.clone(), radiusMaterial);
-        this.radiusHandle.position.copy(centerEUS.clone().add(east.clone().multiplyScalar(this.radius)));
+        this.radiusHandle.position.copy(east.clone().multiplyScalar(this.radius));
         this.radiusHandle.layers.mask = LAYER.MASK_HELPERS;
         this.group.add(this.radiusHandle);
         
         const moveMaterial = new MeshBasicMaterial({color: 0xff8800, depthTest: false, transparent: true, opacity: 0.8});
         this.moveHandle = new Mesh(handleGeometry.clone(), moveMaterial);
-        const movePos = centerEUS.clone().add(east.clone().multiplyScalar(-this.radius * 0.5));
-        this.moveHandle.position.copy(movePos);
+        this.moveHandle.position.copy(east.clone().multiplyScalar(-this.radius * 0.5));
         this.moveHandle.layers.mask = LAYER.MASK_HELPERS;
         this.group.add(this.moveHandle);
         
@@ -451,12 +461,13 @@ export class CNodeSynthClouds extends CNode3DGroup {
         }
         
         const handlePixelSize = 20; // Target size in screen pixels
+        const worldPos = new Vector3();
         
         const handles = [this.altitudeHandle, this.radiusHandle, this.moveHandle];
         handles.forEach(handle => {
             if (handle) {
-                const scale = view.pixelsToMeters(handle.position, handlePixelSize);
-                // SphereGeometry with radius 3m, so scale to get handlePixelSize on screen
+                handle.getWorldPosition(worldPos);
+                const scale = view.pixelsToMeters(worldPos, handlePixelSize);
                 handle.scale.set(scale / 3, scale / 3, scale / 3);
             }
         });
