@@ -428,6 +428,17 @@ export function scaleBuildingHandles(view) {
             }
         }
     }
+    
+    // Iterate over all synthetic clouds and update their handle scales
+    if (Synth3DManager && Synth3DManager.cloudsList) {
+        for (const cloudsId in Synth3DManager.cloudsList) {
+            const clouds = Synth3DManager.cloudsList[cloudsId];
+
+            if (clouds && clouds.updateHandleScales) {
+                clouds.updateHandleScales(view);
+            }
+        }
+    }
 }
 
 export function removeDebugArrow(name) {

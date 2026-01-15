@@ -19,7 +19,7 @@ import {makeMouseRay} from "../mouseMoveView";
 import {ViewMan} from "../CViewManager";
 import {CustomManager, Globals, guiMenus, setRenderOne, Synth3DManager, UndoManager} from "../Globals";
 import {mouseInViewOnly} from "../ViewUtils";
-import {f2m, m2f} from "../utils";
+import {f2m} from "../utils";
 import {SITREC_APP} from "../configUtils";
 import seedrandom from "seedrandom";
 
@@ -170,6 +170,15 @@ export class CNodeSynthClouds extends CNode3DGroup {
         if (!this.editMode) return;
         if (event.button !== 0) return; // Only left mouse button
         
+        // Check if clicking on a GUI element - menus should have priority
+        let target = event.target;
+        while (target) {
+            if (target.classList && target.classList.contains('lil-gui')) {
+                return; // Click is on GUI, don't handle it
+            }
+            target = target.parentElement;
+        }
+        
         const view = ViewMan.get("mainView");
         if (!view) return;
         if (!mouseInViewOnly(view, event.clientX, event.clientY)) return;
@@ -257,6 +266,7 @@ export class CNodeSynthClouds extends CNode3DGroup {
                         this.altitude = newAltitude;
                         this.buildCloudMesh();
                         this.createControlHandles();
+                        this.updateGUIControllers();
                     }
                 } else if (this.draggingHandle === 'radius') {
                     // Calculate new radius based on distance from initial center to current intersection
@@ -265,6 +275,7 @@ export class CNodeSynthClouds extends CNode3DGroup {
                         this.radius = newRadius;
                         this.buildCloudMesh();
                         this.createControlHandles();
+                        this.updateGUIControllers();
                     }
                 } else if (this.draggingHandle === 'move') {
                     // Move center by displacement
@@ -356,27 +367,51 @@ export class CNodeSynthClouds extends CNode3DGroup {
         const localUp = getLocalUpVector(centerEUS);
         const east = new Vector3(1, 0, 0).cross(localUp).normalize();
         
-        const handleSize = Math.max(20, this.radius * 0.05);
-        const handleGeometry = new SphereGeometry(handleSize, 16, 16);
+        // Use fixed 3m radius geometry (same as buildings) - scaled dynamically in updateHandleScales
+        const handleGeometry = new SphereGeometry(3, 16, 16);
         
         const altitudeMaterial = new MeshBasicMaterial({color: 0xffff00, depthTest: false, transparent: true, opacity: 0.8});
-        this.altitudeHandle = new Mesh(handleGeometry, altitudeMaterial);
+        this.altitudeHandle = new Mesh(handleGeometry.clone(), altitudeMaterial);
         this.altitudeHandle.position.copy(centerEUS);
         this.altitudeHandle.layers.mask = LAYER.MASK_HELPERS;
         this.group.add(this.altitudeHandle);
         
         const radiusMaterial = new MeshBasicMaterial({color: 0x00ffff, depthTest: false, transparent: true, opacity: 0.8});
-        this.radiusHandle = new Mesh(handleGeometry, radiusMaterial);
+        this.radiusHandle = new Mesh(handleGeometry.clone(), radiusMaterial);
         this.radiusHandle.position.copy(centerEUS.clone().add(east.clone().multiplyScalar(this.radius)));
         this.radiusHandle.layers.mask = LAYER.MASK_HELPERS;
         this.group.add(this.radiusHandle);
         
         const moveMaterial = new MeshBasicMaterial({color: 0xff8800, depthTest: false, transparent: true, opacity: 0.8});
-        this.moveHandle = new Mesh(handleGeometry, moveMaterial);
+        this.moveHandle = new Mesh(handleGeometry.clone(), moveMaterial);
         const movePos = centerEUS.clone().add(east.clone().multiplyScalar(-this.radius * 0.5));
         this.moveHandle.position.copy(movePos);
         this.moveHandle.layers.mask = LAYER.MASK_HELPERS;
         this.group.add(this.moveHandle);
+        
+        handleGeometry.dispose(); // Dispose the template
+    }
+    
+    /**
+     * Update handle scales to maintain constant screen size (20px)
+     * Should be called from the render loop
+     * @param {CNodeView3D} view - The view to use for screen-space scaling
+     */
+    updateHandleScales(view) {
+        if (!this.editMode || !view || !view.pixelsToMeters) {
+            return;
+        }
+        
+        const handlePixelSize = 20; // Target size in screen pixels
+        
+        const handles = [this.altitudeHandle, this.radiusHandle, this.moveHandle];
+        handles.forEach(handle => {
+            if (handle) {
+                const scale = view.pixelsToMeters(handle.position, handlePixelSize);
+                // SphereGeometry with radius 3m, so scale to get handlePixelSize on screen
+                handle.scale.set(scale / 3, scale / 3, scale / 3);
+            }
+        });
     }
     
     removeControlHandles() {
@@ -406,13 +441,23 @@ export class CNodeSynthClouds extends CNode3DGroup {
         if (enabled) {
             Globals.editingClouds = this;
             this.createControlHandles();
-            if (this.guiFolder) this.guiFolder.show();
         } else {
             if (Globals.editingClouds === this) {
                 Globals.editingClouds = null;
             }
             this.removeControlHandles();
-            if (this.guiFolder) this.guiFolder.hide();
+            
+            // Close the standalone edit menu if it exists
+            if (CustomManager.cloudsEditMenu) {
+                CustomManager.cloudsEditMenu.destroy();
+                CustomManager.cloudsEditMenu = null;
+            }
+            
+            // Clear controller references (created by showCloudsEditingMenu)
+            this.altitudeController = null;
+            this.radiusController = null;
+            this.altitudeProxy = null;
+            this.radiusProxy = null;
         }
         
         setRenderOne(true);
@@ -425,77 +470,6 @@ export class CNodeSynthClouds extends CNode3DGroup {
             this.guiFolder.name = `Clouds: ${this.name}`;
             CustomManager.saveGlobalSettings();
         });
-        
-        const editFolder = this.guiFolder.addFolder('Edit');
-        
-        const altitudeProxy = {
-            get altitude() { return m2f(this.clouds.altitude); },
-            set altitude(v) { this.clouds.altitude = f2m(v); },
-            clouds: this
-        };
-        editFolder.add(altitudeProxy, 'altitude', 1000, 50000, 100)
-            .name('Altitude (ft)')
-            .onChange(() => {
-                this.buildCloudMesh();
-                if (this.editMode) this.createControlHandles();
-                setRenderOne(true);
-                CustomManager.saveGlobalSettings();
-            });
-        
-        const radiusProxy = {
-            get radius() { return this.clouds.radius; },
-            set radius(v) { this.clouds.radius = v; },
-            clouds: this
-        };
-        editFolder.add(radiusProxy, 'radius', 100, 10000, 10)
-            .name('Radius (m)')
-            .onChange(() => {
-                this.buildCloudMesh();
-                if (this.editMode) this.createControlHandles();
-                setRenderOne(true);
-                CustomManager.saveGlobalSettings();
-            });
-        
-        const cloudSizeProxy = {
-            get size() { return this.clouds.cloudSize; },
-            set size(v) { this.clouds.cloudSize = v; },
-            clouds: this
-        };
-        editFolder.add(cloudSizeProxy, 'size', 50, 1000, 10)
-            .name('Cloud Size (m)')
-            .onChange(() => {
-                this.buildCloudMesh();
-                setRenderOne(true);
-                CustomManager.saveGlobalSettings();
-            });
-        
-        const densityProxy = {
-            get density() { return this.clouds.density; },
-            set density(v) { this.clouds.density = v; },
-            clouds: this
-        };
-        editFolder.add(densityProxy, 'density', 0.1, 2.0, 0.1)
-            .name('Density')
-            .onChange(() => {
-                this.buildCloudMesh();
-                setRenderOne(true);
-                CustomManager.saveGlobalSettings();
-            });
-        
-        const opacityProxy = {
-            get opacity() { return this.clouds.opacity; },
-            set opacity(v) { this.clouds.opacity = v; },
-            clouds: this
-        };
-        editFolder.add(opacityProxy, 'opacity', 0.1, 1.0, 0.05)
-            .name('Opacity')
-            .onChange(() => {
-                if (this.cloudMesh && this.cloudMesh.material) {
-                    this.cloudMesh.material.opacity = this.opacity;
-                }
-                setRenderOne(true);
-                CustomManager.saveGlobalSettings();
-            });
         
         const actions = {
             delete: () => {
@@ -520,8 +494,15 @@ export class CNodeSynthClouds extends CNode3DGroup {
             }
         };
         this.guiFolder.add(actions, 'delete').name('Delete Clouds');
-        
-        this.guiFolder.hide();
+    }
+    
+    updateGUIControllers() {
+        if (this.altitudeController) {
+            this.altitudeController.setSIValue(this.altitude);
+        }
+        if (this.radiusController) {
+            this.radiusController.setSIValue(this.radius);
+        }
     }
     
     serialize() {

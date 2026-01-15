@@ -45,9 +45,7 @@ import {
     degrees,
     drawVideoWatermark,
     ExportProgressWidget,
-    f2m,
     getDateTimeFilename,
-    m2f,
     openFullscreen
 } from "./utils";
 import {ViewMan} from "./CViewManager";
@@ -2560,21 +2558,33 @@ export class CCustomManager {
         const editFolder = menu.addFolder('Properties');
         
         const altitudeProxy = {
-            get altitude() { return m2f(clouds.altitude); },
-            set altitude(v) { clouds.altitude = f2m(v); }
+            _displayValue: clouds.altitude,
+            get altitude() { return this._displayValue; },
+            set altitude(v) { this._displayValue = v; }
         };
-        editFolder.add(altitudeProxy, 'altitude', 1000, 50000, 100)
-            .name('Altitude (ft)')
+        clouds.altitudeProxy = altitudeProxy;
+        clouds.altitudeController = editFolder.add(altitudeProxy, 'altitude', 300, 15000, 10)
+            .name('Altitude')
+            .setUnitType('small')
             .onChange(() => {
+                clouds.altitude = clouds.altitudeController.getSIValue();
                 clouds.buildCloudMesh();
                 if (clouds.editMode) clouds.createControlHandles();
                 setRenderOne(true);
                 this.saveGlobalSettings();
             });
         
-        editFolder.add(clouds, 'radius', 100, 10000, 10)
-            .name('Radius (m)')
+        const radiusProxy = {
+            _displayValue: clouds.radius,
+            get radius() { return this._displayValue; },
+            set radius(v) { this._displayValue = v; }
+        };
+        clouds.radiusProxy = radiusProxy;
+        clouds.radiusController = editFolder.add(radiusProxy, 'radius', 100, 10000, 10)
+            .name('Radius')
+            .setUnitType('small')
             .onChange(() => {
+                clouds.radius = clouds.radiusController.getSIValue();
                 clouds.buildCloudMesh();
                 if (clouds.editMode) clouds.createControlHandles();
                 setRenderOne(true);
