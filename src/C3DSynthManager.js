@@ -3,18 +3,22 @@
 
 import {CManager} from "./CManager";
 import {CNodeSynthBuilding} from "./nodes/CNodeSynthBuilding";
+import {CNodeSynthClouds} from "./nodes/CNodeSynthClouds";
 import {Globals, NodeMan, setRenderOne} from "./Globals";
 import {ViewMan} from "./CViewManager";
 import {makeMouseRay} from "./mouseMoveView";
 import {V3} from "./threeUtils";
 import {getLocalUpVector} from "./SphericalMath";
 import {Sphere, Vector3} from "three";
-import {wgs84} from "./LLA-ECEF-ENU";
+import {EUSToLLA, wgs84} from "./LLA-ECEF-ENU";
+import {f2m} from "./utils";
 
 export class C3DSynthManager extends CManager {
     constructor() {
         super();
         this.nextBuildingID = 1;
+        this.nextCloudsID = 1;
+        this.cloudsList = {};
         
         console.log("C3DSynthManager initialized");
     }
@@ -199,7 +203,88 @@ export class C3DSynthManager extends CManager {
     }
     
     /**
-     * Serialize all buildings for saving
+     * Add a new cloud layer
+     */
+    addClouds(cloudsData) {
+        const id = cloudsData.id || `synthClouds_${this.nextCloudsID++}`;
+        const clouds = new CNodeSynthClouds({
+            ...cloudsData,
+            id: id
+        });
+        
+        this.cloudsList[id] = clouds;
+        console.log(`Added clouds: ${id}`);
+        setRenderOne(true);
+        return clouds;
+    }
+    
+    /**
+     * Remove a cloud layer
+     */
+    removeClouds(cloudsID) {
+        if (this.cloudsList[cloudsID]) {
+            const clouds = this.cloudsList[cloudsID];
+            
+            if (clouds.editMode || Globals.editingClouds === clouds) {
+                console.log(`  Exiting edit mode for clouds ${cloudsID} before removal`);
+                clouds.setEditMode(false);
+            }
+            
+            NodeMan.disposeRemove(clouds);
+            delete this.cloudsList[cloudsID];
+            
+            console.log(`Removed clouds: ${cloudsID}`);
+            setRenderOne(true);
+        }
+    }
+    
+    /**
+     * Get a cloud layer by ID
+     */
+    getClouds(cloudsID) {
+        return this.cloudsList[cloudsID];
+    }
+    
+    /**
+     * Create a cloud disk at the given ground point
+     * @param {Vector3} groundPoint - The ground point (in EUS coordinates)
+     * @param {number} altitude - Altitude in meters (default 10,000 ft)
+     * @returns {CNodeSynthClouds} The created cloud layer
+     */
+    createCloudsAtPoint(groundPoint, altitude = f2m(10000)) {
+        if (Globals.editingClouds) {
+            alert("Please exit edit mode before creating new clouds");
+            return null;
+        }
+        
+        const lla = EUSToLLA(groundPoint);
+        
+        const clouds = this.addClouds({
+            centerLat: lla.x,
+            centerLon: lla.y,
+            altitude: altitude,
+            radius: 500,
+            cloudSize: 200,
+            density: 0.5,
+            opacity: 0.8,
+            name: `Clouds ${this.nextCloudsID}`
+        });
+        
+        console.log(`Created clouds: ${clouds.cloudsID} at ground point`);
+        return clouds;
+    }
+    
+    /**
+     * Iterate over all cloud layers
+     */
+    iterateClouds(callback) {
+        for (const id in this.cloudsList) {
+            callback(id, this.cloudsList[id]);
+        }
+    }
+    
+    /**
+     * Serialize all buildings and clouds for saving
      */
     serialize() {
         const buildingsArray = [];
@@ -207,44 +292,60 @@ export class C3DSynthManager extends CManager {
             buildingsArray.push(building.serialize());
         });
         
+        const cloudsArray = [];
+        this.iterateClouds((id, clouds) => {
+            cloudsArray.push(clouds.serialize());
+        });
+        
         return {
             buildings: buildingsArray,
-            nextBuildingID: this.nextBuildingID
+            nextBuildingID: this.nextBuildingID,
+            clouds: cloudsArray,
+            nextCloudsID: this.nextCloudsID
         };
     }
     
     /**
-     * Deserialize buildings from save data
+     * Deserialize buildings and clouds from save data
      */
     deserialize(data) {
-        if (!data || !data.buildings) return;
+        if (!data) return;
         
-        // Clear existing buildings
         this.clear();
         
-        // Load buildings
-        data.buildings.forEach(buildingData => {
-            const building = CNodeSynthBuilding.deserialize(buildingData);
-            
-            // Note: CNodeSynthBuilding's constructor automatically adds itself to NodeMan
-            
-            // Add to manager using inherited CManager.add() method
-            this.add(building.buildingID || building.id, building);
-        });
+        if (data.buildings) {
+            data.buildings.forEach(buildingData => {
+                const building = CNodeSynthBuilding.deserialize(buildingData);
+                this.add(building.buildingID || building.id, building);
+            });
+            this.nextBuildingID = data.nextBuildingID || this.size() + 1;
+            console.log(`Loaded ${this.size()} buildings`);
+        }
         
-        this.nextBuildingID = data.nextBuildingID || this.size() + 1;
+        if (data.clouds) {
+            data.clouds.forEach(cloudsData => {
+                const clouds = CNodeSynthClouds.deserialize(cloudsData);
+                this.cloudsList[clouds.cloudsID] = clouds;
+            });
+            this.nextCloudsID = data.nextCloudsID || Object.keys(this.cloudsList).length + 1;
+            console.log(`Loaded ${Object.keys(this.cloudsList).length} cloud layers`);
+        }
         
-        console.log(`Loaded ${this.size()} buildings`);
         setRenderOne(true);
     }
     
     /**
-     * Clear all buildings
+     * Clear all buildings and clouds
      */
     clear() {
-        const ids = Object.keys(this.list);
-        ids.forEach(id => {
+        const buildingIds = Object.keys(this.list);
+        buildingIds.forEach(id => {
             this.removeBuilding(id);
+        });
+        
+        const cloudsIds = Object.keys(this.cloudsList);
+        cloudsIds.forEach(id => {
+            this.removeClouds(id);
         });
     }
     
@@ -252,12 +353,10 @@ export class C3DSynthManager extends CManager {
      * Dispose of all resources
      */
     dispose() {
-        // Remove event listeners
         document.removeEventListener('pointerdown', this.onPointerDownBound);
         document.removeEventListener('pointermove', this.onPointerMoveBound);
         document.removeEventListener('pointerup', this.onPointerUpBound);
         
-        // Dispose all buildings
         this.clear();
         
         if (this.creationPreviewBuilding) {

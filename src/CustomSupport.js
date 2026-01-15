@@ -45,7 +45,9 @@ import {
     degrees,
     drawVideoWatermark,
     ExportProgressWidget,
+    f2m,
     getDateTimeFilename,
+    m2f,
     openFullscreen
 } from "./utils";
 import {ViewMan} from "./CViewManager";
@@ -1944,6 +1946,12 @@ export class CCustomManager {
             return;
         }
         
+        // Check if we're in clouds editing mode
+        if (Globals.editingClouds) {
+            this.showCloudsEditingMenu(mouseX, mouseY, groundPoint);
+            return;
+        }
+        
         // Convert ground point to LLA
         const groundLLA = EUSToLLA(groundPoint);
         const lat = groundLLA.x;
@@ -2137,6 +2145,38 @@ export class CCustomManager {
                     console.log(`Created building at ground point, now in edit mode with menu`);
                 }
             },
+            addClouds: () => {
+                this.groundContextMenu = null;
+                menu.destroy();
+                
+                if (Globals.editingClouds) {
+                    console.log(`  Exiting edit mode on previous clouds: ${Globals.editingClouds.cloudsID}`);
+                    Globals.editingClouds.setEditMode(false);
+                }
+                
+                const clouds = Synth3DManager.createCloudsAtPoint(groundPoint);
+                
+                if (clouds && UndoManager) {
+                    const cloudsID = clouds.cloudsID;
+                    const cloudsState = clouds.serialize();
+                    
+                    UndoManager.add({
+                        undo: () => {
+                            Synth3DManager.removeClouds(cloudsID);
+                        },
+                        redo: () => {
+                            Synth3DManager.addClouds(cloudsState);
+                        },
+                        description: `Create cloud layer "${clouds.name}"`
+                    });
+                }
+                
+                if (clouds) {
+                    clouds.setEditMode(true);
+                    this.showCloudsEditingMenu(mouseX, mouseY, groundPoint);
+                    console.log(`Created clouds at ground point, now in edit mode with menu`);
+                }
+            },
         };
         
         // Add location text as custom HTML (bright and selectable)
@@ -2157,6 +2197,9 @@ export class CCustomManager {
         
         // Add building creation option
         menu.add(menuData, "addBuilding").name("Add Building");
+        
+        // Add clouds creation option
+        menu.add(menuData, "addClouds").name("Add Clouds");
 
         if (NodeMan.exists("terrainUI")) {
             const terrainUI = NodeMan.get("terrainUI");
@@ -2493,6 +2536,111 @@ export class CCustomManager {
         menu.add(menuData, "deleteBuilding").name("Delete Building").setLabelColor('#ff4444');
         
         // Open the menu
+        menu.open();
+    }
+
+    showCloudsEditingMenu(mouseX, mouseY, groundPoint) {
+        const clouds = Globals.editingClouds;
+        if (!clouds) {
+            console.warn("No clouds being edited");
+            return;
+        }
+        
+        const cloudsName = clouds.name || clouds.cloudsID;
+        
+        if (this.cloudsEditMenu) {
+            this.cloudsEditMenu.destroy();
+        }
+        
+        const menu = Globals.menuBar.createStandaloneMenu(`Edit: ${cloudsName}`, mouseX, mouseY);
+        this.cloudsEditMenu = menu;
+        
+        menu.addHTML('<div style="color: #aaa; font-size: 11px; padding: 5px;">Drag handles to adjust clouds</div>', 'Instructions');
+        
+        const editFolder = menu.addFolder('Properties');
+        
+        const altitudeProxy = {
+            get altitude() { return m2f(clouds.altitude); },
+            set altitude(v) { clouds.altitude = f2m(v); }
+        };
+        editFolder.add(altitudeProxy, 'altitude', 1000, 50000, 100)
+            .name('Altitude (ft)')
+            .onChange(() => {
+                clouds.buildCloudMesh();
+                if (clouds.editMode) clouds.createControlHandles();
+                setRenderOne(true);
+                this.saveGlobalSettings();
+            });
+        
+        editFolder.add(clouds, 'radius', 100, 10000, 10)
+            .name('Radius (m)')
+            .onChange(() => {
+                clouds.buildCloudMesh();
+                if (clouds.editMode) clouds.createControlHandles();
+                setRenderOne(true);
+                this.saveGlobalSettings();
+            });
+        
+        editFolder.add(clouds, 'cloudSize', 50, 1000, 10)
+            .name('Cloud Size (m)')
+            .onChange(() => {
+                clouds.buildCloudMesh();
+                setRenderOne(true);
+                this.saveGlobalSettings();
+            });
+        
+        editFolder.add(clouds, 'density', 0.1, 2.0, 0.1)
+            .name('Density')
+            .onChange(() => {
+                clouds.buildCloudMesh();
+                setRenderOne(true);
+                this.saveGlobalSettings();
+            });
+        
+        editFolder.add(clouds, 'opacity', 0.1, 1.0, 0.05)
+            .name('Opacity')
+            .onChange(() => {
+                if (clouds.cloudMesh && clouds.cloudMesh.material) {
+                    clouds.cloudMesh.material.opacity = clouds.opacity;
+                }
+                setRenderOne(true);
+                this.saveGlobalSettings();
+            });
+        
+        const menuData = {
+            exitEditMode: () => {
+                clouds.setEditMode(false);
+                console.log(`Exited edit mode for clouds ${cloudsName}`);
+                menu.destroy();
+                this.cloudsEditMenu = null;
+            },
+            deleteClouds: () => {
+                if (confirm(`Delete cloud layer "${cloudsName}"?`)) {
+                    if (UndoManager) {
+                        const cloudsState = clouds.serialize();
+                        const cloudsID = clouds.cloudsID;
+                        
+                        UndoManager.add({
+                            undo: () => {
+                                Synth3DManager.addClouds(cloudsState);
+                            },
+                            redo: () => {
+                                Synth3DManager.removeClouds(cloudsID);
+                            },
+                            description: `Delete cloud layer "${cloudsName}"`
+                        });
+                    }
+                    
+                    Synth3DManager.removeClouds(clouds.cloudsID);
+                    menu.destroy();
+                    this.cloudsEditMenu = null;
+                }
+            }
+        };
+        
+        menu.add(menuData, "exitEditMode").name("Exit Edit Mode").setDoubleClickAction();
+        menu.add(menuData, "deleteClouds").name("Delete Clouds").setLabelColor('#ff4444');
+        
         menu.open();
     }
 
