@@ -32,13 +32,49 @@ Example entry format:
 
 ---
 
-## Version 2.20.0+ (2026-01-05) - Development
+## Version 2.21.0 (2026-01-14)
+
+### New Features
+- **Depth velocity traversal** using manual tracking with optimization for ground speed vs air speed
+- **Multiple manual curve types** with linear segmented curves for testing
+- **MISB track exporting** for minimally-compliant tracks that can be reimported
+- **Compass tool** for mobile devices
+- **Align with Flow** option to rotate overlays based on motion direction
+- **Remove Outer Black** video processing option
+- **Speed overlay** display
+- **Flowgen tool** to generate scrolling fuzzy backgrounds for testing motion analysis
+
+### Improvements
+- Optimized flow orbs by reusing Three.js vectors
+- Increased max satellite brightness to 50 (was 6)
+- Force settings to default for visual regression tests
+- Video resize now uses original dimensions for consistency across users
+- Resample audio to 48K if not a common format (48K or 44.1K)
+- Flow orbs working in Legacy Gimbal sitch with different camera matrix
+- Legacy gimbal sphere visible in look view for better visibility
+
+### Bug Fixes
+- Fixed focus issues with GUI mousing out of input boxes
+- Fixed typo (choise → choice) preventing early return optimization
+- Fixed exporting of Gimbal viewport
+- Fixed viewport resizing when changing presets
+
+---
+
+## Version 2.20.1 (2026-01-06)
 
 ### Improvements
 - Panorama frame step control for more precise panorama creation
+- Improved subpixel tracking for slow movement (panning)
+- Using actual values (not smoothed) for panorama motion
+- Using effects in panorama rendering
+- Code consolidation with DRY utility functions
 
 ### Bug Fixes
 - Fixed mouse scroll wheel leaking through GUI to video zoom
+- Fixed skipping frames on panorama export
+- Fixed multiple Masking menus bug
+- Fixed OpenCV loading issue
 
 ---
 
