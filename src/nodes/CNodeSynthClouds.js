@@ -14,7 +14,7 @@ import {
     Vector3
 } from "three";
 import * as LAYER from "../LayerMasks";
-import {getLocalUpVector} from "../SphericalMath";
+import {dropFromDistance, getLocalUpVector} from "../SphericalMath";
 import {EUSToLLA, LLAToEUS} from "../LLA-ECEF-ENU";
 import {makeMouseRay} from "../mouseMoveView";
 import {ViewMan} from "../CViewManager";
@@ -116,11 +116,14 @@ export class CNodeSynthClouds extends CNode3DGroup {
             const angle = getRandomFloat(0, Math.PI * 2);
             const maxRadius = getEdgeRadius(angle, this.radius, this.edgeWiggle, this.edgeFrequency, this.seed);
             const dist = Math.sqrt(getRandomFloat(0, 1)) * maxRadius;
-            
+
+            // to conform to the curvature of the Earth, we need to adjust the height based on the distance from the center
+            const drop = dropFromDistance(dist);
+
             const offsetX = Math.cos(angle) * dist;
             const offsetZ = Math.sin(angle) * dist;
             const depthOffset = halfDepth > 0 ? getRandomFloat(-halfDepth, halfDepth) : 0;
-            const heightVariation = getRandomFloat(-h * 0.3, h * 0.3) + depthOffset;
+            const heightVariation = getRandomFloat(-h * 0.3, h * 0.3) + depthOffset - drop;
             
             const pos = centerEUS.clone()
                 .add(east.clone().multiplyScalar(offsetX))
