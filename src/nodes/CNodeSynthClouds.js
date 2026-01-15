@@ -1,5 +1,6 @@
 import {CNode3DGroup} from "./CNode3DGroup";
 import {
+    BufferAttribute,
     BufferGeometry,
     Color,
     DoubleSide,
@@ -100,68 +101,86 @@ export class CNodeSynthClouds extends CNode3DGroup {
         
         rng = seedrandom(this.seed.toString());
         
-        const indices = [];
-        const vertices = [];
-        const normals = [];
-        const uvs = [];
-        
         const numClouds = Math.floor(this.density * this.radius * this.radius * 0.0001);
+        const numVertices = numClouds * 4;
+        const numIndices = numClouds * 6;
+        
+        const vertices = new Float32Array(numVertices * 3);
+        const normals = new Float32Array(numVertices * 3);
+        const uvs = new Float32Array(numVertices * 2);
+        const indices = new Uint32Array(numIndices);
+        
         const w = this.cloudSize;
         const h = this.cloudSize * 0.5;
-        const xz = w / Math.sqrt(2);
+        const xzHalf = w / Math.sqrt(2) / 2;
+        const xzFull = xzHalf * 2;
+        const hHalf = h / 2;
+        const hVar = h * 0.3;
         const halfDepth = this.depth / 2;
         
-        let index = 0;
+        const cx = centerEUS.x, cy = centerEUS.y, cz = centerEUS.z;
+        const ex = east.x, ey = east.y, ez = east.z;
+        const nx = north.x, ny = north.y, nz = north.z;
+        const ux = localUp.x, uy = localUp.y, uz = localUp.z;
+        
+        let vi = 0, ni = 0, ui = 0, ii = 0;
+        
         for (let i = 0; i < numClouds; i++) {
-            const angle = getRandomFloat(0, Math.PI * 2);
+            const angle = rng() * Math.PI * 2;
             const maxRadius = getEdgeRadius(angle, this.radius, this.edgeWiggle, this.edgeFrequency, this.seed);
-            const dist = Math.sqrt(getRandomFloat(0, 1)) * maxRadius;
-
-            // to conform to the curvature of the Earth, we need to adjust the height based on the distance from the center
+            const dist = Math.sqrt(rng()) * maxRadius;
             const drop = dropFromDistance(dist);
 
             const offsetX = Math.cos(angle) * dist;
             const offsetZ = Math.sin(angle) * dist;
-            const depthOffset = halfDepth > 0 ? getRandomFloat(-halfDepth, halfDepth) : 0;
-            const heightVariation = getRandomFloat(-h * 0.3, h * 0.3) + depthOffset - drop;
+            const depthOffset = halfDepth > 0 ? (rng() * this.depth - halfDepth) : 0;
+            const heightVariation = (rng() * hVar * 2 - hVar) + depthOffset - drop;
             
-            const pos = centerEUS.clone()
-                .add(east.clone().multiplyScalar(offsetX))
-                .add(north.clone().multiplyScalar(offsetZ))
-                .add(localUp.clone().multiplyScalar(heightVariation));
+            const px = cx + ex * offsetX + nx * offsetZ + ux * heightVariation;
+            const py = cy + ey * offsetX + ny * offsetZ + uy * heightVariation;
+            const pz = cz + ez * offsetX + nz * offsetZ + uz * heightVariation;
             
-            const eastDir = east.clone().multiplyScalar(xz / 2);
-            const northDir = north.clone().multiplyScalar(xz);
-            const upDir = localUp.clone().multiplyScalar(h / 2);
+            const edx = ex * xzHalf, edy = ey * xzHalf, edz = ez * xzHalf;
+            const ndx = nx * xzFull, ndy = ny * xzFull, ndz = nz * xzFull;
+            const udx = ux * hHalf, udy = uy * hHalf, udz = uz * hHalf;
             
-            const v0 = pos.clone().sub(eastDir).add(upDir).add(northDir);
-            const v1 = pos.clone().add(eastDir).add(upDir).sub(northDir);
-            const v2 = pos.clone().sub(eastDir).sub(upDir).add(northDir);
-            const v3 = pos.clone().add(eastDir).sub(upDir).sub(northDir);
+            vertices[vi++] = px - edx + udx + ndx;
+            vertices[vi++] = py - edy + udy + ndy;
+            vertices[vi++] = pz - edz + udz + ndz;
             
-            vertices.push(v0.x, v0.y, v0.z);
-            vertices.push(v1.x, v1.y, v1.z);
-            vertices.push(v2.x, v2.y, v2.z);
-            vertices.push(v3.x, v3.y, v3.z);
+            vertices[vi++] = px + edx + udx - ndx;
+            vertices[vi++] = py + edy + udy - ndy;
+            vertices[vi++] = pz + edz + udz - ndz;
             
-            normals.push(localUp.x, localUp.y, localUp.z);
-            normals.push(localUp.x, localUp.y, localUp.z);
-            normals.push(localUp.x, localUp.y, localUp.z);
-            normals.push(localUp.x, localUp.y, localUp.z);
+            vertices[vi++] = px - edx - udx + ndx;
+            vertices[vi++] = py - edy - udy + ndy;
+            vertices[vi++] = pz - edz - udz + ndz;
             
-            uvs.push(0, 1);
-            uvs.push(1, 1);
-            uvs.push(0, 0);
-            uvs.push(1, 0);
+            vertices[vi++] = px + edx - udx - ndx;
+            vertices[vi++] = py + edy - udy - ndy;
+            vertices[vi++] = pz + edz - udz - ndz;
             
-            indices.push(index, index + 2, index + 1);
-            indices.push(index + 2, index + 3, index + 1);
+            normals[ni++] = ux; normals[ni++] = uy; normals[ni++] = uz;
+            normals[ni++] = ux; normals[ni++] = uy; normals[ni++] = uz;
+            normals[ni++] = ux; normals[ni++] = uy; normals[ni++] = uz;
+            normals[ni++] = ux; normals[ni++] = uy; normals[ni++] = uz;
             
-            index += 4;
+            uvs[ui++] = 0; uvs[ui++] = 1;
+            uvs[ui++] = 1; uvs[ui++] = 1;
+            uvs[ui++] = 0; uvs[ui++] = 0;
+            uvs[ui++] = 1; uvs[ui++] = 0;
+            
+            const idx = i * 4;
+            indices[ii++] = idx;
+            indices[ii++] = idx + 2;
+            indices[ii++] = idx + 1;
+            indices[ii++] = idx + 2;
+            indices[ii++] = idx + 3;
+            indices[ii++] = idx + 1;
         }
         
         this.cloudGeometry = new BufferGeometry();
-        this.cloudGeometry.setIndex(indices);
+        this.cloudGeometry.setIndex(new BufferAttribute(indices, 1));
         this.cloudGeometry.setAttribute('position', new Float32BufferAttribute(vertices, 3));
         this.cloudGeometry.setAttribute('normal', new Float32BufferAttribute(normals, 3));
         this.cloudGeometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
