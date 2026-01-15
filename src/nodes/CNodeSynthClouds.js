@@ -16,10 +16,10 @@ import {
 } from "three";
 import * as LAYER from "../LayerMasks";
 import {dropFromDistance, getLocalUpVector} from "../SphericalMath";
-import {EUSToLLA, LLAToEUS} from "../LLA-ECEF-ENU";
+import {EUSToLLA, LLAToEUS, wgs84} from "../LLA-ECEF-ENU";
 import {makeMouseRay} from "../mouseMoveView";
 import {ViewMan} from "../CViewManager";
-import {CustomManager, Globals, guiMenus, NodeMan, setRenderOne, Synth3DManager, UndoManager} from "../Globals";
+import {CustomManager, Globals, guiMenus, setRenderOne, Synth3DManager, UndoManager} from "../Globals";
 import {mouseInViewOnly} from "../ViewUtils";
 import {f2m} from "../utils";
 import {SITREC_APP} from "../configUtils";
@@ -162,7 +162,8 @@ export class CNodeSynthClouds extends CNode3DGroup {
                 opacity: { value: this.opacity },
                 color: { value: new Color(baseColor, baseColor, baseColor) },
                 emissive: { value: new Color(emissiveIntensity, emissiveIntensity, emissiveIntensity) },
-                localSun: { value: 1.0 },
+                sunDirection: { value: new Vector3(0, 1, 0) },
+                earthCenter: { value: new Vector3(0, -wgs84.RADIUS, 0) },
                 ...sharedUniforms,
             },
             vertexShader: `
@@ -170,6 +171,7 @@ export class CNodeSynthClouds extends CNode3DGroup {
                 attribute vec2 instanceSize;
                 varying vec2 vUv;
                 varying float vDepth;
+                varying vec3 vWorldPosition;
                 
                 void main() {
                     vUv = uv;
@@ -180,6 +182,9 @@ export class CNodeSynthClouds extends CNode3DGroup {
                     vec3 vertexPosition = instanceOffset 
                         + cameraRight * position.x * instanceSize.x 
                         + cameraUp * position.y * instanceSize.y;
+                    
+                    vec4 worldPos = modelMatrix * vec4(instanceOffset, 1.0);
+                    vWorldPosition = worldPos.xyz;
                     
                     vec4 mvPosition = modelViewMatrix * vec4(vertexPosition, 1.0);
                     gl_Position = projectionMatrix * mvPosition;
@@ -193,17 +198,22 @@ export class CNodeSynthClouds extends CNode3DGroup {
                 uniform vec3 emissive;
                 uniform float nearPlane;
                 uniform float farPlane;
-                uniform float localSun;
+                uniform vec3 sunDirection;
+                uniform vec3 earthCenter;
                 uniform float sunAmbientIntensity;
                 varying vec2 vUv;
                 varying float vDepth;
+                varying vec3 vWorldPosition;
                 
                 void main() {
                     vec4 texColor = texture2D(map, vUv);
                     float alpha = texColor.a * opacity;
                     if (alpha < 0.01) discard;
                     
-                    float lighting = mix(sunAmbientIntensity, 1.0, localSun);
+                    vec3 globalNormal = normalize(vWorldPosition - earthCenter);
+                    float globalIntensity = max(dot(globalNormal, sunDirection), -0.1);
+                    float dayFactor = smoothstep(-0.1, 0.1, globalIntensity);
+                    float lighting = mix(sunAmbientIntensity, 1.0, dayFactor);
                     vec3 litColor = texColor.rgb * color * lighting + emissive;
                     gl_FragColor = vec4(litColor, alpha);
                     
@@ -226,13 +236,8 @@ export class CNodeSynthClouds extends CNode3DGroup {
     preRender(view) {
         if (!this.cloudMesh || !this.cloudMesh.material || !this.cloudMesh.material.uniforms) return;
         
-        const lightingNode = NodeMan.get("lighting");
-        if (lightingNode.noMainLighting && view.id === "mainView") {
-            this.cloudMesh.material.uniforms.localSun.value = 1.0;
-        } else {
-            const sunNode = NodeMan.get("theSun");
-            const localSun = sunNode.calculateSunAt(this.group.position).sunTotal;
-            this.cloudMesh.material.uniforms.localSun.value = localSun;
+        if (Globals.sunLight) {
+            this.cloudMesh.material.uniforms.sunDirection.value.copy(Globals.sunLight.position).normalize();
         }
     }
     

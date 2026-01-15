@@ -2563,7 +2563,7 @@ export class CCustomManager {
             set altitude(v) { this._displayValue = v; }
         };
         clouds.altitudeProxy = altitudeProxy;
-        clouds.altitudeController = editFolder.add(altitudeProxy, 'altitude', 0, 40000, 10)
+        clouds.altitudeController = editFolder.add(altitudeProxy, 'altitude', 0, 20000, 10)
             .name('Altitude')
             .setUnitType('small')
             .onChange(() => {
