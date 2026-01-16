@@ -17,6 +17,7 @@ import {convertColorInput} from "../ConvertColorInputs";
 import {par} from "../par";
 import {hexColor, V3} from "../threeUtils";
 import {CNodeGUIValue} from "./CNodeGUIValue";
+import {EUSToLLA, haversineDistanceKM, interpolateGreatCircle, LLAToEUS} from "../LLA-ECEF-ENU";
 
 export class CNodeDisplayTrack extends CNode3DGroup {
     constructor(v) {
@@ -401,6 +402,7 @@ export class CNodeDisplayTrack extends CNode3DGroup {
         // we use EPS to define the minimum distance between points
         const EPS = 1e-4;           // epsilon for comparing floats
         let  lastPos;               // track the previous accepted point
+        let  lastLLA;               // track the previous accepted point in LLA
 
 
         // we need to adjust the step based on the simulation speed
@@ -439,45 +441,56 @@ export class CNodeDisplayTrack extends CNode3DGroup {
                 assert(A, "CNodeDisplayTrack: trackPoint.position is undefined or null, id=" + this.id + " frame=" + f);
                 assert(!isNaN(A.x) && !isNaN(A.y) && !isNaN(A.z), "CNodeDisplayTrack: trackPoint has NaNs in position, id=" + this.id + " frame=" + f);
 
-                //line_points.push(A.x, A.y, A.z);
-                // Skip if coincident (or almost) with previous point
-                 if (!lastPos ||
-                     lastPos.distanceToSquared(A) > EPS*EPS) {
-                     line_points.push(A.x, A.y, A.z);
-                     lastPos = A;        // remember
-                 } else {
-                     continue;           // drop zero‑length segment
-                 }
-
-
-
-                var color = trackPoint.color // the track itself can override the color defaults
+                var color = trackPoint.color
                 if (color === undefined) {
-          //         if (f <= par.frame || this.in.secondColor === undefined)
                         color = this.in.color.v(f)
-          //          else
-          //              color = this.in.secondColor.v(f)
-
                     if (trackPoint.bad)
                         if (this.in.badColor !== undefined)
-                            color = this.in.badColor.v(f) // display can specify a "bad" color
+                            color = this.in.badColor.v(f)
                         else
-                            color = {r: 1, g: 0, b: 0};  // "bad" default color is red
+                            color = {r: 1, g: 0, b: 0};
                 }
-
                 if (!this.ignoreAB && (f < Sit.aFrame || f > Sit.bFrame)) {
                     if (this.in.secondColor !== undefined)
                         color = this.in.secondColor.v(f)
                     else
                         color = {r: 0.25, g: 0.25, b: 0.25}
                 }
-
                 color = new Color(color)
 
-                line_colors.push(color.r, color.g, color.b)
+                if (!lastPos || lastPos.distanceToSquared(A) <= EPS*EPS) {
+                    if (!lastPos) {
+                        line_points.push(A.x, A.y, A.z);
+                        line_colors.push(color.r, color.g, color.b);
+                        lastPos = A.clone();
+                        lastLLA = EUSToLLA(A);
+                    }
+                    continue;
+                }
+
+                const currentLLA = EUSToLLA(A);
+                const distKM = haversineDistanceKM(lastLLA.x, lastLLA.y, currentLLA.x, currentLLA.y);
+                const MAX_SEGMENT_KM = 10;
+                
+                if (distKM > MAX_SEGMENT_KM) {
+                    const numSegments = Math.ceil(distKM / MAX_SEGMENT_KM);
+                    for (let seg = 1; seg < numSegments; seg++) {
+                        const t = seg / numSegments;
+                        const interpLL = interpolateGreatCircle(lastLLA.x, lastLLA.y, currentLLA.x, currentLLA.y, t);
+                        const interpAlt = lastLLA.z + t * (currentLLA.z - lastLLA.z);
+                        const interpEUS = LLAToEUS(interpLL.lat, interpLL.lon, interpAlt);
+                        line_points.push(interpEUS.x, interpEUS.y, interpEUS.z);
+                        line_colors.push(color.r, color.g, color.b);
+                    }
+                }
+                
+                line_points.push(A.x, A.y, A.z);
+                line_colors.push(color.r, color.g, color.b);
+                lastPos = A.clone();
+                lastLLA = currentLLA;
+
                 let dropColor;
                 if (this.in.dropColor === undefined) {
-                    // if no color give, then use the main color * 0.75
                     dropColor = {r: color.r * 0.75, g: color.g * 0.75, b: color.b * 0.75}
                 } else {
                     dropColor = this.in.dropColor.v(f)

@@ -28,6 +28,36 @@ export function haversineDistanceABKM(a, b) {
     return haversineDistanceKM(a.y, a.x, b.y, b.x);
 }
 
+export function interpolateGreatCircle(lat1, lon1, lat2, lon2, t) {
+    const toRad = Math.PI / 180;
+    const toDeg = 180 / Math.PI;
+    const phi1 = lat1 * toRad;
+    const lambda1 = lon1 * toRad;
+    const phi2 = lat2 * toRad;
+    const lambda2 = lon2 * toRad;
+    
+    const d = 2 * Math.asin(Math.sqrt(
+        Math.pow(Math.sin((phi2 - phi1) / 2), 2) +
+        Math.cos(phi1) * Math.cos(phi2) * Math.pow(Math.sin((lambda2 - lambda1) / 2), 2)
+    ));
+    
+    if (d < 1e-10) {
+        return { lat: lat1, lon: lon1 };
+    }
+    
+    const a = Math.sin((1 - t) * d) / Math.sin(d);
+    const b = Math.sin(t * d) / Math.sin(d);
+    
+    const x = a * Math.cos(phi1) * Math.cos(lambda1) + b * Math.cos(phi2) * Math.cos(lambda2);
+    const y = a * Math.cos(phi1) * Math.sin(lambda1) + b * Math.cos(phi2) * Math.sin(lambda2);
+    const z = a * Math.sin(phi1) + b * Math.sin(phi2);
+    
+    return {
+        lat: Math.atan2(z, Math.sqrt(x * x + y * y)) * toDeg,
+        lon: Math.atan2(y, x) * toDeg
+    };
+}
+
 
 /////////////////
 // https://github.com/lakowske/ecef-projector/blob/master/index.js
