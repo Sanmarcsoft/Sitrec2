@@ -35,10 +35,17 @@ export function asyncCheckLogin() {
     const url = SITREC_SERVER + "rehost.php?getuser=1"
     console.log("Checking login at " + url)
     return fetch(url, {mode: 'cors'})
-        .then(response => response.text())
+        .then(response => response.json())
         .then(data => {
-            Globals.userID = parseInt(data)
-            console.log("User ID is " + Globals.userID)
+            Globals.userID = data.user_id || 0;
+            Globals.userName = data.username || null;
+            console.log("User ID is " + Globals.userID + (Globals.userName ? ", username: " + Globals.userName : ""));
+        })
+        .catch(err => {
+            // Fallback for legacy servers that return plain text
+            console.warn("Failed to parse user info as JSON, falling back to legacy format", err);
+            Globals.userID = 0;
+            Globals.userName = null;
         });
 }
 

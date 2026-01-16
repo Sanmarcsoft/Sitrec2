@@ -115,6 +115,10 @@ import {C3DSynthManager} from "./C3DSynthManager";
 import {undoManager} from "./UndoManager";
 import {arModeManager} from "./ARMode";
 import {TileUsageTracker} from "./TileUsageTracker";
+import {debugLog} from "./DebugLog";
+
+// Initialize debug log capture BEFORE any console output
+debugLog.init();
 
 // CRITICAL: Global context menu blocker - ensures system context menu NEVER appears
 // Uses capture mode (true) so it catches events before other listeners
@@ -1384,6 +1388,10 @@ async function initializeOnce() {
         }
     }
 
+    // Export debug log button
+    guiMenus.help.add({ exportDebugLog: () => debugLog.export() }, 'exportDebugLog')
+        .name('Export Debug Log')
+        .tooltip('Download all console output (log, warn, error) as a text file for debugging');
 
     // legacy accessor variables. can also use guiMenus.physics, etc
     setupGUIGlobals(_gui,_guiShowHide,_guiTweaks, _guiShowHideViews, _guiPhysics)
