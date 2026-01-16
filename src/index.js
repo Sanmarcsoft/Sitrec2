@@ -2002,7 +2002,7 @@ function hasPendingVideoFrames() {
  * @returns {Promise} - Resolves when all pending actions and tiles are loaded
  */
 async function waitForAllPendingOperations() {
-    const maxWaitTime = 30000; // 30 second timeout to prevent infinite waiting
+    const maxWaitTime = 120000; // 2 min timeout to prevent infinite waiting
     const startTime = Date.now();
     let timeoutWarningShown = false;
     let lastPendingString = ''; // Track changes to pending ops list
