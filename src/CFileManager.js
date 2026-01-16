@@ -33,7 +33,15 @@ import {par} from "./par";
 import {assert} from "./assert.js";
 import {textSitchToObject} from "./RegisterSitches";
 import {addOptionToGUIMenu, removeOptionFromGUIMenu} from "./lil-gui-extras";
-import {isCustom1, isFR24CSV, parseCustom1CSV, parseCustomFLLCSV, parseFR24CSV} from "./ParseCustom1CSV";
+import {
+    extractPBACSV,
+    isCustom1,
+    isFR24CSV,
+    isPBAFile,
+    parseCustom1CSV,
+    parseCustomFLLCSV,
+    parseFR24CSV
+} from "./ParseCustom1CSV";
 import {findColumn, stripDuplicateTimes} from "./ParseUtils";
 import {isConsole, isLocal, isServerless, SITREC_APP, SITREC_DOMAIN, SITREC_SERVER} from "./configUtils";
 import {TSParser} from "./TSParser";
@@ -1448,7 +1456,7 @@ export class CFileManager extends CManager {
 
         // very rough figuring out what to do with it
         // TODO: multiple TLEs, Videos, images.
-        if (this.detectTLE(filename)) {
+        if (fileManagerEntry.dataType === "tle") {
 
             // remove any existing TLE (most likely the current Starlink, bout could be the last drag and drop file)
             this.deleteIf(file => file.isTLE);
@@ -1672,10 +1680,25 @@ export class CFileManager extends CManager {
             let dataType = "unknown";
 
             switch (fileExt.toLowerCase()) {
-                case "txt":
-                    parsed = decoder.decode(buffer);
-                    dataType = "text";
+                case "txt": {
+                    var text = decoder.decode(buffer);
+                    const txtType = detectTXTType(text);
+                    if (txtType === "PBA") {
+                        text = extractPBACSV(text);
+                        parsed = csv.toArrays(text);
+                        const custom1Misb = parseCustom1CSV(parsed);
+                        if (Sit.isCustom) {
+                            parsed = new CTrackFileMISB(stripDuplicateTimes(custom1Misb));
+                        } else {
+                            parsed = new CTrackFileMISB(custom1Misb);
+                        }
+                        dataType = "trackfile";
+                    } else {
+                        parsed = text;
+                        dataType = "tle";
+                    }
                     break;
+                }
                 case "tle":
                     parsed = decoder.decode(buffer);
                     dataType = "tle";
@@ -2041,6 +2064,19 @@ export class CFileManager extends CManager {
         super.disposeAll()
     }
 
+}
+
+/**
+ * Detects the type of a TXT file based on content patterns.
+ * Assumes TLE unless detected as something else.
+ * @param {string} text - The text content of the file
+ * @returns {string} Type identifier: "PBA" or "TLE" (default)
+ */
+export function detectTXTType(text) {
+    if (isPBAFile(text)) {
+        return "PBA";
+    }
+    return "TLE";
 }
 
 /**

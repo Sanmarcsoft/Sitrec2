@@ -5,6 +5,22 @@ import {MISB, MISBFields} from "./MISBUtils";
 import {GlobalDateTimeNode, Sit} from "./Globals";
 import {f2m} from "./utils";
 
+export function isPBAFile(text) {
+    return text.startsWith("---Pico Balloon Archive");
+}
+
+export function extractPBACSV(text) {
+    const separatorIndex = text.indexOf("-----");
+    if (separatorIndex === -1) {
+        return text;
+    }
+    const afterSeparator = text.indexOf("\n", separatorIndex);
+    if (afterSeparator === -1) {
+        return "";
+    }
+    return text.substring(afterSeparator + 1);
+}
+
 
 // For a custom format we have a list of acceptable column headers
 // for the various needed fields
