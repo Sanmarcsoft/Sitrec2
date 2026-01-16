@@ -15,16 +15,17 @@ import {
     Vector3
 } from "three";
 import * as LAYER from "../LayerMasks";
-import {dropFromDistance, getLocalUpVector} from "../SphericalMath";
+import {dropFromDistance, getLocalNorthVector, getLocalUpVector} from "../SphericalMath";
 import {EUSToLLA, LLAToEUS, wgs84} from "../LLA-ECEF-ENU";
 import {makeMouseRay} from "../mouseMoveView";
 import {ViewMan} from "../CViewManager";
-import {CustomManager, Globals, guiMenus, setRenderOne, Synth3DManager, UndoManager} from "../Globals";
+import {CustomManager, Globals, guiMenus, NodeMan, setRenderOne, Sit, Synth3DManager, UndoManager} from "../Globals";
 import {mouseInViewOnly} from "../ViewUtils";
-import {f2m} from "../utils";
+import {f2m, metersPerSecondFromKnots, radians} from "../utils";
 import {SITREC_APP} from "../configUtils";
 import seedrandom from "seedrandom";
 import {sharedUniforms} from "../js/map33/material/SharedUniforms";
+import {par} from "../par";
 
 let rng;
 
@@ -32,16 +33,47 @@ function getRandomFloat(min, max) {
     return rng() * (max - min) + min;
 }
 
-function getEdgeRadius(angle, baseRadius, wiggle, frequency, seed) {
-    if (wiggle <= 0) return baseRadius;
-    const rngEdge = seedrandom(seed.toString() + '_edge');
-    let offset = 0;
-    for (let i = 1; i <= frequency; i++) {
-        const phase = rngEdge() * Math.PI * 2;
-        const amp = (1 / i) * wiggle * baseRadius;
-        offset += Math.sin(angle * i + phase) * amp;
+function buildEdgeRadiusTable(baseRadius, wiggle, frequency, seed) {
+    const TABLE_SIZE = 3600;
+    const table = new Float32Array(TABLE_SIZE);
+    
+    if (wiggle <= 0) {
+        table.fill(baseRadius);
+        return { table, maxRadius: baseRadius };
     }
-    return baseRadius + offset;
+    
+    const rngEdge = seedrandom(seed.toString() + '_edge');
+    const phases = new Float32Array(frequency);
+    const amps = new Float32Array(frequency);
+    
+    for (let i = 0; i < frequency; i++) {
+        phases[i] = rngEdge() * Math.PI * 2;
+        amps[i] = (1 / (i + 1)) * wiggle * baseRadius;
+    }
+    
+    let maxRadius = 0;
+    for (let t = 0; t < TABLE_SIZE; t++) {
+        const angle = (t / TABLE_SIZE) * Math.PI * 2;
+        let offset = 0;
+        for (let i = 0; i < frequency; i++) {
+            offset += Math.sin(angle * (i + 1) + phases[i]) * amps[i];
+        }
+        table[t] = baseRadius + offset;
+        if (table[t] > maxRadius) maxRadius = table[t];
+    }
+    
+    return { table, maxRadius };
+}
+
+function getEdgeRadiusFromTable(table, angle) {
+    const TABLE_SIZE = 3600;
+    const TWO_PI = Math.PI * 2;
+    const normalizedAngle = ((angle % TWO_PI) + TWO_PI) % TWO_PI;
+    const indexFloat = (normalizedAngle / TWO_PI) * TABLE_SIZE;
+    const index0 = Math.floor(indexFloat) % TABLE_SIZE;
+    const index1 = (index0 + 1) % TABLE_SIZE;
+    const frac = indexFloat - Math.floor(indexFloat);
+    return table[index0] * (1 - frac) + table[index1] * frac;
 }
 
 export class CNodeSynthClouds extends CNode3DGroup {
@@ -63,6 +95,12 @@ export class CNodeSynthClouds extends CNode3DGroup {
         this.opacity = v.opacity !== undefined ? v.opacity : 0.8;
         this.brightness = v.brightness !== undefined ? v.brightness : 1.0;
         this.seed = v.seed !== undefined ? v.seed : 0;
+        
+        this.windMode = v.windMode !== undefined ? v.windMode : "No Wind";
+        this.windFrom = v.windFrom !== undefined ? v.windFrom : 270;
+        this.windKnots = v.windKnots !== undefined ? v.windKnots : 50;
+        
+        this.basePosition = null;
         
         this.cloudMesh = null;
         this.cloudGeometry = null;
@@ -89,6 +127,7 @@ export class CNodeSynthClouds extends CNode3DGroup {
     
     updateGroupPosition() {
         const centerEUS = LLAToEUS(this.centerLat, this.centerLon, this.altitude);
+        this.basePosition = centerEUS.clone();
         this.group.position.copy(centerEUS);
         this.localUp = getLocalUpVector(centerEUS);
     }
@@ -101,6 +140,7 @@ export class CNodeSynthClouds extends CNode3DGroup {
         }
         
         const centerEUS = LLAToEUS(this.centerLat, this.centerLon, this.altitude);
+        this.basePosition = centerEUS.clone();
         this.localUp = getLocalUpVector(centerEUS);
         this.group.position.copy(centerEUS);
         
@@ -123,10 +163,20 @@ export class CNodeSynthClouds extends CNode3DGroup {
         const nx = north.x, ny = north.y, nz = north.z;
         const ux = this.localUp.x, uy = this.localUp.y, uz = this.localUp.z;
         
-        for (let i = 0; i < numClouds; i++) {
+        const { table: edgeRadiusTable, maxRadius: sampleRadius } = buildEdgeRadiusTable(this.radius, this.edgeWiggle, this.edgeFrequency, this.seed);
+        
+        let cloudIndex = 0;
+        let attempts = 0;
+        const maxAttempts = numClouds * 10;
+        
+        while (cloudIndex < numClouds && attempts < maxAttempts) {
+            attempts++;
             const angle = rng() * Math.PI * 2;
-            const maxRadius = getEdgeRadius(angle, this.radius, this.edgeWiggle, this.edgeFrequency, this.seed);
-            const dist = Math.sqrt(rng()) * maxRadius;
+            const dist = Math.sqrt(rng()) * sampleRadius;
+            const maxRadius = getEdgeRadiusFromTable(edgeRadiusTable, angle);
+            
+            if (dist > maxRadius) continue;
+            
             const drop = dropFromDistance(dist);
 
             const offsetX = Math.cos(angle) * dist;
@@ -134,15 +184,19 @@ export class CNodeSynthClouds extends CNode3DGroup {
             const depthOffset = halfDepth > 0 ? (rng() * this.depth - halfDepth) : 0;
             const heightVariation = (rng() * hVar * 2 - hVar) + depthOffset - drop;
             
-            const idx3 = i * 3;
+            const idx3 = cloudIndex * 3;
             offsets[idx3] = ex * offsetX + nx * offsetZ + ux * heightVariation;
             offsets[idx3 + 1] = ey * offsetX + ny * offsetZ + uy * heightVariation;
             offsets[idx3 + 2] = ez * offsetX + nz * offsetZ + uz * heightVariation;
             
-            const idx2 = i * 2;
+            const idx2 = cloudIndex * 2;
             sizes[idx2] = w;
             sizes[idx2 + 1] = h;
+            
+            cloudIndex++;
         }
+        
+        const actualCloudCount = cloudIndex;
         
         const baseQuad = new PlaneGeometry(1, 1);
         this.cloudGeometry = new InstancedBufferGeometry();
@@ -151,7 +205,7 @@ export class CNodeSynthClouds extends CNode3DGroup {
         this.cloudGeometry.setAttribute('uv', baseQuad.getAttribute('uv'));
         this.cloudGeometry.setAttribute('instanceOffset', new InstancedBufferAttribute(offsets, 3));
         this.cloudGeometry.setAttribute('instanceSize', new InstancedBufferAttribute(sizes, 2));
-        this.cloudGeometry.instanceCount = numClouds;
+        this.cloudGeometry.instanceCount = actualCloudCount;
         
         const baseColor = Math.min(this.brightness, 1.0);
         const emissiveIntensity = Math.max(0, this.brightness - 1.0);
@@ -233,11 +287,54 @@ export class CNodeSynthClouds extends CNode3DGroup {
         this.group.add(this.cloudMesh);
     }
     
+    getWindVector() {
+        if (this.windMode === "No Wind") {
+            return new Vector3(0, 0, 0);
+        }
+        
+        let windFrom, windKnots;
+        
+        if (this.windMode === "Use Local") {
+            const localWind = NodeMan.get("localWind", false);
+            if (!localWind) return new Vector3(0, 0, 0);
+            windFrom = localWind.from;
+            windKnots = localWind.knots;
+        } else if (this.windMode === "Use Target") {
+            const targetWind = NodeMan.get("targetWind", false);
+            if (!targetWind) return new Vector3(0, 0, 0);
+            windFrom = targetWind.from;
+            windKnots = targetWind.knots;
+        } else {
+            windFrom = this.windFrom;
+            windKnots = this.windKnots;
+        }
+        
+        const position = this.basePosition || this.group.position;
+        let wind = getLocalNorthVector(position);
+        wind.multiplyScalar(metersPerSecondFromKnots(windKnots));
+        const posUp = getLocalUpVector(position);
+        wind.applyAxisAngle(posUp, radians(180 - windFrom));
+        
+        return wind;
+    }
+    
     preRender(view) {
         if (!this.cloudMesh || !this.cloudMesh.material || !this.cloudMesh.material.uniforms) return;
         
         if (Globals.sunLight) {
             this.cloudMesh.material.uniforms.sunDirection.value.copy(Globals.sunLight.position).normalize();
+        }
+        
+        if (this.basePosition) {
+            if (this.windMode === "No Wind") {
+                this.group.position.copy(this.basePosition);
+            } else {
+                const wind = this.getWindVector();
+                const frame = par.frame || 0;
+                const timeSeconds = frame / (Sit.fps || 30);
+                const offset = wind.clone().multiplyScalar(timeSeconds);
+                this.group.position.copy(this.basePosition).add(offset);
+            }
         }
     }
     
@@ -549,6 +646,9 @@ export class CNodeSynthClouds extends CNode3DGroup {
             this.radiusController = null;
             this.altitudeProxy = null;
             this.radiusProxy = null;
+            this.windModeController = null;
+            this.windFromController = null;
+            this.windKnotsController = null;
         }
         
         setRenderOne(true);
@@ -616,7 +716,10 @@ export class CNodeSynthClouds extends CNode3DGroup {
             density: this.density,
             opacity: this.opacity,
             brightness: this.brightness,
-            seed: this.seed
+            seed: this.seed,
+            windMode: this.windMode,
+            windFrom: this.windFrom,
+            windKnots: this.windKnots
         };
     }
     
@@ -635,7 +738,10 @@ export class CNodeSynthClouds extends CNode3DGroup {
             density: data.density,
             opacity: data.opacity,
             brightness: data.brightness,
-            seed: data.seed
+            seed: data.seed,
+            windMode: data.windMode,
+            windFrom: data.windFrom,
+            windKnots: data.windKnots
         });
     }
     

@@ -2657,6 +2657,35 @@ export class CCustomManager {
                 this.saveGlobalSettings();
             });
         
+        const windFolder = menu.addFolder('Wind');
+        
+        const windModes = ["No Wind", "Use Local", "Use Target", "Custom"];
+        clouds.windModeController = windFolder.add(clouds, 'windMode', windModes)
+            .name('Wind Mode')
+            .onChange(() => {
+                const isCustom = clouds.windMode === "Custom";
+                if (clouds.windFromController) clouds.windFromController.show(isCustom);
+                if (clouds.windKnotsController) clouds.windKnotsController.show(isCustom);
+                setRenderOne(true);
+                this.saveGlobalSettings();
+            });
+        
+        clouds.windFromController = windFolder.add(clouds, 'windFrom', 0, 359, 1)
+            .name('Wind From (°)')
+            .onChange(() => {
+                setRenderOne(true);
+                this.saveGlobalSettings();
+            });
+        clouds.windFromController.show(clouds.windMode === "Custom");
+        
+        clouds.windKnotsController = windFolder.add(clouds, 'windKnots', 0, 200, 1)
+            .name('Wind (knots)')
+            .onChange(() => {
+                setRenderOne(true);
+                this.saveGlobalSettings();
+            });
+        clouds.windKnotsController.show(clouds.windMode === "Custom");
+        
         const menuData = {
             exitEditMode: () => {
                 clouds.setEditMode(false);
