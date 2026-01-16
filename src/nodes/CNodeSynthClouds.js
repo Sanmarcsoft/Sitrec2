@@ -298,6 +298,87 @@ export class CNodeSynthClouds extends CNode3DGroup {
         this.cloudMesh.layers.mask = LAYER.MASK_WORLD;
         this.cloudMesh.frustumCulled = false;
         this.group.add(this.cloudMesh);
+        
+        this.binSort();
+    }
+    
+    binSort() {
+        const lookCameraNode = NodeMan.get("lookCamera", false);
+        if (!lookCameraNode || !this.instanceOffsets || this.cloudCount < 2) return;
+        
+        const camPos = lookCameraNode.camera.position;
+        const groupPos = this.group.position;
+        const offsets = this.instanceOffsets;
+        const sizes = this.instanceSizes;
+        const n = this.cloudCount;
+        
+        const distances = new Float32Array(n);
+        let minDist = Infinity, maxDist = -Infinity;
+        
+        for (let i = 0; i < n; i++) {
+            const i3 = i * 3;
+            const dx = groupPos.x + offsets[i3] - camPos.x;
+            const dy = groupPos.y + offsets[i3 + 1] - camPos.y;
+            const dz = groupPos.z + offsets[i3 + 2] - camPos.z;
+            const d = dx * dx + dy * dy + dz * dz;
+            distances[i] = d;
+            if (d < minDist) minDist = d;
+            if (d > maxDist) maxDist = d;
+        }
+        
+        const NUM_BINS = n;
+        const range = maxDist - minDist;
+        if (range <= 0) return;
+        
+        const binCounts = new Uint32Array(NUM_BINS);
+        const binIndices = new Uint32Array(n);
+        
+        for (let i = 0; i < n; i++) {
+            const bin = Math.min(NUM_BINS - 1, Math.floor((distances[i] - minDist) / range * NUM_BINS));
+            binIndices[i] = bin;
+            binCounts[bin]++;
+        }
+        
+        let maxBinCount = 0;
+        for (let b = 0; b < NUM_BINS; b++) {
+            if (binCounts[b] > maxBinCount) maxBinCount = binCounts[b];
+        }
+        
+        const binStarts = new Uint32Array(NUM_BINS);
+        let sum = 0;
+        for (let b = NUM_BINS - 1; b >= 0; b--) {
+            binStarts[b] = sum;
+            sum += binCounts[b];
+        }
+        
+        const binCurrent = binStarts.slice();
+        
+        const newOffsets = new Float32Array(n * 3);
+        const newSizes = new Float32Array(n * 2);
+        
+        for (let i = 0; i < n; i++) {
+            const bin = binIndices[i];
+            const dest = binCurrent[bin]++;
+            const i3 = i * 3;
+            const d3 = dest * 3;
+            newOffsets[d3] = offsets[i3];
+            newOffsets[d3 + 1] = offsets[i3 + 1];
+            newOffsets[d3 + 2] = offsets[i3 + 2];
+            const i2 = i * 2;
+            const d2 = dest * 2;
+            newSizes[d2] = sizes[i2];
+            newSizes[d2 + 1] = sizes[i2 + 1];
+        }
+        
+        this.instanceOffsets.set(newOffsets);
+        this.instanceSizes.set(newSizes);
+        
+        if (this.cloudGeometry) {
+            this.cloudGeometry.getAttribute('instanceOffset').needsUpdate = true;
+            this.cloudGeometry.getAttribute('instanceSize').needsUpdate = true;
+        }
+        
+        this.combGap = maxBinCount;
     }
     
     getWindVector() {
@@ -360,6 +441,19 @@ export class CNodeSynthClouds extends CNode3DGroup {
         if (view.id !== "lookView") return false;
         
         const camPos = view.camera.position;
+        
+        if (!this.lastSortCamPos) {
+            this.lastSortCamPos = camPos.clone();
+        } else {
+            const dx = camPos.x - this.lastSortCamPos.x;
+            const dy = camPos.y - this.lastSortCamPos.y;
+            const dz = camPos.z - this.lastSortCamPos.z;
+            const distMoved = dx * dx + dy * dy + dz * dz;
+            if (distMoved > 10000) {
+                this.binSort();
+                this.lastSortCamPos.copy(camPos);
+            }
+        }
         const groupPos = this.group.position;
         const offsets = this.instanceOffsets;
         const sizes = this.instanceSizes;
