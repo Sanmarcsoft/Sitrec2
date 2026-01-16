@@ -2,8 +2,6 @@
 // Hooks into console.log, console.error, and console.warn to capture all output
 // Provides export functionality to download logs as a text file
 
-import {Globals} from "./Globals";
-
 const debugLog = {
     buffer: [],
     maxEntries: 10000,  // Prevent memory issues on long sessions
@@ -67,12 +65,7 @@ const debugLog = {
             return String(arg);
         }).join(' ');
 
-        // Capture the actual call site from the stack trace
-        // Stack format: "Error\n    at capture (DebugLog.js:X)\n    at Proxy.apply (DebugLog.js:Y)\n    at actualCaller (file.js:Z)"
-        const stack = new Error().stack;
-        const callerLine = this.extractCaller(stack);
-
-        this.buffer.push(`[${timestamp}] ${level}: ${callerLine} ${message}`);
+        this.buffer.push(`[${timestamp}] ${level}: ${message}`);
 
         // Trim old entries if we exceed max
         if (this.buffer.length > this.maxEntries) {
@@ -95,27 +88,10 @@ const debugLog = {
         const blob = new Blob([content], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
 
-        // Build filename with user info if logged in
-        // Format: sitrec-debug-[userID-username-]2026-01-16T10-30-45.log
-        const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-        let filename = 'sitrec-debug-';
-
-        if (Globals.userID && Globals.userID > 0) {
-            // Sanitize username for filename (remove invalid chars)
-            const safeUsername = Globals.userName
-                ? Globals.userName.replace(/[^a-zA-Z0-9_-]/g, '_')
-                : '';
-            filename += `${Globals.userID}`;
-            if (safeUsername) {
-                filename += `-${safeUsername}`;
-            }
-            filename += '-';
-        }
-        filename += `${timestamp}.log`;
-
         const a = document.createElement('a');
         a.href = url;
-        a.download = filename;
+        // Timestamp format: sitrec-debug-2026-01-16T10-30-45.log
+        a.download = `sitrec-debug-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.log`;
         a.click();
 
         URL.revokeObjectURL(url);
@@ -127,35 +103,6 @@ const debugLog = {
 
     getEntryCount() {
         return this.buffer.length;
-    },
-
-    // Extract the actual caller location from a stack trace, skipping DebugLog internals
-    extractCaller(stack) {
-        if (!stack) return '';
-
-        const lines = stack.split('\n');
-        // Find the first line that's NOT from DebugLog.js
-        // Stack looks like:
-        //   Error
-        //   at capture (DebugLog.js:66)
-        //   at Proxy.<anonymous> (DebugLog.js:28)
-        //   at actualFunction (SomeFile.js:123)  <-- we want this
-        for (const line of lines) {
-            if (line.includes('DebugLog.js') || line.trim() === 'Error') {
-                continue;
-            }
-            // Extract just the relevant part: "SomeFile.js:123" or "(SomeFile.js:123:45)"
-            // Handle both formats: "at func (file:line:col)" and "at file:line:col"
-            const match = line.match(/\(([^)]+)\)/) || line.match(/at\s+(\S+:\d+)/);
-            if (match) {
-                // Return just filename:line (strip full path and column)
-                const fullPath = match[1];
-                // Get just the filename and line number
-                const fileMatch = fullPath.match(/([^/\\]+:\d+)/);
-                return fileMatch ? `[${fileMatch[1]}]` : `[${fullPath}]`;
-            }
-        }
-        return '';
     }
 };
 

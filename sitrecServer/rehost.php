@@ -35,18 +35,9 @@ function startS3() {
 }
 
 
-// if we were passed the parameter "getuser", then we return user info as JSON
+// if we were passed the parameter "getuser", then we just return the user_id
 if (isset($_GET['getuser'])) {
-    header('Content-Type: application/json');
-    $userInfo = getUserInfo();
-    // getUserInfo() returns an array with 'user_id' and optionally 'username'
-    // If it only returns user_id (legacy), wrap it in the expected format
-    if (is_array($userInfo)) {
-        echo json_encode($userInfo);
-    } else {
-        // Legacy: getUserInfo() returned just the ID
-        echo json_encode(['user_id' => $user_id, 'username' => null]);
-    }
+    echo $user_id;
     exit();
 }
 
