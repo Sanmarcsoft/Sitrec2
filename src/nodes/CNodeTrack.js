@@ -41,6 +41,8 @@ export class CNodeTrack extends CNodeEmptyArray {
         ];
         let csv = headers.join(",") + "\n";
 
+        const lookCamera = NodeMan.get("lookCamera", false);
+
         for (let f = 0; f < this.frames; f++) {
             const frameData = this.v(f);
             const timeMS = GlobalDateTimeNode.frameToMS(f);
@@ -56,8 +58,16 @@ export class CNodeTrack extends CNodeEmptyArray {
             }
 
             const misbRow = frameData.misbRow;
-            let vFOV = frameData.vFOV ?? (misbRow ? misbRow[MISB.SensorVerticalFieldofView] : "") ?? "";
+            let vFOV = frameData.vFOV ?? (misbRow ? misbRow[MISB.SensorVerticalFieldofView] : null) ?? "";
             let hFOV = misbRow ? (misbRow[MISB.SensorHorizontalFieldofView] ?? "") : "";
+
+            if (vFOV === "" && lookCamera && lookCamera.camera) {
+                vFOV = lookCamera.camera.fov;
+                const aspect = lookCamera.camera.aspect;
+                const vFovRad = vFOV * Math.PI / 180;
+                const hFovRad = 2 * Math.atan(Math.tan(vFovRad / 2) * aspect);
+                hFOV = hFovRad * 180 / Math.PI;
+            }
 
             let platformHeading = misbRow ? (misbRow[MISB.PlatformHeadingAngle] ?? "") : "";
             let platformPitch = misbRow ? (misbRow[MISB.PlatformPitchAngle] ?? "") : "";
@@ -67,16 +77,18 @@ export class CNodeTrack extends CNodeEmptyArray {
             let sensorEl = misbRow ? (misbRow[MISB.SensorRelativeElevationAngle] ?? "") : "";
             let sensorRoll = misbRow ? (misbRow[MISB.SensorRelativeRollAngle] ?? "") : "";
 
-            if (frameData.heading && frameData.up && frameData.right && frameData.position) {
+            if (frameData.heading && frameData.position) {
                 const [az, el] = getAzElFromPositionAndForward(frameData.position, frameData.heading);
                 sensorAz = az;
                 sensorEl = el;
 
-                const localUp = getLocalUpVector(frameData.position);
-                const rightProjection = localUp.clone().cross(frameData.heading).normalize();
-                const cosRoll = frameData.up.dot(localUp);
-                const sinRoll = frameData.up.dot(rightProjection);
-                sensorRoll = degrees(Math.atan2(sinRoll, cosRoll));
+                if (frameData.up && frameData.right) {
+                    const localUp = getLocalUpVector(frameData.position);
+                    const rightProjection = localUp.clone().cross(frameData.heading).normalize();
+                    const cosRoll = frameData.up.dot(localUp);
+                    const sinRoll = frameData.up.dot(rightProjection);
+                    sensorRoll = degrees(Math.atan2(sinRoll, cosRoll));
+                }
 
                 platformHeading = 0;
                 platformPitch = 0;

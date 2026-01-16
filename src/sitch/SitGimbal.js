@@ -904,7 +904,8 @@ export function SetupGimbal() {
             jetTrack: "jetTrack",
             az: "azSources",
             el: "el",
-        }
+        },
+        exportable: true,
     })
 
 }

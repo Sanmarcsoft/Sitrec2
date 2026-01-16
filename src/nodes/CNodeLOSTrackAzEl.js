@@ -4,6 +4,7 @@ import {Matrix4} from "three";
 import {assert} from "../assert.js";
 import {V3} from "../threeUtils";
 import {CNodeLOS} from "./CNodeLOS";
+import {NodeMan} from "../Globals";
 
 // CNodeLOSTrackAzEl calculates lines of sight from jetTrack, az and el tracks
 // LOS track consists of {position:, heading:) where heading is a unit vector
@@ -14,6 +15,12 @@ export class CNodeLOSTrackAzEl extends CNodeLOS {
         assert(this.in.az !== undefined)
         assert(this.in.el !== undefined)
         this.absolute = v.absolute;
+        
+        this.exportable = v.exportable ?? false;
+        if (this.exportable) {
+            NodeMan.addExportButton(this, "exportMISBCompliantCSV")
+        }
+        
         this.recalculate()
     }
 
