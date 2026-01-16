@@ -32,6 +32,22 @@ Example entry format:
 
 ---
 
+## Version 2.22.0 (2026-01-16)
+
+### New Features
+- **Cloud layers** with sprite-based rendering, proper lighting, and wind-driven animation
+- **Feathered cloud edges** with randomized wiggled borders for realistic appearance
+- **Cloud drag handles** for intuitive positioning and scaling in the scene
+
+### Improvements
+- Clouds conform to earth curvature creating realistic "cloud horizon" for flat cloud banks
+- Optimized cloud rendering with comb sort for proper transparency ordering
+- Optimized cloud mesh generation for better performance
+- Panorama export now starts motion analysis automatically
+- Cloud GUI matches building controls for consistency
+
+---
+
 ## Version 2.21.0 (2026-01-14)
 
 ### New Features
