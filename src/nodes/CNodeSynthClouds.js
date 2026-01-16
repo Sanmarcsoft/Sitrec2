@@ -95,6 +95,7 @@ export class CNodeSynthClouds extends CNode3DGroup {
         this.opacity = v.opacity !== undefined ? v.opacity : 0.8;
         this.brightness = v.brightness !== undefined ? v.brightness : 1.0;
         this.seed = v.seed !== undefined ? v.seed : 0;
+        this.feather = v.feather !== undefined ? v.feather : 1000;
         
         this.windMode = v.windMode !== undefined ? v.windMode : "No Wind";
         this.windFrom = v.windFrom !== undefined ? v.windFrom : 270;
@@ -176,6 +177,14 @@ export class CNodeSynthClouds extends CNode3DGroup {
             const maxRadius = getEdgeRadiusFromTable(edgeRadiusTable, angle);
             
             if (dist > maxRadius) continue;
+            
+            if (this.feather > 0) {
+                const distFromEdge = maxRadius - dist;
+                if (distFromEdge < this.feather) {
+                    const probability = distFromEdge / this.feather;
+                    if (rng() > probability) continue;
+                }
+            }
             
             const drop = dropFromDistance(dist);
 
@@ -717,6 +726,7 @@ export class CNodeSynthClouds extends CNode3DGroup {
             opacity: this.opacity,
             brightness: this.brightness,
             seed: this.seed,
+            feather: this.feather,
             windMode: this.windMode,
             windFrom: this.windFrom,
             windKnots: this.windKnots
@@ -739,6 +749,7 @@ export class CNodeSynthClouds extends CNode3DGroup {
             opacity: data.opacity,
             brightness: data.brightness,
             seed: data.seed,
+            feather: data.feather,
             windMode: data.windMode,
             windFrom: data.windFrom,
             windKnots: data.windKnots

@@ -2657,6 +2657,14 @@ export class CCustomManager {
                 this.saveGlobalSettings();
             });
         
+        editFolder.add(clouds, 'feather', 0, 50000, 10)
+            .name('Feather (m)')
+            .onChange(() => {
+                clouds.buildCloudMesh();
+                setRenderOne(true);
+                this.saveGlobalSettings();
+            });
+        
         const windFolder = menu.addFolder('Wind');
         
         const windModes = ["No Wind", "Use Local", "Use Target", "Custom"];
