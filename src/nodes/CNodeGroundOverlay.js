@@ -4,8 +4,8 @@ import {
     DoubleSide,
     Float32BufferAttribute,
     Mesh,
-    MeshBasicMaterial,
     Raycaster,
+    ShaderMaterial,
     SphereGeometry,
     TextureLoader,
     Vector3
@@ -20,6 +20,7 @@ import {mouseInViewOnly} from "../ViewUtils";
 import {getPointBelow, pointAbove} from "../threeExt";
 import {EventManager} from "../CEventManager";
 import {degrees, radians} from "../utils";
+import {sharedUniforms} from "../js/map33/material/SharedUniforms";
 
 export class CNodeGroundOverlay extends CNode3DGroup {
     constructor(v) {
@@ -38,11 +39,8 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         this.heightOffset = v.heightOffset !== undefined ? v.heightOffset : 1;
         this.wireframe = v.wireframe !== undefined ? v.wireframe : false;
         
-        this.subdivisions = v.subdivisions !== undefined ? v.subdivisions : 100;
-        
-        this.overlayMesh = null;
+        this.overlayTileMeshes = new Map();
         this.overlayMaterial = null;
-        this.overlayGeometry = null;
         this.texture = null;
         
         this.editMode = false;
@@ -56,6 +54,8 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         this.raycaster = new Raycaster();
         this.raycaster.layers.mask = LAYER.MASK_HELPERS;
         
+        this.createMaterial();
+        
         if (this.imageURL) {
             this.loadTexture();
         }
@@ -65,6 +65,49 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         this.createGUIFolder();
     }
     
+    createMaterial() {
+        this.overlayMaterial = new ShaderMaterial({
+            uniforms: {
+                map: { value: this.texture },
+                ...sharedUniforms,
+            },
+            vertexShader: `
+                varying vec2 vUv;
+                varying float vDepth;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    vDepth = gl_Position.w;
+                }
+            `,
+            fragmentShader: `
+                uniform sampler2D map;
+                uniform float nearPlane;
+                uniform float farPlane;
+                varying vec2 vUv;
+                varying float vDepth;
+                void main() {
+                    if (vUv.x < 0.0 || vUv.x > 1.0 || vUv.y < 0.0 || vUv.y > 1.0) {
+                        discard;
+                    }
+                    gl_FragColor = texture2D(map, vUv);
+                    
+                    // Logarithmic depth calculation
+                    float z = (log2(max(nearPlane, 1.0 + vDepth)) / log2(1.0 + farPlane)) * 2.0 - 1.0;
+                    gl_FragDepthEXT = z * 0.5 + 0.5;
+                }
+            `,
+            side: DoubleSide,
+            transparent: true,
+            depthTest: true,
+            depthWrite: false,
+            polygonOffset: true,
+            polygonOffsetFactor: -1,
+            polygonOffsetUnits: -4,
+            wireframe: this.wireframe,
+        });
+    }
+    
     loadTexture() {
         if (!this.imageURL) return;
         
@@ -72,7 +115,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         loader.load(this.imageURL, (texture) => {
             this.texture = texture;
             if (this.overlayMaterial) {
-                this.overlayMaterial.map = texture;
+                this.overlayMaterial.uniforms.map.value = texture;
                 this.overlayMaterial.needsUpdate = true;
             }
             setRenderOne(true);
@@ -122,78 +165,147 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         });
     }
     
+    disposeTileMeshes() {
+        this.overlayTileMeshes.forEach(mesh => {
+            this.group.remove(mesh);
+            if (mesh.geometry) mesh.geometry.dispose();
+        });
+        this.overlayTileMeshes.clear();
+    }
+    
+    disposeTileMesh(tileKey) {
+        const mesh = this.overlayTileMeshes.get(tileKey);
+        if (mesh) {
+            this.group.remove(mesh);
+            if (mesh.geometry) mesh.geometry.dispose();
+            this.overlayTileMeshes.delete(tileKey);
+        }
+    }
+    
+    tilesOverlap(tileNorth, tileSouth, tileEast, tileWest) {
+        return !(tileEast < this.west || tileWest > this.east ||
+                 tileSouth > this.north || tileNorth < this.south);
+    }
+    
+    latLonToUV(lat, lon) {
+        const centerLat = (this.north + this.south) / 2;
+        const centerLon = (this.east + this.west) / 2;
+        
+        let relLat = lat - centerLat;
+        let relLon = lon - centerLon;
+        
+        if (this.rotation !== 0) {
+            const rotationRad = radians(-this.rotation);
+            const cosR = Math.cos(rotationRad);
+            const sinR = Math.sin(rotationRad);
+            
+            const rotatedLon = relLon * cosR - relLat * sinR;
+            const rotatedLat = relLon * sinR + relLat * cosR;
+            
+            relLon = rotatedLon;
+            relLat = rotatedLat;
+        }
+        
+        const latRange = this.north - this.south;
+        const lonRange = this.east - this.west;
+        
+        const u = (relLon / lonRange) + 0.5;
+        const v = 1.0 - ((relLat / latRange) + 0.5);
+        
+        return {u, v};
+    }
+    
     buildMesh() {
-        if (this.overlayMesh) {
-            this.group.remove(this.overlayMesh);
-            if (this.overlayGeometry) this.overlayGeometry.dispose();
-            if (this.overlayMaterial) this.overlayMaterial.dispose();
+        this.disposeTileMeshes();
+        
+        if (!NodeMan.exists("TerrainModel")) {
+            return;
         }
         
-        const corners = this.getCornerPositions();
+        const terrainNode = NodeMan.get("TerrainModel");
+        if (!terrainNode.maps || !terrainNode.UI) {
+            return;
+        }
         
-        const nw = corners[0];
-        const ne = corners[1];
-        const se = corners[2];
-        const sw = corners[3];
+        const terrainMap = terrainNode.maps[terrainNode.UI.mapType]?.map;
+        if (!terrainMap) {
+            return;
+        }
         
-        const subdivs = this.subdivisions;
-        const vertices = [];
-        const uvs = [];
-        const indices = [];
+        const mapProjection = terrainMap.options?.mapProjection;
+        if (!mapProjection) {
+            return;
+        }
         
-        for (let j = 0; j <= subdivs; j++) {
-            const v = j / subdivs;
-            for (let i = 0; i <= subdivs; i++) {
-                const u = i / subdivs;
-                
-                const topPos = nw.clone().lerp(ne, u);
-                const bottomPos = sw.clone().lerp(se, u);
-                const pos = topPos.lerp(bottomPos, v);
-                
-                const groundPos = getPointBelow(pos);
-                const adjustedPos = pointAbove(groundPos, this.heightOffset);
-                
-                vertices.push(adjustedPos.x, adjustedPos.y, adjustedPos.z);
-                uvs.push(u, 1 - v);
+        terrainMap.forEachTile((tile) => {
+            if (!tile.mesh || !tile.mesh.geometry || !tile.loaded) {
+                return;
             }
-        }
-        
-        for (let j = 0; j < subdivs; j++) {
-            for (let i = 0; i < subdivs; i++) {
-                const a = j * (subdivs + 1) + i;
-                const b = a + 1;
-                const c = a + (subdivs + 1);
-                const d = c + 1;
-                
-                indices.push(a, c, b);
-                indices.push(b, c, d);
+            
+            const tileNorth = mapProjection.getNorthLatitude(tile.y, tile.z);
+            const tileSouth = mapProjection.getNorthLatitude(tile.y + 1, tile.z);
+            const tileWest = mapProjection.getLeftLongitude(tile.x, tile.z);
+            const tileEast = mapProjection.getLeftLongitude(tile.x + 1, tile.z);
+            
+            if (!this.tilesOverlap(tileNorth, tileSouth, tileEast, tileWest)) {
+                return;
             }
-        }
-        
-        this.overlayGeometry = new BufferGeometry();
-        this.overlayGeometry.setAttribute('position', new Float32BufferAttribute(vertices, 3));
-        this.overlayGeometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
-        this.overlayGeometry.setIndex(indices);
-        this.overlayGeometry.computeVertexNormals();
-        
-        this.overlayMaterial = new MeshBasicMaterial({
-            map: this.texture,
-            side: DoubleSide,
-            transparent: true,
-            depthTest: true,
-            depthWrite: false,
-            polygonOffset: true,
-            polygonOffsetFactor: -1,
-            polygonOffsetUnits: -4,
-            wireframe: this.wireframe,
+            
+            this.createOverlayTileFromTerrainTile(tile, mapProjection);
         });
         
-        this.overlayMesh = new Mesh(this.overlayGeometry, this.overlayMaterial);
-        this.overlayMesh.layers.mask = LAYER.MASK_WORLD;
-        this.overlayMesh.frustumCulled = false;
-        this.group.add(this.overlayMesh);
-        
         setRenderOne(true);
+    }
+    
+    createOverlayTileFromTerrainTile(tile, mapProjection) {
+        const tileKey = tile.key();
+        
+        this.disposeTileMesh(tileKey);
+        
+        const sourceGeometry = tile.mesh.geometry;
+        const sourcePositions = sourceGeometry.attributes.position.array;
+        const sourceIndex = sourceGeometry.index ? sourceGeometry.index.array : null;
+        const tilePosition = tile.mesh.position;
+        
+        const vertexCount = sourcePositions.length / 3;
+        const newPositions = new Float32Array(sourcePositions.length);
+        const newUVs = new Float32Array(vertexCount * 2);
+        
+        for (let i = 0; i < vertexCount; i++) {
+            const x = sourcePositions[i * 3];
+            const y = sourcePositions[i * 3 + 1];
+            const z = sourcePositions[i * 3 + 2];
+            
+            const worldPos = new Vector3(x + tilePosition.x, y + tilePosition.y, z + tilePosition.z);
+            const adjustedPos = pointAbove(worldPos, this.heightOffset);
+            
+            newPositions[i * 3] = adjustedPos.x;
+            newPositions[i * 3 + 1] = adjustedPos.y;
+            newPositions[i * 3 + 2] = adjustedPos.z;
+            
+            const lla = EUSToLLA(worldPos);
+            const {u, v} = this.latLonToUV(lla.x, lla.y);
+            
+            newUVs[i * 2] = u;
+            newUVs[i * 2 + 1] = v;
+        }
+        
+        const overlayGeometry = new BufferGeometry();
+        overlayGeometry.setAttribute('position', new Float32BufferAttribute(newPositions, 3));
+        overlayGeometry.setAttribute('uv', new Float32BufferAttribute(newUVs, 2));
+        
+        if (sourceIndex) {
+            overlayGeometry.setIndex(Array.from(sourceIndex));
+        }
+        
+        overlayGeometry.computeVertexNormals();
+        
+        const overlayMesh = new Mesh(overlayGeometry, this.overlayMaterial);
+        overlayMesh.layers.mask = LAYER.MASK_WORLD;
+        overlayMesh.frustumCulled = false;
+        
+        this.group.add(overlayMesh);
+        this.overlayTileMeshes.set(tileKey, overlayMesh);
     }
     
     updateMesh() {
@@ -282,9 +394,60 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         document.addEventListener('pointermove', this.onPointerMoveBound);
         document.addEventListener('pointerup', this.onPointerUpBound);
         
-        EventManager.addEventListener("elevationChanged", () => {
+        EventManager.addEventListener("terrainLoaded", () => {
             this.updateMesh();
         });
+        
+        this.onTileOnBound = this.onTileOn.bind(this);
+        this.onTileOffBound = this.onTileOff.bind(this);
+        this.onTileChangedBound = this.onTileChanged.bind(this);
+        
+        EventManager.addEventListener("tileOn", this.onTileOnBound);
+        EventManager.addEventListener("tileOff", this.onTileOffBound);
+        EventManager.addEventListener("tileChanged", this.onTileChangedBound);
+    }
+    
+    getMapProjection() {
+        if (!NodeMan.exists("TerrainModel")) return null;
+        const terrainNode = NodeMan.get("TerrainModel");
+        if (!terrainNode.maps || !terrainNode.UI) return null;
+        const terrainMap = terrainNode.maps[terrainNode.UI.mapType]?.map;
+        if (!terrainMap) return null;
+        return terrainMap.options?.mapProjection;
+    }
+    
+    tileOverlapsOverlay(tile, mapProjection) {
+        const tileNorth = mapProjection.getNorthLatitude(tile.y, tile.z);
+        const tileSouth = mapProjection.getNorthLatitude(tile.y + 1, tile.z);
+        const tileWest = mapProjection.getLeftLongitude(tile.x, tile.z);
+        const tileEast = mapProjection.getLeftLongitude(tile.x + 1, tile.z);
+        return this.tilesOverlap(tileNorth, tileSouth, tileEast, tileWest);
+    }
+    
+    onTileOn(tile) {
+        const mapProjection = this.getMapProjection();
+        if (!mapProjection) return;
+        if (!tile.mesh || !tile.mesh.geometry || !tile.loaded) return;
+        if (!this.tileOverlapsOverlay(tile, mapProjection)) return;
+        
+        this.createOverlayTileFromTerrainTile(tile, mapProjection);
+        setRenderOne(true);
+    }
+    
+    onTileOff(tile) {
+        this.disposeTileMesh(tile.key());
+        setRenderOne(true);
+    }
+    
+    onTileChanged(tile) {
+        const mapProjection = this.getMapProjection();
+        if (!mapProjection) return;
+        if (!tile.mesh || !tile.mesh.geometry || !tile.loaded) return;
+        if (!this.tileOverlapsOverlay(tile, mapProjection)) return;
+        if (!this.overlayTileMeshes.has(tile.key())) return;
+        
+        this.createOverlayTileFromTerrainTile(tile, mapProjection);
+        setRenderOne(true);
     }
     
     onPointerDown(event) {
@@ -529,12 +692,13 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         document.removeEventListener('pointermove', this.onPointerMoveBound);
         document.removeEventListener('pointerup', this.onPointerUpBound);
         
-        this.removeControlPoints();
+        EventManager.removeEventListener("tileOn", this.onTileOnBound);
+        EventManager.removeEventListener("tileOff", this.onTileOffBound);
+        EventManager.removeEventListener("tileChanged", this.onTileChangedBound);
         
-        if (this.overlayMesh) {
-            this.group.remove(this.overlayMesh);
-        }
-        if (this.overlayGeometry) this.overlayGeometry.dispose();
+        this.removeControlPoints();
+        this.disposeTileMeshes();
+        
         if (this.overlayMaterial) this.overlayMaterial.dispose();
         if (this.texture) this.texture.dispose();
         

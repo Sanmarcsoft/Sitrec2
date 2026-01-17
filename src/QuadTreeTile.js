@@ -3,6 +3,7 @@ import {boxMark, DebugArrowAB, removeDebugArrow} from "./threeExt";
 import {LLAToEUS, wgs84} from "./LLA-ECEF-ENU";
 import {GlobalScene} from "./LocalFrame";
 import {Globals} from "./Globals";
+import {EventManager} from "./CEventManager";
 import {getLocalDownVector, getLocalNorthVector, getLocalUpVector, pointOnSphereBelow} from "./SphericalMath";
 import {loadTextureWithRetries} from "./js/map33/material/QuadTextureMaterial";
 import {convertTIFFToElevationArray} from "./TIFFUtils";
@@ -1090,6 +1091,8 @@ export class QuadTreeTile {
         if (this.skirtMesh && this.skirtGeometry) {
             this.updateSkirtGeometry();
         }
+        
+        EventManager.dispatchEvent("tileChanged", this);
     }
 
     // Flat version of recalculateCurve that assumes elevation is always 0
@@ -1172,7 +1175,8 @@ export class QuadTreeTile {
         await fastComputeVertexNormalsAsync(geometry).catch(error => {
             console.warn(`Failed to compute vertex normals for tile ${this.key()}:`, error);
         });
-
+        
+        EventManager.dispatchEvent("tileChanged", this);
     }
 
     // Optimized Web Mercator version of recalculateCurve that steps directly over tile coordinates
@@ -1297,6 +1301,8 @@ export class QuadTreeTile {
         // if (duration > 5) { // Only log if it takes more than 5ms
         //     console.log(`recalculateCurveWebMercator for tile ${this.key()}: ${duration.toFixed(2)}ms (${geometry.attributes.position.count} vertices)`);
         // }
+        
+        EventManager.dispatchEvent("tileChanged", this);
     }
 
     buildMaterial() {

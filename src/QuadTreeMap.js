@@ -6,6 +6,7 @@ import {altitudeAboveSphere, distanceToHorizon, hiddenByGlobe} from "./Spherical
 import * as LAYER from "./LayerMasks";
 import {assert} from "./assert";
 import "./threeExt";
+import {EventManager} from "./CEventManager";
 
 // Reusable Vector3 objects to avoid garbage collection pressure
 // These are reused across all tile visibility calculations
@@ -830,16 +831,19 @@ export class QuadTreeMap {
 
     // Set the layer mask on a tile's mesh objects
     setTileLayerMask(tile, layerMask) {
-
-        // layerMask |= LAYER.MASK_EYES;
+        const oldMask = tile.mesh ? tile.mesh.layers.mask : 0;
 
         if (tile.mesh) {
-            //tile.mesh.layers.disableAll();
             tile.mesh.layers.mask = layerMask;
         }
         if (tile.skirtMesh) {
-            //tile.skirtMesh.layers.disableAll();
             tile.skirtMesh.layers.mask = layerMask;
+        }
+        
+        if (oldMask === 0 && layerMask !== 0) {
+            EventManager.dispatchEvent("tileOn", tile);
+        } else if (oldMask !== 0 && layerMask === 0) {
+            EventManager.dispatchEvent("tileOff", tile);
         }
     }
 
