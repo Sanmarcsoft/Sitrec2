@@ -36,6 +36,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         this.rotation = v.rotation !== undefined ? v.rotation : 0;
         
         this.imageURL = v.imageURL || "";
+        this.imageFileID = v.imageFileID || null;
         this.wireframe = v.wireframe !== undefined ? v.wireframe : false;
         this.opacity = v.opacity !== undefined ? v.opacity : 1.0;
         
@@ -351,7 +352,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
     }
     
     createSkirtMesh(positions, uvs, segments, tile, layerMask) {
-        const skirtDepth = 5;
+        const skirtDepth = tile.size * 0.1;
         
         const tileNorth = tile.map.options.mapProjection.getNorthLatitude(tile.y, tile.z);
         const tileSouth = tile.map.options.mapProjection.getNorthLatitude(tile.y + 1, tile.z);
@@ -809,6 +810,13 @@ export class CNodeGroundOverlay extends CNode3DGroup {
     }
     
     serialize() {
+        let imageURL = this.imageURL;
+        if (this.imageFileID && FileManager.exists(this.imageFileID)) {
+            const fileEntry = FileManager.list[this.imageFileID];
+            if (fileEntry.staticURL) {
+                imageURL = fileEntry.staticURL;
+            }
+        }
         return {
             id: this.overlayID,
             name: this.name,
@@ -817,7 +825,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
             east: this.east,
             west: this.west,
             rotation: this.rotation,
-            imageURL: this.imageURL,
+            imageURL: imageURL,
             wireframe: this.wireframe,
             opacity: this.opacity,
         };

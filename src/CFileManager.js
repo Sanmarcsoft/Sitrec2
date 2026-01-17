@@ -22,7 +22,18 @@ import {
 } from "./KMLUtils";
 import {CRehoster} from "./CRehoster";
 import {CManager} from "./CManager";
-import {CustomManager, Globals, guiMenus, NodeMan, setNewSitchObject, setRenderOne, Sit, TrackManager} from "./Globals";
+import {
+    CustomManager,
+    Globals,
+    guiMenus,
+    NodeMan,
+    setNewSitchObject,
+    setRenderOne,
+    Sit,
+    Synth3DManager,
+    TrackManager
+} from "./Globals";
+import {fromArrayBuffer as geotiffFromArrayBuffer} from 'geotiff';
 import {DragDropHandler} from "./DragDropHandler";
 import {parseAirdataCSV} from "./ParseAirdataCSV";
 import {parseKLVFile, parseMISB1CSV} from "./MISBUtils";
@@ -1573,9 +1584,78 @@ export class CFileManager extends CManager {
                 return;
             }
 
+            // is it a GeoTIFF?
+            if (fileManagerEntry.dataType === "geotiff") {
+                const { buffer, bounds } = parsedFile;
+                this.createGroundOverlayFromGeoTIFF(filename, buffer, bounds);
+                // Mark the original .tif file to skip serialization
+                // We only want to serialize the converted PNG, not the original GeoTIFF
+                fileManagerEntry.skipSerialization = true;
+                return;
+            }
+
             console.warn("Unhandled file type: " + fileExt + " for " + filename);
 
         }
+    }
+
+    async createGroundOverlayFromGeoTIFF(filename, buffer, bounds) {
+        const baseName = filename.replace(/\.[^.]+$/, '');
+        const fileID = `geotiff_${baseName}_${Date.now()}`;
+        
+        const tiff = await geotiffFromArrayBuffer(buffer);
+        const image = await tiff.getImage();
+        const width = image.getWidth();
+        const height = image.getHeight();
+        const rasters = await image.readRasters();
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.createImageData(width, height);
+        
+        const numBands = rasters.length;
+        for (let i = 0; i < width * height; i++) {
+            if (numBands >= 3) {
+                imageData.data[i * 4] = rasters[0][i];
+                imageData.data[i * 4 + 1] = rasters[1][i];
+                imageData.data[i * 4 + 2] = rasters[2][i];
+                imageData.data[i * 4 + 3] = numBands >= 4 ? rasters[3][i] : 255;
+            } else {
+                const val = rasters[0][i];
+                imageData.data[i * 4] = val;
+                imageData.data[i * 4 + 1] = val;
+                imageData.data[i * 4 + 2] = val;
+                imageData.data[i * 4 + 3] = 255;
+            }
+        }
+        ctx.putImageData(imageData, 0, 0);
+        
+        const pngBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        const pngBuffer = await pngBlob.arrayBuffer();
+        const blobURL = URL.createObjectURL(pngBlob);
+        
+        const pngFilename = baseName + '.png';
+        this.remove(fileID);
+        this.add(fileID, pngBuffer, pngBuffer);
+        this.list[fileID].dynamicLink = true;
+        this.list[fileID].staticURL = null;
+        this.list[fileID].filename = pngFilename;
+        this.list[fileID].dataType = "image";
+        
+        Synth3DManager.addOverlay({
+            name: baseName,
+            north: bounds.north,
+            south: bounds.south,
+            east: bounds.east,
+            west: bounds.west,
+            rotation: 0,
+            imageURL: blobURL,
+            imageFileID: fileID,
+        });
+        CustomManager.saveGlobalSettings();
+        console.log(`Created ground overlay from GeoTIFF: ${filename} (fileID: ${fileID})`);
     }
 
     /**
@@ -1728,8 +1808,29 @@ export class CFileManager extends CManager {
                     break
                 case "tif":
                 case "tiff":
-                    prom = createImageFromArrayBuffer(buffer, 'image/tiff')
-                    dataType = "image";
+                    prom = (async () => {
+                        try {
+                            const tiff = await geotiffFromArrayBuffer(buffer);
+                            const image = await tiff.getImage();
+                            const bbox = image.getBoundingBox();
+                            if (bbox && bbox.length === 4) {
+                                const [west, south, east, north] = bbox;
+                                if (west !== 0 || south !== 0 || east !== image.getWidth() || north !== image.getHeight()) {
+                                    dataType = "geotiff";
+                                    return {
+                                        buffer: buffer,
+                                        bounds: { north, south, east, west },
+                                        width: image.getWidth(),
+                                        height: image.getHeight()
+                                    };
+                                }
+                            }
+                        } catch (e) {
+                            console.log("GeoTIFF parsing failed, treating as regular image:", e.message);
+                        }
+                        dataType = "image";
+                        return createImageFromArrayBuffer(buffer, 'image/tiff');
+                    })();
                     break
                 case "webp":
                     prom = createImageFromArrayBuffer(buffer, 'image/webp')
