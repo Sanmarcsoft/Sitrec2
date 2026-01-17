@@ -140,8 +140,6 @@ export class CCustomManager {
                 // Sanitize the value
                 const newValue = Math.max(5, Math.min(30, Math.round(value)));
                 Globals.settings.maxDetails = newValue;
-                // Save settings (will debounce automatically if needed)
-                this.saveGlobalSettings();
             })
             .onFinishChange(()=>{
                 // When we release the slider, force immediate save and recalculate everything
@@ -156,13 +154,12 @@ export class CCustomManager {
             })
             .listen();
         
-        // Add FPS Limit dropdown
+        // Add FPS Limit dropdown - dropdown doesn't need onFinishChange, immediate save is fine
         settingsFolder.add(Globals.settings, "fpsLimit", [60, 30, 20, 15])
             .name("Frame Rate Limit")
             .tooltip("Set maximum frame rate (60, 30, 20, or 15 fps)")
             .onChange(() => {
-                // Save settings when changed
-                this.saveGlobalSettings();
+                this.saveGlobalSettings(true);
             })
             .listen();
         
@@ -170,10 +167,6 @@ export class CCustomManager {
         settingsFolder.add(Globals.settings, "tileSegments", [8, 16, 32, 64, 128])
             .name("Tile Segments")
             .tooltip("Mesh resolution for terrain tiles. Higher values = more detail but slower")
-            .onChange(() => {
-                // Save settings when changed
-                this.saveGlobalSettings();
-            })
             .onFinishChange(() => {
                 // When selection is finalized, force immediate save and refresh terrain
                 this.saveGlobalSettings(true);
@@ -186,16 +179,11 @@ export class CCustomManager {
             })
             .listen();
         
-        // Add Max Resolution dropdown
+        // Add Max Resolution dropdown - dropdown doesn't need onFinishChange
         settingsFolder.add(Globals.settings, "videoMaxSize", ["None", "1080P", "720P", "480P", "360P"])
             .name("Max Resolution")
             .tooltip("Maximum video frame resolution (longer side). Reduces GPU memory usage. Applies to newly loaded frames.")
             .onChange(() => {
-                // Save settings when changed
-                this.saveGlobalSettings();
-            })
-            .onFinishChange(() => {
-                // When selection is finalized, force immediate save
                 this.saveGlobalSettings(true);
             })
             .listen();
@@ -2617,8 +2605,8 @@ export class CCustomManager {
                 clouds.updateGroupPosition();
                 if (clouds.editMode) clouds.createControlHandles();
                 setRenderOne(true);
-                this.saveGlobalSettings();
-            });
+            })
+            .onFinishChange(() => { this.saveGlobalSettings(true); });
         
         const radiusProxy = {
             _displayValue: clouds.radius,
@@ -2634,24 +2622,24 @@ export class CCustomManager {
                 clouds.buildCloudMesh();
                 if (clouds.editMode) clouds.createControlHandles();
                 setRenderOne(true);
-                this.saveGlobalSettings();
-            });
+            })
+            .onFinishChange(() => { this.saveGlobalSettings(true); });
         
         editFolder.add(clouds, 'cloudSize', 50, 1000, 10)
             .name('Cloud Size (m)')
             .onChange(() => {
                 clouds.buildCloudMesh();
                 setRenderOne(true);
-                this.saveGlobalSettings();
-            });
+            })
+            .onFinishChange(() => { this.saveGlobalSettings(true); });
         
         editFolder.add(clouds, 'density', 0.1, 2.0, 0.1)
             .name('Density')
             .onChange(() => {
                 clouds.buildCloudMesh();
                 setRenderOne(true);
-                this.saveGlobalSettings();
-            });
+            })
+            .onFinishChange(() => { this.saveGlobalSettings(true); });
         
         editFolder.add(clouds, 'opacity', 0.1, 1.0, 0.05)
             .name('Opacity')
@@ -2660,56 +2648,56 @@ export class CCustomManager {
                     clouds.cloudMesh.material.uniforms.opacity.value = clouds.opacity;
                 }
                 setRenderOne(true);
-                this.saveGlobalSettings();
-            });
+            })
+            .onFinishChange(() => { this.saveGlobalSettings(true); });
         
         editFolder.add(clouds, 'brightness', 0, 2, 0.05)
             .name('Brightness')
             .onChange(() => {
                 clouds.buildCloudMesh();
                 setRenderOne(true);
-                this.saveGlobalSettings();
-            });
+            })
+            .onFinishChange(() => { this.saveGlobalSettings(true); });
         
         editFolder.add(clouds, 'depth', 0, 2000, 10)
             .name('Depth (m)')
             .onChange(() => {
                 clouds.buildCloudMesh();
                 setRenderOne(true);
-                this.saveGlobalSettings();
-            });
+            })
+            .onFinishChange(() => { this.saveGlobalSettings(true); });
         
         editFolder.add(clouds, 'edgeWiggle', 0, 0.5, 0.01)
             .name('Edge Wiggle')
             .onChange(() => {
                 clouds.buildCloudMesh();
                 setRenderOne(true);
-                this.saveGlobalSettings();
-            });
+            })
+            .onFinishChange(() => { this.saveGlobalSettings(true); });
         
         editFolder.add(clouds, 'edgeFrequency', 1, 20, 1)
             .name('Edge Frequency')
             .onChange(() => {
                 clouds.buildCloudMesh();
                 setRenderOne(true);
-                this.saveGlobalSettings();
-            });
+            })
+            .onFinishChange(() => { this.saveGlobalSettings(true); });
         
         editFolder.add(clouds, 'seed', 0, 9999, 1)
             .name('Seed')
             .onChange(() => {
                 clouds.buildCloudMesh();
                 setRenderOne(true);
-                this.saveGlobalSettings();
-            });
+            })
+            .onFinishChange(() => { this.saveGlobalSettings(true); });
         
         editFolder.add(clouds, 'feather', 0, 50000, 10)
             .name('Feather (m)')
             .onChange(() => {
                 clouds.buildCloudMesh();
                 setRenderOne(true);
-                this.saveGlobalSettings();
-            });
+            })
+            .onFinishChange(() => { this.saveGlobalSettings(true); });
         
         const windFolder = menu.addFolder('Wind');
         
@@ -2721,23 +2709,23 @@ export class CCustomManager {
                 if (clouds.windFromController) clouds.windFromController.show(isCustom);
                 if (clouds.windKnotsController) clouds.windKnotsController.show(isCustom);
                 setRenderOne(true);
-                this.saveGlobalSettings();
+                this.saveGlobalSettings(true);
             });
         
         clouds.windFromController = windFolder.add(clouds, 'windFrom', 0, 359, 1)
             .name('Wind From (°)')
             .onChange(() => {
                 setRenderOne(true);
-                this.saveGlobalSettings();
-            });
+            })
+            .onFinishChange(() => { this.saveGlobalSettings(true); });
         clouds.windFromController.show(clouds.windMode === "Custom");
         
         clouds.windKnotsController = windFolder.add(clouds, 'windKnots', 0, 200, 1)
             .name('Wind (knots)')
             .onChange(() => {
                 setRenderOne(true);
-                this.saveGlobalSettings();
-            });
+            })
+            .onFinishChange(() => { this.saveGlobalSettings(true); });
         clouds.windKnotsController.show(clouds.windMode === "Custom");
         
         const menuData = {

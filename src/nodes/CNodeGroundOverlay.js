@@ -4,6 +4,7 @@ import {
     DoubleSide,
     Float32BufferAttribute,
     Mesh,
+    MeshBasicMaterial,
     Raycaster,
     ShaderMaterial,
     SphereGeometry,
@@ -34,7 +35,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         this.east = v.east !== undefined ? v.east : 0;
         this.west = v.west !== undefined ? v.west : 0;
         this.rotation = v.rotation !== undefined ? v.rotation : 0;
-        
+
         this.imageURL = v.imageURL || "";
         this.imageFileID = v.imageFileID || null;
         this.wireframe = v.wireframe !== undefined ? v.wireframe : false;
@@ -133,39 +134,26 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         const centerLat = (this.north + this.south) / 2;
         const centerLon = (this.east + this.west) / 2;
         const centerEUS = LLAToEUS(centerLat, centerLon, 0);
-        
-        const rotationRad = radians(this.rotation);
-        const cosR = Math.cos(rotationRad);
-        const sinR = Math.sin(rotationRad);
-        
+
         const corners = [
             {lat: this.north, lon: this.west},
             {lat: this.north, lon: this.east},
             {lat: this.south, lon: this.east},
             {lat: this.south, lon: this.west}
         ];
-        
+
         return corners.map(corner => {
             let pos = LLAToEUS(corner.lat, corner.lon, 0);
-            
+
             if (this.rotation !== 0) {
+                // Rotate in EUS space around local up vector
                 const offset = pos.clone().sub(centerEUS);
-                const localUp = getLocalUpVector(centerEUS);
-                
-                const east = new Vector3(1, 0, 0).cross(localUp).normalize();
-                const north = new Vector3().crossVectors(localUp, east).normalize();
-                
-                const eastComponent = offset.dot(east);
-                const northComponent = offset.dot(north);
-                
-                const rotatedEast = eastComponent * cosR - northComponent * sinR;
-                const rotatedNorth = eastComponent * sinR + northComponent * cosR;
-                
-                pos = centerEUS.clone()
-                    .add(east.clone().multiplyScalar(rotatedEast))
-                    .add(north.clone().multiplyScalar(rotatedNorth));
+                const up = getLocalUpVector(centerEUS);
+                const rotationRad = radians(this.rotation);
+                const rotatedOffset = offset.clone().applyAxisAngle(up, rotationRad);
+                pos = centerEUS.clone().add(rotatedOffset);
             }
-            
+
             return pos;
         });
     }
@@ -208,28 +196,32 @@ export class CNodeGroundOverlay extends CNode3DGroup {
     latLonToUV(lat, lon) {
         const centerLat = (this.north + this.south) / 2;
         const centerLon = (this.east + this.west) / 2;
-        
+
         let relLat = lat - centerLat;
         let relLon = lon - centerLon;
-        
+
         if (this.rotation !== 0) {
+            // Rotate in EUS space around local up vector, then convert back to lat/lon
+            const centerEUS = LLAToEUS(centerLat, centerLon, 0);
+            const pos = LLAToEUS(lat, lon, 0);
+            const offset = pos.clone().sub(centerEUS);
+
+            const up = getLocalUpVector(centerEUS);
             const rotationRad = radians(-this.rotation);
-            const cosR = Math.cos(rotationRad);
-            const sinR = Math.sin(rotationRad);
-            
-            const rotatedLon = relLon * cosR - relLat * sinR;
-            const rotatedLat = relLon * sinR + relLat * cosR;
-            
-            relLon = rotatedLon;
-            relLat = rotatedLat;
+            const rotatedOffset = offset.clone().applyAxisAngle(up, rotationRad);
+            const rotatedPos = centerEUS.clone().add(rotatedOffset);
+
+            const rotatedLLA = EUSToLLA(rotatedPos);
+            relLat = rotatedLLA.x - centerLat;
+            relLon = rotatedLLA.y - centerLon;
         }
-        
+
         const latRange = this.north - this.south;
         const lonRange = this.east - this.west;
-        
+
         const u = (relLon / lonRange) + 0.5;
         const v = 1.0 - ((relLat / latRange) + 0.5);
-        
+
         return {u, v};
     }
     
@@ -444,38 +436,41 @@ export class CNodeGroundOverlay extends CNode3DGroup {
     
     createControlPoints() {
         this.removeControlPoints();
-        
+
         const corners = this.getCornerPositions();
-        const handleSize = 50;
-        
+        const handleGeometry = new SphereGeometry(3, 16, 16);
+        const groupPos = this.group.position;
+
         corners.forEach((pos, index) => {
             const groundPos = getPointBelow(pos);
             const adjustedPos = pointAbove(groundPos, 5);
-            
-            const geometry = new SphereGeometry(handleSize, 16, 16);
-            const material = new MeshBasicMaterial({color: 0xffff00, transparent: true, opacity: 0.8});
-            const handle = new Mesh(geometry, material);
-            handle.position.copy(adjustedPos);
+
+            const material = new MeshBasicMaterial({color: 0xffff00, depthTest: false, transparent: true, opacity: 0.8});
+            const handle = new Mesh(handleGeometry.clone(), material);
+            // Convert world position to local position relative to group
+            handle.position.copy(adjustedPos).sub(groupPos);
             handle.layers.mask = LAYER.MASK_HELPERS;
             handle.userData.cornerIndex = index;
             handle.userData.handleType = 'corner';
             this.group.add(handle);
             this.cornerHandles.push(handle);
         });
-        
+
         const centerLat = (this.north + this.south) / 2;
         const centerLon = (this.east + this.west) / 2;
         const centerEUS = LLAToEUS(centerLat, centerLon, 0);
         const groundCenter = getPointBelow(centerEUS);
         const adjustedCenter = pointAbove(groundCenter, 5);
-        
-        const rotGeometry = new SphereGeometry(handleSize * 0.8, 16, 16);
-        const rotMaterial = new MeshBasicMaterial({color: 0x00ffff, transparent: true, opacity: 0.8});
-        this.rotationHandle = new Mesh(rotGeometry, rotMaterial);
-        this.rotationHandle.position.copy(adjustedCenter);
+
+        const rotMaterial = new MeshBasicMaterial({color: 0x00ffff, depthTest: false, transparent: true, opacity: 0.8});
+        this.rotationHandle = new Mesh(handleGeometry.clone(), rotMaterial);
+        // Convert world position to local position relative to group
+        this.rotationHandle.position.copy(adjustedCenter).sub(groupPos);
         this.rotationHandle.layers.mask = LAYER.MASK_HELPERS;
         this.rotationHandle.userData.handleType = 'rotation';
         this.group.add(this.rotationHandle);
+
+        handleGeometry.dispose();
     }
     
     removeControlPoints() {
@@ -600,25 +595,61 @@ export class CNodeGroundOverlay extends CNode3DGroup {
     
     onPointerDown(event) {
         if (!this.editMode) return;
+        if (event.button !== 0) return;
+        
+        let target = event.target;
+        while (target) {
+            if (target.classList && target.classList.contains('lil-gui')) {
+                return;
+            }
+            target = target.parentElement;
+        }
         
         const view = ViewMan.get("mainView");
         if (!view || !mouseInViewOnly(view, event.clientX, event.clientY)) return;
         
-        const mouseYUp = view.heightPx - (event.clientY - view.topPx);
-        const mouseRay = makeMouseRay(view, event.clientX, mouseYUp);
+        const handle = this.getHandleAtMouse(event.clientX, event.clientY);
+        if (handle) {
+            this.isDragging = true;
+            this.draggingHandle = handle;
+            
+            if (view.controls) {
+                view.controls.enabled = false;
+            }
+            
+            event.stopPropagation();
+            event.preventDefault();
+        }
+    }
+    
+    getHandleAtMouse(mouseX, mouseY) {
+        const view = ViewMan.get("mainView");
+        if (!view) return null;
+        
+        const mouseYUp = view.heightPx - (mouseY - view.topPx);
+        const mouseRay = makeMouseRay(view, mouseX, mouseYUp);
         this.raycaster.setFromCamera(mouseRay, view.camera);
         
-        const handles = [...this.cornerHandles];
-        if (this.rotationHandle) handles.push(this.rotationHandle);
-        
-        const intersects = this.raycaster.intersectObjects(handles, false);
-        
-        if (intersects.length > 0) {
-            this.isDragging = true;
-            this.draggingHandle = intersects[0].object;
-            event.preventDefault();
-            event.stopPropagation();
+        const handles = [];
+        this.cornerHandles.forEach((mesh, index) => {
+            handles.push({mesh, type: 'corner', index});
+        });
+        if (this.rotationHandle) {
+            handles.push({mesh: this.rotationHandle, type: 'rotation'});
         }
+        
+        let closest = null;
+        let closestDist = Infinity;
+        
+        for (const h of handles) {
+            const intersects = this.raycaster.intersectObject(h.mesh, false);
+            if (intersects.length > 0 && intersects[0].distance < closestDist) {
+                closestDist = intersects[0].distance;
+                closest = h;
+            }
+        }
+        
+        return closest;
     }
     
     onPointerMove(event) {
@@ -638,10 +669,9 @@ export class CNodeGroundOverlay extends CNode3DGroup {
                 if (intersect) {
                     const lla = EUSToLLA(intersect.point);
                     
-                    if (this.draggingHandle.userData.handleType === 'corner') {
-                        const cornerIndex = this.draggingHandle.userData.cornerIndex;
-                        this.updateCorner(cornerIndex, lla.x, lla.y);
-                    } else if (this.draggingHandle.userData.handleType === 'rotation') {
+                    if (this.draggingHandle.type === 'corner') {
+                        this.updateCorner(this.draggingHandle.index, lla.x, lla.y);
+                    } else if (this.draggingHandle.type === 'rotation') {
                         const centerLat = (this.north + this.south) / 2;
                         const centerLon = (this.east + this.west) / 2;
                         const angle = Math.atan2(lla.y - centerLon, lla.x - centerLat);
@@ -650,7 +680,6 @@ export class CNodeGroundOverlay extends CNode3DGroup {
                     
                     this.updateMesh();
                     this.updateGUIControllers();
-                    CustomManager.saveGlobalSettings();
                 }
             }
         }
@@ -679,27 +708,32 @@ export class CNodeGroundOverlay extends CNode3DGroup {
     
     onPointerUp(event) {
         if (this.isDragging) {
+            const view = ViewMan.get("mainView");
+            if (view && view.controls) {
+                view.controls.enabled = true;
+            }
             this.isDragging = false;
             this.draggingHandle = null;
-            CustomManager.saveGlobalSettings();
+          //  CustomManager.saveGlobalSettings();
         }
     }
     
     updateHandleScales(view) {
         if (!this.editMode || !view || !view.pixelsToMeters) return;
         
-        const targetPixels = 10;
+        const handlePixelSize = 20;
+        const worldPos = new Vector3();
         
         this.cornerHandles.forEach(handle => {
-            const metersPerPixel = view.pixelsToMeters(handle.position, 1);
-            const scale = metersPerPixel * targetPixels;
-            handle.scale.set(scale, scale, scale);
+            handle.getWorldPosition(worldPos);
+            const scale = view.pixelsToMeters(worldPos, handlePixelSize);
+            handle.scale.set(scale / 3, scale / 3, scale / 3);
         });
         
         if (this.rotationHandle) {
-            const metersPerPixel = view.pixelsToMeters(this.rotationHandle.position, 1);
-            const scale = metersPerPixel * targetPixels * 0.8;
-            this.rotationHandle.scale.set(scale, scale, scale);
+            this.rotationHandle.getWorldPosition(worldPos);
+            const scale = view.pixelsToMeters(worldPos, handlePixelSize);
+            this.rotationHandle.scale.set(scale / 3, scale / 3, scale / 3);
         }
     }
     
@@ -708,35 +742,29 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         
         this.guiFolder.add(this, 'imageURL').name('Image URL').onChange(() => {
             this.loadTexture();
-            CustomManager.saveGlobalSettings();
-        });
+        }).onFinishChange(() => {  });
         
         this.guiFolder.add({rehost: () => this.showRehostDialog()}, 'rehost').name('Rehost Local Image');
         
         this.guiFolder.add(this, 'north', -90, 90, 0.0001).name('North').onChange(() => {
             this.updateMesh();
-            CustomManager.saveGlobalSettings();
-        });
+        }).onFinishChange(() => {  });
         
         this.guiFolder.add(this, 'south', -90, 90, 0.0001).name('South').onChange(() => {
             this.updateMesh();
-            CustomManager.saveGlobalSettings();
-        });
+        }).onFinishChange(() => {  });
         
         this.guiFolder.add(this, 'east', -180, 180, 0.0001).name('East').onChange(() => {
             this.updateMesh();
-            CustomManager.saveGlobalSettings();
-        });
+        }).onFinishChange(() => {  });
         
         this.guiFolder.add(this, 'west', -180, 180, 0.0001).name('West').onChange(() => {
             this.updateMesh();
-            CustomManager.saveGlobalSettings();
-        });
+        }).onFinishChange(() => {  });
         
         this.guiFolder.add(this, 'rotation', -180, 180, 0.1).name('Rotation').onChange(() => {
             this.updateMesh();
-            CustomManager.saveGlobalSettings();
-        });
+        }).onFinishChange(() => {  });
         
         this.guiFolder.add(this, 'wireframe').name('Wireframe').onChange(() => {
             if (this.overlayMaterial) {
@@ -744,7 +772,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
                 this.overlayMaterial.needsUpdate = true;
             }
             setRenderOne(true);
-            CustomManager.saveGlobalSettings();
+
         });
         
         this.guiFolder.add(this, 'opacity', 0, 1, 0.01).name('Opacity').onChange(() => {
@@ -752,8 +780,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
                 this.overlayMaterial.uniforms.opacity.value = this.opacity;
             }
             setRenderOne(true);
-            CustomManager.saveGlobalSettings();
-        });
+        }).onFinishChange(() => {  });
         
         this.guiFolder.add({edit: () => this.setEditMode(!this.editMode)}, 'edit').name('Toggle Edit Mode');
         

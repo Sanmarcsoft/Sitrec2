@@ -637,7 +637,6 @@ export class CNodeSynthClouds extends CNode3DGroup {
             }
             
             setRenderOne(true);
-            CustomManager.saveGlobalSettings();
         } else {
             const handle = this.getHandleAtMouse(event.clientX, event.clientY);
             if (handle !== this.hoveredHandle) {
@@ -824,8 +823,7 @@ export class CNodeSynthClouds extends CNode3DGroup {
         
         this.guiFolder.add(this, 'name').name('Name').onChange(() => {
             this.guiFolder.name = `Clouds: ${this.name}`;
-            CustomManager.saveGlobalSettings();
-        });
+        }).onFinishChange(() => { CustomManager.saveGlobalSettings(true); });
         
         const actions = {
             edit: () => {
