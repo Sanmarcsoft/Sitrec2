@@ -36,6 +36,7 @@ import {CNodeDisplayTargetSphere} from "../nodes/CNodeDisplayTargetSphere";
 import {setupOpts} from "../JetChart";
 import {CNodeTrackAir} from "../nodes/CNodeTrackAir";
 import {ViewMan} from "../CViewManager";
+import {CNodeGimbalTriangulate} from "../nodes/CNodeGimbalTriangulate";
 
 const GimbalDefaults = {
     name:"gimbal",
@@ -906,6 +907,13 @@ export function SetupGimbal() {
             el: "el",
         },
         exportable: true,
+    })
+
+    new CNodeGimbalTriangulate({
+        id: "gimbalTriangulate",
+        inputs: {
+            LOS: "JetLOS",
+        },
     })
 
 }
