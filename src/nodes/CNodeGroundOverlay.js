@@ -38,6 +38,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         this.imageURL = v.imageURL || "";
         this.heightOffset = v.heightOffset !== undefined ? v.heightOffset : 1;
         this.wireframe = v.wireframe !== undefined ? v.wireframe : false;
+        this.opacity = v.opacity !== undefined ? v.opacity : 1.0;
         
         this.overlayTileMeshes = new Map();
         this.overlayMaterial = null;
@@ -69,6 +70,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         this.overlayMaterial = new ShaderMaterial({
             uniforms: {
                 map: { value: this.texture },
+                opacity: { value: this.opacity },
                 ...sharedUniforms,
             },
             vertexShader: `
@@ -82,6 +84,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
             `,
             fragmentShader: `
                 uniform sampler2D map;
+                uniform float opacity;
                 uniform float nearPlane;
                 uniform float farPlane;
                 varying vec2 vUv;
@@ -90,7 +93,8 @@ export class CNodeGroundOverlay extends CNode3DGroup {
                     if (vUv.x < 0.0 || vUv.x > 1.0 || vUv.y < 0.0 || vUv.y > 1.0) {
                         discard;
                     }
-                    gl_FragColor = texture2D(map, vUv);
+                    vec4 texColor = texture2D(map, vUv);
+                    gl_FragColor = vec4(texColor.rgb, texColor.a * opacity);
                     
                     // Logarithmic depth calculation
                     float z = (log2(max(nearPlane, 1.0 + vDepth)) / log2(1.0 + farPlane)) * 2.0 - 1.0;
@@ -242,6 +246,11 @@ export class CNodeGroundOverlay extends CNode3DGroup {
                 return;
             }
             
+            const layerMask = tile.mesh.layers.mask;
+            if (layerMask === 0) {
+                return;
+            }
+            
             const tileNorth = mapProjection.getNorthLatitude(tile.y, tile.z);
             const tileSouth = mapProjection.getNorthLatitude(tile.y + 1, tile.z);
             const tileWest = mapProjection.getLeftLongitude(tile.x, tile.z);
@@ -251,13 +260,13 @@ export class CNodeGroundOverlay extends CNode3DGroup {
                 return;
             }
             
-            this.createOverlayTileFromTerrainTile(tile, mapProjection);
+            this.createOverlayTileFromTerrainTile(tile, mapProjection, layerMask);
         });
         
         setRenderOne(true);
     }
     
-    createOverlayTileFromTerrainTile(tile, mapProjection) {
+    createOverlayTileFromTerrainTile(tile, mapProjection, layerMask) {
         const tileKey = tile.key();
         
         this.disposeTileMesh(tileKey);
@@ -301,7 +310,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         overlayGeometry.computeVertexNormals();
         
         const overlayMesh = new Mesh(overlayGeometry, this.overlayMaterial);
-        overlayMesh.layers.mask = LAYER.MASK_WORLD;
+        overlayMesh.layers.mask = layerMask;
         overlayMesh.frustumCulled = false;
         
         this.group.add(overlayMesh);
@@ -398,12 +407,10 @@ export class CNodeGroundOverlay extends CNode3DGroup {
             this.updateMesh();
         });
         
-        this.onTileOnBound = this.onTileOn.bind(this);
-        this.onTileOffBound = this.onTileOff.bind(this);
+        this.onTileVisibilityChangedBound = this.onTileVisibilityChanged.bind(this);
         this.onTileChangedBound = this.onTileChanged.bind(this);
         
-        EventManager.addEventListener("tileOn", this.onTileOnBound);
-        EventManager.addEventListener("tileOff", this.onTileOffBound);
+        EventManager.addEventListener("tileVisibilityChanged", this.onTileVisibilityChangedBound);
         EventManager.addEventListener("tileChanged", this.onTileChangedBound);
     }
     
@@ -424,19 +431,27 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         return this.tilesOverlap(tileNorth, tileSouth, tileEast, tileWest);
     }
     
-    onTileOn(tile) {
-        const mapProjection = this.getMapProjection();
-        if (!mapProjection) return;
-        if (!tile.mesh || !tile.mesh.geometry || !tile.loaded) return;
-        if (!this.tileOverlapsOverlay(tile, mapProjection)) return;
+    onTileVisibilityChanged({tile, oldMask, newMask}) {
+        const tileKey = tile.key();
         
-        this.createOverlayTileFromTerrainTile(tile, mapProjection);
-        setRenderOne(true);
-    }
-    
-    onTileOff(tile) {
-        this.disposeTileMesh(tile.key());
-        setRenderOne(true);
+        if (oldMask === 0 && newMask !== 0) {
+            const mapProjection = this.getMapProjection();
+            if (!mapProjection) return;
+            if (!tile.mesh || !tile.mesh.geometry || !tile.loaded) return;
+            if (!this.tileOverlapsOverlay(tile, mapProjection)) return;
+            
+            this.createOverlayTileFromTerrainTile(tile, mapProjection, newMask);
+            setRenderOne(true);
+        } else if (oldMask !== 0 && newMask === 0) {
+            this.disposeTileMesh(tileKey);
+            setRenderOne(true);
+        } else if (oldMask !== newMask) {
+            const overlayMesh = this.overlayTileMeshes.get(tileKey);
+            if (overlayMesh) {
+                overlayMesh.layers.mask = newMask;
+                setRenderOne(true);
+            }
+        }
     }
     
     onTileChanged(tile) {
@@ -446,7 +461,8 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         if (!this.tileOverlapsOverlay(tile, mapProjection)) return;
         if (!this.overlayTileMeshes.has(tile.key())) return;
         
-        this.createOverlayTileFromTerrainTile(tile, mapProjection);
+        const layerMask = tile.mesh.layers.mask;
+        this.createOverlayTileFromTerrainTile(tile, mapProjection, layerMask);
         setRenderOne(true);
     }
     
@@ -604,6 +620,14 @@ export class CNodeGroundOverlay extends CNode3DGroup {
             CustomManager.saveGlobalSettings();
         });
         
+        this.guiFolder.add(this, 'opacity', 0, 1, 0.01).name('Opacity').onChange(() => {
+            if (this.overlayMaterial) {
+                this.overlayMaterial.uniforms.opacity.value = this.opacity;
+            }
+            setRenderOne(true);
+            CustomManager.saveGlobalSettings();
+        });
+        
         this.guiFolder.add({edit: () => this.setEditMode(!this.editMode)}, 'edit').name('Toggle Edit Mode');
         
         this.guiFolder.add({goto: () => this.gotoOverlay()}, 'goto').name('Go to Overlay');
@@ -669,6 +693,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
             imageURL: this.imageURL,
             heightOffset: this.heightOffset,
             wireframe: this.wireframe,
+            opacity: this.opacity,
         };
     }
     
@@ -684,6 +709,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
             imageURL: data.imageURL,
             heightOffset: data.heightOffset,
             wireframe: data.wireframe,
+            opacity: data.opacity,
         });
     }
     
@@ -692,8 +718,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         document.removeEventListener('pointermove', this.onPointerMoveBound);
         document.removeEventListener('pointerup', this.onPointerUpBound);
         
-        EventManager.removeEventListener("tileOn", this.onTileOnBound);
-        EventManager.removeEventListener("tileOff", this.onTileOffBound);
+        EventManager.removeEventListener("tileVisibilityChanged", this.onTileVisibilityChangedBound);
         EventManager.removeEventListener("tileChanged", this.onTileChangedBound);
         
         this.removeControlPoints();

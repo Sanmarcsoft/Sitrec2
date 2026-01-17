@@ -840,10 +840,8 @@ export class QuadTreeMap {
             tile.skirtMesh.layers.mask = layerMask;
         }
         
-        if (oldMask === 0 && layerMask !== 0) {
-            EventManager.dispatchEvent("tileOn", tile);
-        } else if (oldMask !== 0 && layerMask === 0) {
-            EventManager.dispatchEvent("tileOff", tile);
+        if (oldMask !== layerMask) {
+            EventManager.dispatchEvent("tileVisibilityChanged", {tile, oldMask, newMask: layerMask});
         }
     }
 
