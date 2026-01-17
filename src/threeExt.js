@@ -439,6 +439,17 @@ export function scaleBuildingHandles(view) {
             }
         }
     }
+    
+    // Iterate over all ground overlays and update their handle scales
+    if (Synth3DManager && Synth3DManager.overlaysList) {
+        for (const overlayId in Synth3DManager.overlaysList) {
+            const overlay = Synth3DManager.overlaysList[overlayId];
+
+            if (overlay && overlay.updateHandleScales) {
+                overlay.updateHandleScales(view);
+            }
+        }
+    }
 }
 
 export function removeDebugArrow(name) {

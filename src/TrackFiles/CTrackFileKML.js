@@ -1,6 +1,6 @@
 import {CTrackFile} from "./CTrackFile";
 import {MISB, MISBFields} from "../MISBFields";
-import {CustomManager, NodeMan, Sit} from "../Globals";
+import {CustomManager, NodeMan, Sit, Synth3DManager} from "../Globals";
 import {timeStrToEpoch} from "../DateTimeUtils";
 import {assert} from "../assert.js";
 import {CNodeTrackFromLLAArray} from "../nodes/CNodeTrack";
@@ -196,7 +196,7 @@ export class CTrackFileKML extends CTrackFile {
                     info.name = kml.kml.Document.Placemark.name["#text"];
                 }
             }
-        } else {
+        } else if (kml.kml.Folder !== undefined) {
             if (kml.kml.Folder.Folder !== undefined) {
                 let trackFolder = kml.kml.Folder.Folder
                 tracks = trackFolder.Placemark;
@@ -224,6 +224,9 @@ export class CTrackFileKML extends CTrackFile {
                 assert(0, "Unknown KML format - no Document or Folder.Folder")
                 tracks = kml.kml.Folder.Placemark;
             }
+        } else {
+            console.log("KML has no Document or Folder - may contain only overlays or other non-track data");
+            return false;
         }
 
         if (tracks === undefined) {
@@ -332,6 +335,9 @@ export class CTrackFileKML extends CTrackFile {
             else if (key === "Polygon") {
                 this.extractKMLPolygon(value, style, name)
             }
+            else if (key === "GroundOverlay") {
+                this.extractKMLGroundOverlay(value, name)
+            }
             else if (typeof value === 'object') {
                 if (
                     value.name
@@ -356,6 +362,8 @@ export class CTrackFileKML extends CTrackFile {
                         CustomManager.ignore(ignoreID)
                     }
 
+                } else if (value.LatLonBox) {
+                    this.extractKMLGroundOverlay(value, name)
                 } else {
                     this.extractKMLObjectsInternal(root, value, depth + 1)
                 }
@@ -474,6 +482,51 @@ export class CTrackFileKML extends CTrackFile {
         const altitudeMode = this.getText(obj, "altitudeMode")
         const coordinates = this.extractCoordinates(obj.outerBoundaryIs.LinearRing)
         this.makeKMLDisplayTrack(coordinates, style, name, altitudeMode, true);
+    }
+
+    extractKMLGroundOverlay(obj, name) {
+        if (!Synth3DManager) {
+            console.warn("Synth3DManager not available, skipping GroundOverlay");
+            return;
+        }
+
+        const latLonBox = obj.LatLonBox;
+        if (!latLonBox) {
+            console.warn("GroundOverlay missing LatLonBox, skipping");
+            return;
+        }
+
+        const north = latLonBox.north ? parseFloat(latLonBox.north["#text"]) : 0;
+        const south = latLonBox.south ? parseFloat(latLonBox.south["#text"]) : 0;
+        const east = latLonBox.east ? parseFloat(latLonBox.east["#text"]) : 0;
+        const west = latLonBox.west ? parseFloat(latLonBox.west["#text"]) : 0;
+        const rotation = latLonBox.rotation ? parseFloat(latLonBox.rotation["#text"]) : 0;
+
+        let imageURL = "";
+        if (obj.Icon && obj.Icon.href) {
+            imageURL = obj.Icon.href["#text"];
+        }
+
+        const overlayName = obj.name ? obj.name["#text"] : name || "KML Overlay";
+
+        const ignoreID = `overlay_${north}_${south}_${east}_${west}_${rotation}`;
+        if (CustomManager.shouldIgnore(ignoreID)) {
+            console.log("Ignoring KML GroundOverlay " + ignoreID);
+            return;
+        }
+
+        Synth3DManager.addOverlay({
+            north: north,
+            south: south,
+            east: east,
+            west: west,
+            rotation: rotation,
+            imageURL: imageURL,
+            name: overlayName
+        });
+
+        CustomManager.ignore(ignoreID);
+        console.log(`Added KML GroundOverlay: ${overlayName}`);
     }
 
     getBoolean(obj, key) {

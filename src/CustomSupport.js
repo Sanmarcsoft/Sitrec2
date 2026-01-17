@@ -2187,6 +2187,37 @@ export class CCustomManager {
                     console.log(`Created clouds at ground point, now in edit mode with menu`);
                 }
             },
+            addOverlay: () => {
+                this.groundContextMenu = null;
+                menu.destroy();
+                
+                if (Globals.editingOverlay) {
+                    console.log(`  Exiting edit mode on previous overlay: ${Globals.editingOverlay.overlayID}`);
+                    Globals.editingOverlay.setEditMode(false);
+                }
+                
+                const overlay = Synth3DManager.createOverlayAtPoint(groundPoint);
+                
+                if (overlay && UndoManager) {
+                    const overlayID = overlay.overlayID;
+                    const overlayState = overlay.serialize();
+                    
+                    UndoManager.add({
+                        undo: () => {
+                            Synth3DManager.removeOverlay(overlayID);
+                        },
+                        redo: () => {
+                            Synth3DManager.addOverlay(overlayState);
+                        },
+                        description: `Create ground overlay "${overlay.name}"`
+                    });
+                }
+                
+                if (overlay) {
+                    overlay.setEditMode(true);
+                    console.log(`Created overlay at ground point, now in edit mode`);
+                }
+            },
         };
         
         // Add location text as custom HTML (bright and selectable)
@@ -2210,6 +2241,9 @@ export class CCustomManager {
         
         // Add clouds creation option
         menu.add(menuData, "addClouds").name("Add Clouds");
+        
+        // Add ground overlay creation option
+        menu.add(menuData, "addOverlay").name("Add Ground Overlay");
 
         if (NodeMan.exists("terrainUI")) {
             const terrainUI = NodeMan.get("terrainUI");

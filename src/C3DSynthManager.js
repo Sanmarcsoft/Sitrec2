@@ -4,6 +4,7 @@
 import {CManager} from "./CManager";
 import {CNodeSynthBuilding} from "./nodes/CNodeSynthBuilding";
 import {CNodeSynthClouds} from "./nodes/CNodeSynthClouds";
+import {CNodeGroundOverlay} from "./nodes/CNodeGroundOverlay";
 import {Globals, NodeMan, setRenderOne} from "./Globals";
 import {ViewMan} from "./CViewManager";
 import {makeMouseRay} from "./mouseMoveView";
@@ -18,7 +19,9 @@ export class C3DSynthManager extends CManager {
         super();
         this.nextBuildingID = 1;
         this.nextCloudsID = 1;
+        this.nextOverlayID = 1;
         this.cloudsList = {};
+        this.overlaysList = {};
         
         console.log("C3DSynthManager initialized");
     }
@@ -284,7 +287,87 @@ export class C3DSynthManager extends CManager {
     }
     
     /**
-     * Serialize all buildings and clouds for saving
+     * Add a new ground overlay
+     */
+    addOverlay(overlayData) {
+        const id = overlayData.id || `groundOverlay_${this.nextOverlayID++}`;
+        const overlay = new CNodeGroundOverlay({
+            ...overlayData,
+            id: id
+        });
+        
+        this.overlaysList[id] = overlay;
+        console.log(`Added overlay: ${id}`);
+        setRenderOne(true);
+        return overlay;
+    }
+    
+    /**
+     * Remove a ground overlay
+     */
+    removeOverlay(overlayID) {
+        if (this.overlaysList[overlayID]) {
+            const overlay = this.overlaysList[overlayID];
+            
+            if (overlay.editMode || Globals.editingOverlay === overlay) {
+                console.log(`  Exiting edit mode for overlay ${overlayID} before removal`);
+                overlay.setEditMode(false);
+            }
+            
+            NodeMan.disposeRemove(overlay);
+            delete this.overlaysList[overlayID];
+            
+            console.log(`Removed overlay: ${overlayID}`);
+            setRenderOne(true);
+        }
+    }
+    
+    /**
+     * Get a ground overlay by ID
+     */
+    getOverlay(overlayID) {
+        return this.overlaysList[overlayID];
+    }
+    
+    /**
+     * Create a ground overlay at the given ground point
+     * @param {Vector3} groundPoint - The ground point (in EUS coordinates)
+     * @returns {CNodeGroundOverlay} The created overlay
+     */
+    createOverlayAtPoint(groundPoint) {
+        if (Globals.editingOverlay) {
+            alert("Please exit edit mode before creating a new overlay");
+            return null;
+        }
+        
+        const lla = EUSToLLA(groundPoint);
+        const offset = 0.01;
+        
+        const overlay = this.addOverlay({
+            north: lla.x + offset,
+            south: lla.x - offset,
+            east: lla.y + offset,
+            west: lla.y - offset,
+            rotation: 0,
+            imageURL: "",
+            name: `Overlay ${this.nextOverlayID}`
+        });
+        
+        console.log(`Created overlay: ${overlay.overlayID} at ground point`);
+        return overlay;
+    }
+    
+    /**
+     * Iterate over all ground overlays
+     */
+    iterateOverlays(callback) {
+        for (const id in this.overlaysList) {
+            callback(id, this.overlaysList[id]);
+        }
+    }
+    
+    /**
+     * Serialize all buildings, clouds, and overlays for saving
      */
     serialize() {
         const buildingsArray = [];
@@ -297,16 +380,23 @@ export class C3DSynthManager extends CManager {
             cloudsArray.push(clouds.serialize());
         });
         
+        const overlaysArray = [];
+        this.iterateOverlays((id, overlay) => {
+            overlaysArray.push(overlay.serialize());
+        });
+        
         return {
             buildings: buildingsArray,
             nextBuildingID: this.nextBuildingID,
             clouds: cloudsArray,
-            nextCloudsID: this.nextCloudsID
+            nextCloudsID: this.nextCloudsID,
+            overlays: overlaysArray,
+            nextOverlayID: this.nextOverlayID
         };
     }
     
     /**
-     * Deserialize buildings and clouds from save data
+     * Deserialize buildings, clouds, and overlays from save data
      */
     deserialize(data) {
         if (!data) return;
@@ -331,11 +421,20 @@ export class C3DSynthManager extends CManager {
             console.log(`Loaded ${Object.keys(this.cloudsList).length} cloud layers`);
         }
         
+        if (data.overlays) {
+            data.overlays.forEach(overlayData => {
+                const overlay = CNodeGroundOverlay.deserialize(overlayData);
+                this.overlaysList[overlay.overlayID] = overlay;
+            });
+            this.nextOverlayID = data.nextOverlayID || Object.keys(this.overlaysList).length + 1;
+            console.log(`Loaded ${Object.keys(this.overlaysList).length} overlays`);
+        }
+        
         setRenderOne(true);
     }
     
     /**
-     * Clear all buildings and clouds
+     * Clear all buildings, clouds, and overlays
      */
     clear() {
         const buildingIds = Object.keys(this.list);
@@ -346,6 +445,11 @@ export class C3DSynthManager extends CManager {
         const cloudsIds = Object.keys(this.cloudsList);
         cloudsIds.forEach(id => {
             this.removeClouds(id);
+        });
+        
+        const overlayIds = Object.keys(this.overlaysList);
+        overlayIds.forEach(id => {
+            this.removeOverlay(id);
         });
     }
     
