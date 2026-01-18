@@ -1373,11 +1373,11 @@ class CameraMapControls {
 
 		const downAngleStart = this.getVerticalAngleDegrees();
 		if (Math.abs(angle) > 0.0001) {
-			console.log("rotateUp: angle=" + degrees(angle).toFixed(2) + " downAngleStart=" + downAngleStart.toFixed(2) + " maxTilt=" + this.maxTilt);
+//			console.log("rotateUp: angle=" + degrees(angle).toFixed(2) + " downAngleStart=" + downAngleStart.toFixed(2) + " maxTilt=" + this.maxTilt);
 		}
 
 		if (angle > 0 && (downAngleStart - degrees(angle)) < 0) {
-			 console.log("rotateUp: clamping to Nadir. angle=" + degrees(angle).toFixed(2) + " downAngleStart=" + downAngleStart.toFixed(2) + " maxTilt=" + this.maxTilt);
+//			 console.log("rotateUp: clamping to Nadir. angle=" + degrees(angle).toFixed(2) + " downAngleStart=" + downAngleStart.toFixed(2) + " maxTilt=" + this.maxTilt);
 			return; // don't go below the horizon (Nadir)
 		}
 
