@@ -2,7 +2,7 @@
 
 import {Matrix4, Plane, Raycaster, Sphere, Vector2, Vector3} from "three";
 import {degrees, radians, vdump} from "../utils";
-import {DebugArrowAB, DebugSphere, getPointBelow, intersectMSL, pointAbove} from "../threeExt";
+import {clampAboveGround, DebugArrowAB, DebugSphere, getPointBelow, intersectMSL, pointAbove} from "../threeExt";
 import {par} from "../par";
 import {ECEFToLLAVD_Sphere, EUSToECEF, wgs84} from "../LLA-ECEF-ENU";
 import {
@@ -69,7 +69,7 @@ class CameraMapControls {
 
 		// ===== TILT LIMITS =====
 		this.minTilt = 0;   // Nadir (looking straight down)
-		this.maxTilt = 60;  // Maximum tilt angle in degrees
+		this.maxTilt = 85;  // Maximum tilt angle in degrees
 
 		// ===== DOUBLE-TAP TRACKING =====
 		this.lastTapTime = 0;
@@ -85,7 +85,7 @@ class CameraMapControls {
 		this.gestureStartDistance = 0;    // distance between fingers at gesture start
 		this.gestureStartAngle = 0;       // angle between fingers at gesture start
 		this.gestureStartCentroid = new Vector2(); // center point between fingers
-		
+
 		// Active gesture flags (multiple can be true simultaneously)
 		this.pinchActive = false;
 		this.rotateActive = false;
@@ -109,19 +109,19 @@ class CameraMapControls {
 		this.isLongPressTriggered = false;
 		this.activePointers = new Set(); // Track active pointer IDs for multi-touch detection
 
-		this.canvas.addEventListener( 'contextmenu', e => this.onContextMenu(e) );
-		this.canvas.addEventListener( 'pointerdown', e => this.handleMouseDown(e) );
-		this.canvas.addEventListener( 'pointerup', e => this.handleMouseUp(e) );
-		this.canvas.addEventListener( 'pointercancel', e => this.handlePointerCancel(e) );
-		this.canvas.addEventListener( 'pointermove', e => this.handleMouseMove(e) );
-		this.canvas.addEventListener( 'wheel', e => this.handleMouseWheel(e) );
-		this.canvas.addEventListener( 'touchstart', e => this.handleTouchStart(e), { passive: false } );
-		this.canvas.addEventListener( 'touchmove', e => this.handleTouchMove(e), { passive: false } );
-		this.canvas.addEventListener( 'touchend', e => this.handleTouchEnd(e), { passive: false } );
-		
+		this.canvas.addEventListener('contextmenu', e => this.onContextMenu(e));
+		this.canvas.addEventListener('pointerdown', e => this.handleMouseDown(e));
+		this.canvas.addEventListener('pointerup', e => this.handleMouseUp(e));
+		this.canvas.addEventListener('pointercancel', e => this.handlePointerCancel(e));
+		this.canvas.addEventListener('pointermove', e => this.handleMouseMove(e));
+		this.canvas.addEventListener('wheel', e => this.handleMouseWheel(e));
+		this.canvas.addEventListener('touchstart', e => this.handleTouchStart(e), { passive: false });
+		this.canvas.addEventListener('touchmove', e => this.handleTouchMove(e), { passive: false });
+		this.canvas.addEventListener('touchend', e => this.handleTouchEnd(e), { passive: false });
+
 		// Prevent iOS long-press selection menu
-		this.canvas.addEventListener( 'selectstart', e => e.preventDefault(), { passive: false } );
-		this.canvas.addEventListener( 'gesturestart', e => e.preventDefault(), { passive: false } );
+		this.canvas.addEventListener('selectstart', e => e.preventDefault(), { passive: false });
+		this.canvas.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
 
 		this.mouseStart = new Vector2();
 		this.mouseEnd = new Vector2();
@@ -131,27 +131,28 @@ class CameraMapControls {
 
 		this.state = STATE.NONE
 		this.enabled = true;
-		
+
 		// Track mouse position for context menu drag detection
 		this.contextMenuDownPos = null;
 		this.contextMenuDragThreshold = 2; // pixels
-		
+
 		this.lastStartHitSphere = true;
 		this.lastEndHitSphere = true;
 
 		const id = this.view.id;
 		this.measureStartPoint = V3()
 		this.measureEndPoint = V3()
-		this.measureStart = new CNodePositionXYZ({id: id+"measureA", x:0,y:0,z:0});
-		this.measureEnd = new CNodePositionXYZ({id: id+"measureB", x:0,y:0,z:0});
+		this.measureStart = new CNodePositionXYZ({ id: id + "measureA", x: 0, y: 0, z: 0 });
+		this.measureEnd = new CNodePositionXYZ({ id: id + "measureB", x: 0, y: 0, z: 0 });
 		this.measureArrow = new CNodeMeasureAB(
 			{
-				id: id+"measureArrow",
-				A: id+"measureA",
-				B: id+"measureB",
+				id: id + "measureArrow",
+				A: id + "measureA",
+				B: id + "measureB",
 				color: "#ffFFFF",
 				text: "AB",
-				unitType: "flexible"}
+				unitType: "flexible"
+			}
 		);
 
 
@@ -189,17 +190,17 @@ class CameraMapControls {
 	}
 
 
-	onContextMenu( event ) {
+	onContextMenu(event) {
 
-//		console.log("onConrxt")
+		//		console.log("onConrxt")
 
 		// Always prevent the default browser context menu
 		// This MUST be done for every contextmenu event, regardless of enabled state
 		event.preventDefault();
 		event.stopPropagation();
-		
-		if ( this.enabled === false ) return;
-		
+
+		if (this.enabled === false) return;
+
 		// Don't show our context menu - we'll handle it in handleMouseUp instead
 		// This prevents the menu from showing on right-click down
 
@@ -213,7 +214,7 @@ class CameraMapControls {
 	}
 
 
-	handleMouseWheel( event ) {
+	handleMouseWheel(event) {
 
 		// bit of patch, as we need to call the document mouse move
 		// if the window does not have focus, so we can update the cursor position
@@ -225,7 +226,7 @@ class CameraMapControls {
 			onDocumentMouseMove(event);
 		}
 
-		if ( this.enabled === false || this.enableZoom === false || this.state !== STATE.NONE ) return;
+		if (this.enabled === false || this.enableZoom === false || this.state !== STATE.NONE) return;
 
 		event.preventDefault();
 
@@ -262,7 +263,7 @@ class CameraMapControls {
 	}
 
 	// ===== DIRECTIONAL MOTION ANALYSIS =====
-	
+
 	/**
 	 * Analyzes two-finger motions along and perpendicular to the line between them.
 	 * Returns an object with:
@@ -274,32 +275,32 @@ class CameraMapControls {
 		// Get line between fingers (from touch1 to touch2)
 		const lineVector = touch2Curr.clone().sub(touch1Curr);
 		const lineDir = lineVector.clone().normalize();
-		
+
 		// Perpendicular direction (rotated 90° counterclockwise)
 		const perpDir = new Vector2(-lineDir.y, lineDir.x);
-		
+
 		// Current motions of each finger
 		const motion1 = touch1Curr.clone().sub(touch1Prev);
 		const motion2 = touch2Curr.clone().sub(touch2Prev);
-		
+
 		// Project motions onto line and perpendicular directions
 		const motion1_parallel = lineDir.dot(motion1);  // Positive = moving away from touch2
 		const motion2_parallel = lineDir.dot(motion2);  // Positive = moving toward touch1
 		const motion1_perp = perpDir.dot(motion1);      // Perpendicular component
 		const motion2_perp = perpDir.dot(motion2);      // Perpendicular component
-		
+
 		// PINCH ZOOM: relative motion along the line
 		// Positive when fingers move apart, negative when moving together
 		const pinchDelta = (motion1_parallel - motion2_parallel) * 0.5;
-		
+
 		// ROTATION: opposing motions perpendicular to the line
 		// Positive for CCW rotation (touch1 moving CCW, touch2 moving CW relative to line)
 		const rotateDelta = (motion1_perp - motion2_perp) * 0.5;
-		
+
 		// TILT: matching motions perpendicular to the line
 		// Positive when both fingers move in the same perpendicular direction
 		const tiltDelta = (motion1_perp + motion2_perp) * 0.5;
-		
+
 		return { pinchDelta, rotateDelta, tiltDelta };
 	}
 
@@ -312,7 +313,7 @@ class CameraMapControls {
 
 		// Check if this could be a double-tap
 		if (currentTime - this.lastTapTime < this.tapThreshold &&
-		    this.calculateDistance(currentPos, this.lastTapPos) < this.tapDistanceThreshold) {
+			this.calculateDistance(currentPos, this.lastTapPos) < this.tapDistanceThreshold) {
 			// It's a DOUBLE-TAP → zoom in
 			if (this.zoomGestures && this.enableZoom) {
 				this.zoomInAtPoint(event.clientX, event.clientY);
@@ -346,7 +347,7 @@ class CameraMapControls {
 		// Two-finger gesture start
 		if (event.touches.length === 2) {
 			event.preventDefault();
-			
+
 			const touch1 = new Vector2(event.touches[0].clientX, event.touches[0].clientY);
 			const touch2 = new Vector2(event.touches[1].clientX, event.touches[1].clientY);
 
@@ -359,7 +360,7 @@ class CameraMapControls {
 			this.gestureStartDistance = this.calculateDistance(touch1, touch2);
 			this.gestureStartAngle = this.calculateAngle(touch1, touch2);
 			this.gestureStartCentroid = this.calculateCentroid(touch1, touch2);
-			
+
 			// Reset all gesture flags - will be set as thresholds are crossed in handleTouchMove
 			this.pinchActive = false;
 			this.rotateActive = false;
@@ -505,7 +506,7 @@ class CameraMapControls {
 
 	rotateAroundPoint(screenPoint, angle) {
 		if (!this.rotateGestures) return;
-		
+
 		// For now, use the existing rotateLeft which rotates around the target
 		// In a full implementation, would rotate around the focal point (ray from camera through screenPoint)
 		this.rotateLeft(angle * Math.PI / 180);
@@ -615,7 +616,7 @@ class CameraMapControls {
 		if (this.justRotate) this.state = STATE.ROTATE;
 
 		// if we have a PTZ UI controller, then all buttons just pan
-		if (getPTZController(this.view.cameraNode) !== undefined ) this.state = STATE.PAN;
+		if (getPTZController(this.view.cameraNode) !== undefined) this.state = STATE.PAN;
 
 
 	}
@@ -625,35 +626,35 @@ class CameraMapControls {
 			this.state = STATE.NONE
 			return;
 		}
-		if (!mouseInViewOnly(this.view,event.clientX, event.clientY)) return;
-//		console.log ("CameraMapControls Mouse DOWN, button = "+event.button)
+		if (!mouseInViewOnly(this.view, event.clientX, event.clientY)) return;
+		//		console.log ("CameraMapControls Mouse DOWN, button = "+event.button)
 		this.button = event.button;
-		
+
 		// Track pointer for multi-touch detection
 		this.activePointers.add(event.pointerId);
-		
+
 		// Track right mouse button down position for context menu drag detection
 		if (event.button === 2) {
 			this.contextMenuDownPos = { x: event.clientX, y: event.clientY };
 		}
-		
+
 		// Cancel long press if a second finger touches down
 		if (this.activePointers.size > 1 && this.longPressTimer) {
 			clearTimeout(this.longPressTimer);
 			this.longPressTimer = null;
 			this.isLongPressTriggered = false;
 		}
-		
+
 		// Start long press timer for single-finger touch events only (not for mouse right-click)
 		if (event.pointerType === 'touch' && event.button === 0 && this.activePointers.size === 1) {
 			this.longPressStartX = event.clientX;
 			this.longPressStartY = event.clientY;
 			this.longPressEvent = event;
 			this.isLongPressTriggered = false;
-			
+
 			this.longPressTimer = setTimeout(() => {
 				this.isLongPressTriggered = true;
-				
+
 				// Create synthetic context menu event
 				const syntheticEvent = new PointerEvent('contextmenu', {
 					bubbles: true,
@@ -663,35 +664,35 @@ class CameraMapControls {
 					pointerType: 'touch',
 					button: 2
 				});
-				
+
 				// Add custom properties
 				Object.defineProperty(syntheticEvent, 'isSynthetic', { value: true });
 				Object.defineProperty(syntheticEvent, 'originalEvent', { value: event });
-				
+
 				// Call the view's context menu handler directly (same as handleMouseUp does)
 				if (this.view && this.view.onContextMenu) {
 					this.view.onContextMenu(syntheticEvent, this.longPressStartX, this.longPressStartY);
 				}
-				
+
 				// Clean up state since context menu interrupts normal pointer flow
 				this.activePointers.clear();
 				this.state = STATE.NONE;
 				if (event.pointerId !== undefined) {
 					this.canvas.releasePointerCapture(event.pointerId);
 				}
-				
+
 				// Vibrate for tactile feedback
 				if (navigator.vibrate) {
 					navigator.vibrate(50);
 				}
 			}, this.longPressDuration);
 		}
-		
+
 		this.updateStateFromEvent(event)
 		this.lastStartHitSphere = true;
 		this.lastEndHitSphere = true;
 		const [x, y] = mouseToView(this.view, event.clientX, event.clientY)
-		this.mouseStart.set( x, y );
+		this.mouseStart.set(x, y);
 		this.canvas.setPointerCapture(event.pointerId)
 		setRenderOne(true);
 		if (this.view.showCursor) {
@@ -702,7 +703,7 @@ class CameraMapControls {
 		// convert to LLA
 		const ecef = EUSToECEF(cursorPos)
 		const LLA = ECEFToLLAVD_Sphere(ecef)
-//		console.log("Cursor LLA: "+vdump(LLA));
+		//		console.log("Cursor LLA: "+vdump(LLA));
 		if (NodeMan.exists("cursorLLA")) {
 			NodeMan.get("cursorLLA").changeLLA(LLA.x, LLA.y, LLA.z)
 		} else {
@@ -740,33 +741,33 @@ class CameraMapControls {
 			// It was a tap gesture - check for double-tap zoom
 			this.handleSingleTap(event);
 		}
-		
+
 		// Reset long press flag
 		if (this.isLongPressTriggered) {
 			this.isLongPressTriggered = false;
 		}
-		
+
 		// Check if this was a right-click release without dragging
 		if (event.button === 2 && this.contextMenuDownPos) {
 			const dx = event.clientX - this.contextMenuDownPos.x;
 			const dy = event.clientY - this.contextMenuDownPos.y;
 			const distance = Math.sqrt(dx * dx + dy * dy);
-			
+
 			// If mouse didn't move much, show the context menu
 			if (distance <= this.contextMenuDragThreshold) {
 				// Prevent default context menu and stop propagation
 				event.preventDefault();
 				event.stopPropagation();
-				
+
 				if (this.view && this.view.onContextMenu) {
 					this.view.onContextMenu(event, event.clientX, event.clientY);
 				}
 			}
 		}
-		
+
 		// Reset context menu tracking
 		this.contextMenuDownPos = null;
-		
+
 		this.state = STATE.NONE
 		if (!this.enabled) return;
 		this.canvas.releasePointerCapture(event.pointerId)
@@ -774,7 +775,7 @@ class CameraMapControls {
 		// dump a camera location to the console
 		var p = this.camera.position.clone()
 		const v = new Vector3();
-		v.setFromMatrixColumn(this.camera.matrixWorld,2);
+		v.setFromMatrixColumn(this.camera.matrixWorld, 2);
 		v.multiplyScalar(-1000)
 		v.add(p)
 
@@ -810,7 +811,7 @@ class CameraMapControls {
 		if (this.longPressTimer) {
 			const deltaX = Math.abs(event.clientX - this.longPressStartX);
 			const deltaY = Math.abs(event.clientY - this.longPressStartY);
-			
+
 			if (deltaX > this.longPressThreshold || deltaY > this.longPressThreshold) {
 				this.clearLongPressTimer();
 			}
@@ -818,9 +819,9 @@ class CameraMapControls {
 
 		// Skip mouse move handling if we're in a touch gesture
 		// Touch events trigger pointer events which we need to ignore during touch gestures
-		if (this.state === STATE.TOUCH_PINCH_ZOOM || 
-		    this.state === STATE.TOUCH_TWO_FINGER_ROTATE ||
-		    this.state === STATE.TOUCH_TILT) {
+		if (this.state === STATE.TOUCH_PINCH_ZOOM ||
+			this.state === STATE.TOUCH_TWO_FINGER_ROTATE ||
+			this.state === STATE.TOUCH_TILT) {
 			return;
 		}
 
@@ -840,7 +841,7 @@ class CameraMapControls {
 			const cursorPos = this.view.cursorSprite.position.clone();
 
 			// Green sphere is the cursor position, which comes from a mouse ray intersection with the terrain
-			DebugSphere("Mouse"+event.clientX*1000+event.clientY, cursorPos, 5, 0x00FF00)
+			DebugSphere("Mouse" + event.clientX * 1000 + event.clientY, cursorPos, 5, 0x00FF00)
 
 			// check intersection with the terrain
 			// red sphere should be 2.5m above the green sphere
@@ -849,10 +850,10 @@ class CameraMapControls {
 
 			if (groundPoint !== null) {
 				// Red sphere is simply 5 meters above the cursorpos
-				DebugSphere("Mouse2"+event.clientX*1000+event.clientY, groundPoint, 5, 0xFF0000)
+				DebugSphere("Mouse2" + event.clientX * 1000 + event.clientY, groundPoint, 5, 0xFF0000)
 
-			// sample get the elevation at that point
-			// and do a blue sphere based on that.
+				// sample get the elevation at that point
+				// and do a blue sphere based on that.
 
 				const terrainNode = NodeMan.get("TerrainModel", false);
 				if (terrainNode !== undefined) {
@@ -860,7 +861,7 @@ class CameraMapControls {
 					// Blue sphere is the collision with the terrainmodel
 					// allowing you so see differences between the model mesh (blue)
 					// and the elevation map (red)
-					DebugSphere("Mouse3"+event.clientX*1000+event.clientY, eus, 5, 0x0000FF)
+					DebugSphere("Mouse3" + event.clientX * 1000 + event.clientY, eus, 5, 0x0000FF)
 				}
 			}
 
@@ -871,25 +872,25 @@ class CameraMapControls {
 		}
 
 		if (this.state === STATE.NONE) return;
-	//	console.log ("CameraMapControls Mouse MOVE, with non-zero state, enabled = "+this.enabled)
+		//	console.log ("CameraMapControls Mouse MOVE, with non-zero state, enabled = "+this.enabled)
 		this.updateStateFromEvent(event)
 
 		setRenderOne(true);
 
 		const [x, y] = mouseToView(this.view, event.clientX, event.clientY)
-		this.mouseEnd.set( x, y );
+		this.mouseEnd.set(x, y);
 
 		if (this.mouseStart.equals(this.mouseEnd)) {
 			console.warn("mouse motion with no actual motion. Retina issues? ")
 			return;
 		}
 
-	//	this.mouseEnd.set( event.clientX, event.clientY );
-		this.mouseDelta.subVectors( this.mouseEnd, this.mouseStart ).multiplyScalar( this.rotateSpeed );
+		//	this.mouseEnd.set( event.clientX, event.clientY );
+		this.mouseDelta.subVectors(this.mouseEnd, this.mouseStart).multiplyScalar(this.rotateSpeed);
 
-//		console.log(x+","+y+","+vdump(this.mouseDelta))
+		//		console.log(x+","+y+","+vdump(this.mouseDelta))
 
-		const ptzControls= getPTZController(this.view.cameraNode);
+		const ptzControls = getPTZController(this.view.cameraNode);
 
 
 		var xAxis = new Vector3()
@@ -898,7 +899,7 @@ class CameraMapControls {
 
 		var oldMatrix = this.camera.matrix.clone()
 		var oldPosition = this.camera.position.clone()
-		this.camera.matrix.extractBasis(xAxis,yAxis,zAxis)
+		this.camera.matrix.extractBasis(xAxis, yAxis, zAxis)
 
 		const oldUp = yAxis
 
@@ -909,7 +910,7 @@ class CameraMapControls {
 				const xRotate = 2 * Math.PI * this.mouseDelta.x / this.view.heightPx / 4;
 				const yRotate = 2 * Math.PI * this.mouseDelta.y / this.view.heightPx / 4
 
-//				console.log("PAN: "+xRotate+","+yRotate)
+				//				console.log("PAN: "+xRotate+","+yRotate)
 
 
 				// if we have ptzControls in this view, then update them
@@ -921,8 +922,8 @@ class CameraMapControls {
 					ptzControls.az -= degrees(xRotate) * ptzControls.fov / 45
 					ptzControls.el += degrees(yRotate) * ptzControls.fov / 45
 
-					if (ptzControls.az < -180) ptzControls.az+=360
-					if (ptzControls.az >= 180) ptzControls.az-=360
+					if (ptzControls.az < -180) ptzControls.az += 360
+					if (ptzControls.az >= 180) ptzControls.az -= 360
 					if (ptzControls.el <= -89) ptzControls.el = -89
 					if (ptzControls.el >= 89) ptzControls.el = 89
 
@@ -942,15 +943,15 @@ class CameraMapControls {
 			case STATE.ROTATE: // Rotate the camera about a point on the ground,
 
 				// use this.canvas.heightPx for both to keep it square
-				this.rotateLeft( 2 * Math.PI * this.mouseDelta.x / this.view.heightPx);
+				this.rotateLeft(2 * Math.PI * this.mouseDelta.x / this.view.heightPx);
 
-//				console.log("Rotating up by "+(2 * Math.PI * this.mouseDelta.y / this.view.heightPx))
-				this.rotateUp( 2 * Math.PI * this.mouseDelta.y / this.view.heightPx );
+				//				console.log("Rotating up by "+(2 * Math.PI * this.mouseDelta.y / this.view.heightPx))
+				this.rotateUp(2 * Math.PI * this.mouseDelta.y / this.view.heightPx);
 
 
 				this.camera.updateMatrix()
 				this.camera.updateMatrixWorld(true)
-				this.camera.matrix.extractBasis(xAxis,yAxis,zAxis)
+				this.camera.matrix.extractBasis(xAxis, yAxis, zAxis)
 
 				if (!Sit.useGlobe && yAxis.y <= 0.01) {
 					this.camera.position.copy(oldPosition)
@@ -963,7 +964,11 @@ class CameraMapControls {
 
 				this.camera.matrix.extractBasis(xAxis, yAxis, zAxis)
 				var pointInFront = this.camera.position.clone().sub(zAxis)
-				this.camera.lookAt(pointInFront, oldUp)
+
+
+				// This lookAt was an attempt to fix the up vector after rotating,
+				// but it causes other issues, so commented out for now. Needs more thought.
+			//	this.camera.lookAt(pointInFront, oldUp)
 
 
 
@@ -981,35 +986,35 @@ class CameraMapControls {
 				// make a plane at target height
 				// Note this is LEGACY code, and should be replaced with a sphere
 				// as it will only work when near the origin
-				const dragPlane = new Plane(new Vector3(0,-1,0),this.target.y)
+				const dragPlane = new Plane(new Vector3(0, -1, 0), this.target.y)
 
 				let dragHeight = altitudeAboveSphere(this.target);
 
 
 				var dragSphere;
-			//	if (this.useGlobe) {
-					dragSphere = new Sphere(new Vector3(0,-wgs84.RADIUS,0), wgs84.RADIUS + dragHeight)
-			//	}
+				//	if (this.useGlobe) {
+				dragSphere = new Sphere(new Vector3(0, -wgs84.RADIUS, 0), wgs84.RADIUS + dragHeight)
+				//	}
 
 
 				// find intersection for start and end mouse positions
 				const raycaster = new Raycaster();
-				raycaster.layers.mask  |= LAYER.MASK_MAIN | LAYER.MASK_LOOK;
+				raycaster.layers.mask |= LAYER.MASK_MAIN | LAYER.MASK_LOOK;
 
 
 				let width = this.view.widthPx
 				let height = this.view.heightPx
 
 				var startPointer = new Vector2(
-					this.mouseStart.x/ width * 2 - 1,
+					this.mouseStart.x / width * 2 - 1,
 					- this.mouseStart.y / height * 2 + 1
 				)
 				var endPointer = new Vector2(
-					this.mouseEnd.x/ width * 2 - 1,
+					this.mouseEnd.x / width * 2 - 1,
 					- this.mouseEnd.y / height * 2 + 1
 				)
 
-//				console.log(par.frame + ": STATE.DRAG: Start: "+vdump(startPointer)+" End: "+vdump(endPointer))
+				//				console.log(par.frame + ": STATE.DRAG: Start: "+vdump(startPointer)+" End: "+vdump(endPointer))
 
 				if (startPointer.x === endPointer.x && startPointer.y === endPointer.y)
 					console.log("Drag with no motion")
@@ -1048,7 +1053,7 @@ class CameraMapControls {
 					}
 				}
 
-			//	DebugArrowAB("mouseMovePan",start3D,end3D,0x00ffff,true,GlobalScene)
+				//	DebugArrowAB("mouseMovePan",start3D,end3D,0x00ffff,true,GlobalScene)
 
 				if (startHitSphere !== this.lastStartHitSphere || endHitSphere !== this.lastEndHitSphere) {
 					this.lastStartHitSphere = startHitSphere;
@@ -1065,7 +1070,7 @@ class CameraMapControls {
 
 				const origin = V3(0, -wgs84.RADIUS, 0)
 				const originToStart = start3D.clone().sub(origin)
-				const originToEnd   = end3D.clone().sub(origin)
+				const originToEnd = end3D.clone().sub(origin)
 
 				// we now have three points that define the plane of rotation
 				// the origin, and the start and end point
@@ -1077,17 +1082,17 @@ class CameraMapControls {
 				const lengthsMultiplied = (originToStart.length() * originToEnd.length())
 				const oCos = odot / lengthsMultiplied
 
-				let angle = -Math.acos( oCos);
+				let angle = -Math.acos(oCos);
 				if (isNaN(angle)) {
-					console.log("ToStart "+vdump(originToStart)+" ToEnd: "+vdump(originToEnd))
-					console.log("ots "+originToStart.length() +"," + originToEnd.length())
-					console.log("o: "+odot+","+lengthsMultiplied+" / = " + oCos)
+					console.log("ToStart " + vdump(originToStart) + " ToEnd: " + vdump(originToEnd))
+					console.log("ots " + originToStart.length() + "," + originToEnd.length())
+					console.log("o: " + odot + "," + lengthsMultiplied + " / = " + oCos)
 					console.warn("NaN angle in Camera controls STATE.DRAG, patching to 0")
 					angle = 0;
 				};
 
-				 // const rotationAxis = V3(0,1,0)
-				 // const angle = radians(1)
+				// const rotationAxis = V3(0,1,0)
+				// const angle = radians(1)
 
 
 				// DebugArrow("rotationAxis", rotationAxis, origin,7000000, "#00FFFF")
@@ -1097,10 +1102,10 @@ class CameraMapControls {
 
 				this.camera.position.sub(origin) 						// make position relative to the globe orgin
 
-//				console.log("rotationAxis: "+vdump(rotationAxis)+" angle = "+angle)
-				this.camera.rotateOnWorldAxis(rotationAxis,angle) 		// rotate the orientation only
-				this.camera.position.applyAxisAngle(rotationAxis,angle) // rotate the position
-//				console.log("Camera position "+ vdump(this.camera.position))
+				//				console.log("rotationAxis: "+vdump(rotationAxis)+" angle = "+angle)
+				this.camera.rotateOnWorldAxis(rotationAxis, angle) 		// rotate the orientation only
+				this.camera.position.applyAxisAngle(rotationAxis, angle) // rotate the position
+				//				console.log("Camera position "+ vdump(this.camera.position))
 
 				this.camera.position.add(origin) 						// position back to EUS
 				this.camera.updateMatrix();
@@ -1120,7 +1125,7 @@ class CameraMapControls {
 
 		this.fixUp() // fixup on any mouse move
 
-		this.mouseStart.copy( this.mouseEnd );
+		this.mouseStart.copy(this.mouseEnd);
 
 	}
 
@@ -1165,8 +1170,8 @@ class CameraMapControls {
 			const C = pointOnSphereBelow(M, radius - wgs84.RADIUS); // passing in altitude above the wgst84 sphere
 			const C_height = C.clone().sub(Center).length()
 			const M_height = M.clone().sub(Center).length()
-	//		const A_height = A.clone().sub(Center).length()
-	//		const B_height = B.clone().sub(Center).length()
+			//		const A_height = A.clone().sub(Center).length()
+			//		const B_height = B.clone().sub(Center).length()
 			const scale = C_height / M_height
 			const A2 = Center.clone().add(A.clone().sub(Center).multiplyScalar(scale))
 			const B2 = Center.clone().add(B.clone().sub(Center).multiplyScalar(scale))
@@ -1183,66 +1188,66 @@ class CameraMapControls {
 		// WASD walking controls with terrain-following
 		// Normal speed: 3 m/s, Fast speed (with Shift): 10 m/s
 		// Maintains constant height above terrain
-		
+
 		let moveForward = 0;
 		let moveRight = 0;
-		
+
 		// Check WASD keys
 		if (isKeyHeld('w')) moveForward += 1;
 		if (isKeyHeld('s')) moveForward -= 1;
 		if (isKeyHeld('d')) moveRight += 1;
 		if (isKeyHeld('a')) moveRight -= 1;
-		
+
 		// If no movement, return early
 		if (moveForward === 0 && moveRight === 0) return;
-		
+
 		// Determine speed based on Shift key
 		const normalSpeed = 10.0;  // meters per second
 		const fastSpeed = 50.0;   // meters per second with Shift
 		const isShiftHeld = isKeyHeld('Shift');
 		const speed = isShiftHeld ? fastSpeed : normalSpeed;
-		
+
 		// Frame time (assuming 60fps as default, or use actual delta time if available)
-		const deltaTime = 1/60;
+		const deltaTime = 1 / 60;
 		const moveDistance = speed * deltaTime;
-		
+
 		// Get current camera position
 		const currentPos = this.camera.position.clone();
-		
+
 		// Calculate height above terrain at current position
 		const groundBelow = getPointBelow(currentPos);
 		const localUp = getLocalUpVector(currentPos);
 		const currentHeight = currentPos.clone().sub(groundBelow).dot(localUp);
-		
+
 		// Get camera forward and right vectors
 		// Forward is the camera's looking direction projected onto the horizontal plane
 		const cameraForward = new Vector3();
 		this.camera.getWorldDirection(cameraForward);
-		
+
 		// Project forward vector onto horizontal plane (perpendicular to local up)
 		const forwardHorizontal = cameraForward.clone().sub(
 			localUp.clone().multiplyScalar(cameraForward.dot(localUp))
 		).normalize();
-		
+
 		// Right vector is perpendicular to both up and forward
 		const rightHorizontal = new Vector3().crossVectors(localUp, forwardHorizontal).normalize().negate();
-		
+
 		// Calculate movement vector
 		const movement = new Vector3();
 		movement.add(forwardHorizontal.multiplyScalar(moveForward * moveDistance));
 		movement.add(rightHorizontal.multiplyScalar(moveRight * moveDistance));
-		
+
 		// Apply movement to camera position
 		const newPos = currentPos.add(movement);
-		
+
 		// Snap to terrain-relative height
 		const newGroundBelow = getPointBelow(newPos);
 		const finalPos = pointAbove(newGroundBelow, currentHeight);
-		
+
 		// Convert to LLA and update fixed camera track using gotoLLA
 		const fixedCamera = NodeMan.get("fixedCameraPosition");
 		fixedCamera.setFromEUS(finalPos);
-		
+
 		// Trigger re-render
 		setRenderOne(true);
 	}
@@ -1262,10 +1267,10 @@ class CameraMapControls {
 			if (upAngle > 45) {
 
 				if (force) {
-		//			console.log("Forcing up vector to local up")
+					//			console.log("Forcing up vector to local up")
 					this.camera.up.copy(up)
 				} else {
-		//			console.log("Lerping towards local up")
+					//			console.log("Lerping towards local up")
 					this.camera.up.lerp(up, 0.05);
 				}
 				var pointInFront = this.camera.position.clone().sub(zAxis)
@@ -1349,9 +1354,9 @@ class CameraMapControls {
 		this.camera.position.sub(this.target) // make relative to the target
 		//const up = new Vector3(0,1,0)
 		const up = getLocalUpVector(this.target, wgs84.RADIUS)
-		this.camera.position.applyAxisAngle(up,-angle) // rotate around origin (around target)
+		this.camera.position.applyAxisAngle(up, -angle) // rotate around origin (around target)
 		this.camera.position.add(this.target) // back into world space
-		this.camera.rotateOnWorldAxis(up,-angle) // rotate the camere as well, so target stays in same spot
+		this.camera.rotateOnWorldAxis(up, -angle) // rotate the camere as well, so target stays in same spot
 
 	}
 
@@ -1367,9 +1372,19 @@ class CameraMapControls {
 	rotateUp(angle) {
 
 		const downAngleStart = this.getVerticalAngleDegrees();
-		//console.log("angle = "+angle+" Down angle start: "+downAngleStart)
+		if (Math.abs(angle) > 0.0001) {
+			console.log("rotateUp: angle=" + degrees(angle).toFixed(2) + " downAngleStart=" + downAngleStart.toFixed(2) + " maxTilt=" + this.maxTilt);
+		}
 
-		if (angle > 0 && (downAngleStart - degrees(angle)) < 5) return; // don't go below the horizon
+		if (angle > 0 && (downAngleStart - degrees(angle)) < 0) {
+			 console.log("rotateUp: clamping to Nadir. angle=" + degrees(angle).toFixed(2) + " downAngleStart=" + downAngleStart.toFixed(2) + " maxTilt=" + this.maxTilt);
+			return; // don't go below the horizon (Nadir)
+		}
+
+		// if (angle < 0 && (downAngleStart - degrees(angle)) > this.maxTilt) {
+		// 	console.log("rotateUp: clamping to Zenith. angle=" + degrees(angle).toFixed(2) + " downAngleStart=" + downAngleStart.toFixed(2) + " maxTilt=" + this.maxTilt);
+		// 	return;
+		// } // don't go above the max tilt angle, which is usually Zenith but can be set lower for certain views
 
 
 		this.camera.position.sub(this.target) // make relative to the target
@@ -1377,10 +1392,14 @@ class CameraMapControls {
 		var rotationMatrix = new Matrix4().extractRotation(this.camera.matrixWorld);
 		var right = new Vector3(1, 0, 0).applyMatrix4(rotationMatrix).normalize();
 
-		this.camera.position.applyAxisAngle(right,-angle) // rotate around origin (around target)
+		this.camera.position.applyAxisAngle(right, -angle) // rotate around origin (around target)
 		this.camera.position.add(this.target) // back into world space
 
 		this.camera.rotateOnWorldAxis(right, -angle) // rotate the camere as well, so target stays in same spot
+
+		// just don't let it go underground
+		this.camera.position.copy(clampAboveGround(this.camera.position,1));
+
 
 	}
 
@@ -1410,4 +1429,4 @@ export function getPTZController(cameraNode) {
 
 
 
-export {  CameraMapControls };
+export { CameraMapControls };
