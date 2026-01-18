@@ -1,13 +1,17 @@
 //////////////////////////////////////////////////////
 ///  DRAG AND DROP FILES?
-import {FileManager, Globals, NodeMan, Sit} from "./Globals";
+import {FileManager, Globals, NodeMan, Sit, Synth3DManager} from "./Globals";
 import {cos, isSubdomain, radians} from "./utils";
-import {LLAToEUS} from "./LLA-ECEF-ENU";
+import {EUSToLLA, LLAToEUS} from "./LLA-ECEF-ENU";
 import {getLocalSouthVector, getLocalUpVector} from "./SphericalMath";
 import {SITREC_DEV_DOMAIN, SITREC_DOMAIN} from "./configUtils";
 
 import {EventManager} from "./CEventManager";
 import {MP4_DEMUXER_EXTENSIONS, WEBAUDIO_SUPPORTED_EXTENSIONS} from "./AudioFormats";
+import {ViewMan} from "./CViewManager";
+
+// Image file extensions
+const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff', 'tif'];
 
 // The DragDropHandler is more like the local client file handler, with rehosting, and parsing
 class CDragDropHandler {
@@ -15,6 +19,129 @@ class CDragDropHandler {
     constructor() {
         this.dropAreas = [];
         this.dropQueue = []; // Queue for dropped files that need parsing
+    }
+
+    /**
+     * Shows a modal dialog asking the user to choose between video image and ground overlay
+     * @param {string} filename - The name of the image file
+     * @returns {Promise<string>} Resolves with 'video' or 'overlay', or rejects if cancelled
+     */
+    showImageChoiceDialog(filename) {
+        return new Promise((resolve, reject) => {
+            // Create modal overlay
+            const overlay = document.createElement('div');
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 10000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            `;
+
+            // Create modal dialog
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                background: #2a2a2a;
+                border-radius: 8px;
+                padding: 20px;
+                min-width: 300px;
+                max-width: 400px;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+                font-family: Arial, sans-serif;
+                color: white;
+            `;
+
+            // Create title
+            const title = document.createElement('h3');
+            title.textContent = 'Import Image';
+            title.style.cssText = `
+                margin: 0 0 10px 0;
+                font-size: 18px;
+                color: #fff;
+            `;
+
+            // Create message
+            const message = document.createElement('p');
+            message.textContent = `How would you like to use "${filename}"?`;
+            message.style.cssText = `
+                margin: 0 0 20px 0;
+                font-size: 14px;
+                color: #ccc;
+            `;
+
+            // Button styles
+            const buttonStyle = `
+                padding: 10px 20px;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 14px;
+                margin: 5px;
+                width: calc(100% - 10px);
+            `;
+
+            // Create video image button
+            const videoButton = document.createElement('button');
+            videoButton.textContent = 'Video Image (static video source)';
+            videoButton.style.cssText = buttonStyle + `
+                background: #1976d2;
+                color: white;
+            `;
+            videoButton.onclick = () => {
+                document.body.removeChild(overlay);
+                resolve('video');
+            };
+
+            // Create overlay button
+            const overlayButton = document.createElement('button');
+            overlayButton.textContent = 'Ground Overlay (map overlay)';
+            overlayButton.style.cssText = buttonStyle + `
+                background: #388e3c;
+                color: white;
+            `;
+            overlayButton.onclick = () => {
+                document.body.removeChild(overlay);
+                resolve('overlay');
+            };
+
+            // Create cancel button
+            const cancelButton = document.createElement('button');
+            cancelButton.textContent = 'Cancel';
+            cancelButton.style.cssText = buttonStyle + `
+                background: #757575;
+                color: white;
+            `;
+            cancelButton.onclick = () => {
+                document.body.removeChild(overlay);
+                reject(new Error('User cancelled'));
+            };
+
+            // Assemble the modal
+            modal.appendChild(title);
+            modal.appendChild(message);
+            modal.appendChild(videoButton);
+            modal.appendChild(overlayButton);
+            modal.appendChild(cancelButton);
+            overlay.appendChild(modal);
+
+            // Add to document
+            document.body.appendChild(overlay);
+        });
+    }
+
+    /**
+     * Check if a filename is an image file
+     * @param {string} filename - The filename to check
+     * @returns {boolean} True if the file is an image
+     */
+    isImageFile(filename) {
+        const ext = filename.split('.').pop().toLowerCase();
+        return IMAGE_EXTENSIONS.includes(ext);
     }
 
     addDropArea() {
@@ -134,10 +261,36 @@ class CDragDropHandler {
     }
 
 
-    uploadDroppedFile(file) {
+    async uploadDroppedFile(file) {
 
         EventManager.dispatchEvent("fileDropped", {})
 
+        // Check if it's an image file - ask user how to use it
+        if (this.isImageFile(file.name)) {
+            try {
+                const choice = await this.showImageChoiceDialog(file.name);
+
+                if (choice === 'video') {
+                    // Load as video image source using makeImageVideo
+                    console.log("Loading image as video source: " + file.name);
+                    if (NodeMan.exists("video")) {
+                        await this.loadImageAsVideoSource(file);
+                    } else {
+                        console.warn("No video node found to load image as video source");
+                    }
+                    return;
+                } else if (choice === 'overlay') {
+                    // Create ground overlay with the image
+                    console.log("Creating ground overlay with image: " + file.name);
+                    await this.createGroundOverlayFromImage(file);
+                    return;
+                }
+            } catch (e) {
+                // User cancelled
+                console.log("Image import cancelled");
+                return;
+            }
+        }
 
         // if it's a video or audio file, that's handled differently
         // as we might (in the future) want to stream it
@@ -174,6 +327,114 @@ class CDragDropHandler {
         });
 
         return promise;
+    }
+
+    /**
+     * Load an image file and set it as the video source
+     * Also registers it with FileManager for persistence
+     * @param {File} file - The image file
+     */
+    async loadImageAsVideoSource(file) {
+        // Read file as ArrayBuffer for FileManager registration
+        const arrayBuffer = await file.arrayBuffer();
+
+        // Register with FileManager so it persists across saves
+        FileManager.list[file.name] = {
+            filename: file.name,
+            data: arrayBuffer,
+            original: arrayBuffer,
+            dynamicLink: true,
+            dataType: "videoImage",
+            handled: true  // Mark as handled so it doesn't get processed again
+        };
+
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+                const videoNode = NodeMan.get("video");
+                videoNode.makeImageVideo(file.name, img);
+                // Store reference to the FileManager entry
+                videoNode.imageFileID = file.name;
+                console.log(`Loaded image "${file.name}" as video source (${img.width}x${img.height})`);
+                resolve();
+            };
+            img.onerror = () => {
+                console.error("Failed to load image: " + file.name);
+                reject(new Error("Failed to load image"));
+            };
+            // Create data URL from the array buffer
+            const blob = new Blob([arrayBuffer], { type: file.type });
+            img.src = URL.createObjectURL(blob);
+        });
+    }
+
+    /**
+     * Create a ground overlay from an image file
+     * Also registers it with FileManager for persistence
+     * Places the overlay at the center of the screen on the ground
+     * @param {File} file - The image file
+     */
+    async createGroundOverlayFromImage(file) {
+        // Read file as ArrayBuffer for FileManager registration
+        const arrayBuffer = await file.arrayBuffer();
+
+        // Create a blob URL for the image
+        const blob = new Blob([arrayBuffer], { type: file.type });
+        const imageURL = URL.createObjectURL(blob);
+
+        // Register with FileManager so it persists across saves
+        FileManager.list[file.name] = {
+            filename: file.name,
+            data: arrayBuffer,
+            original: arrayBuffer,
+            dynamicLink: true,
+            dataType: "groundOverlayImage",
+            blobURL: imageURL,
+            handled: true  // Mark as handled so it doesn't get processed again
+        };
+
+        // Find ground point at center of screen
+        let centerLLA;
+        const view = ViewMan.get("mainView");
+        if (view) {
+            // Calculate screen center coordinates
+            const centerX = view.leftPx + view.widthPx / 2;
+            const centerY = view.topPx + view.heightPx / 2;
+
+            // Get ground point at screen center
+            const groundPoint = Synth3DManager.getGroundPoint(view, centerX, centerY);
+            if (groundPoint) {
+                centerLLA = EUSToLLA(groundPoint);
+            }
+        }
+
+        // Fallback to camera position if no ground intersection
+        if (!centerLLA) {
+            const mainCamera = NodeMan.get("mainCamera").camera;
+            const cameraPos = mainCamera.position.clone();
+            centerLLA = EUSToLLA(cameraPos);
+        }
+
+        // Create overlay at the ground point with a reasonable size
+        // Default to about 1km square (0.01 degrees ≈ 1.1km at equator)
+        const offset = 0.005;
+
+        const overlay = Synth3DManager.addOverlay({
+            name: file.name.replace(/\.[^/.]+$/, ""), // Remove extension for name
+            north: centerLLA.x + offset,
+            south: centerLLA.x - offset,
+            east: centerLLA.y + offset,
+            west: centerLLA.y - offset,
+            rotation: 0,
+            imageURL: imageURL,
+            imageFileID: file.name  // Link to FileManager entry
+        });
+
+        if (overlay) {
+            // Enter edit mode so user can adjust position/size
+            overlay.setEditMode(true);
+            console.log(`Created ground overlay "${overlay.name}" from image at screen center`);
+        }
     }
 
 
