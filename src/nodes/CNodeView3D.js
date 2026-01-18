@@ -2413,8 +2413,13 @@ export class CNodeView3D extends CNodeViewCanvas {
         if (this.camera && mouseInViewOnly(this, mouseX, mouseY)) {
             // First, check for 3D objects using raycasting (they have priority over tracks)
             this.raycaster.setFromCamera(mouseRay, this.camera);
-            const intersects = this.raycaster.intersectObjects(this.scene.children, true);
-            
+            const allIntersects = this.raycaster.intersectObjects(this.scene.children, true);
+
+            // Filter out objects marked to ignore context menu (overlays, clouds)
+            const intersects = allIntersects.filter(intersect =>
+                !intersect.object.userData?.ignoreContextMenu
+            );
+
             if (intersects.length > 0) {
                 // Track if we found a valid object with nodeId
                 let foundObject = false;

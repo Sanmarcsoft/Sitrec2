@@ -297,6 +297,7 @@ export class CNodeSynthClouds extends CNode3DGroup {
         this.cloudMesh = new Mesh(this.cloudGeometry, cloudMaterial);
         this.cloudMesh.layers.mask = LAYER.MASK_WORLD;
         this.cloudMesh.frustumCulled = false;
+        this.cloudMesh.userData.ignoreContextMenu = true;  // Allow right-clicks to pass through to ground
         this.group.add(this.cloudMesh);
         
         this.binSort();
