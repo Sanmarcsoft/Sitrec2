@@ -52,11 +52,11 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
         // these no longer work with the new rendering pipeline
         // TODO: reimplement them as effects?
-         this.optionalInputs(["brightness", "contrast", "blur", "greyscale", "hue", "invert", "saturate", "enableVideoEffects", "convolutionFilter"])
+        this.optionalInputs(["brightness", "contrast", "blur", "greyscale", "hue", "invert", "saturate", "enableVideoEffects", "convolutionFilter"])
         //
 
         //  if (this.overlayView === undefined)
-             addFiltersToVideoNode(this)
+        addFiltersToVideoNode(this)
 
         this.positioned = false;
         this.autoFill = v.autoFill ?? true; // default to autofill
@@ -64,7 +64,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
         this.scrubFrame = 0; // storing fractiona accumulation of frames while scrubbing
 
-        this.autoClear = (v.autoClear !== undefined)? v.autoClear : false;
+        this.autoClear = (v.autoClear !== undefined) ? v.autoClear : false;
 
         this.input("zoom", true); // zoom input is optional
 
@@ -82,7 +82,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         // if it's an overlay view then we don't need to add the overlay UI view
         if (!v.overlayView) {
             // Add an overlay view to show status (mostly errors)
-            this.overlay = new CNodeViewUI({id: this.id+"_videoOverlay", overlayView: this})
+            this.overlay = new CNodeViewUI({ id: this.id + "_videoOverlay", overlayView: this })
             this.overlay.ignoreMouseEvents();
         }
 
@@ -132,36 +132,36 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
             ctx.fillStyle = '#FF0000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             this.videoData = new CVideoImageData({
-                    id: this.id + "_data_" + this.videos.length,
-                    filename: fileName,
-                    img: canvas,
-                    deleteAfterUsing: false
-                },
+                id: this.id + "_data_" + this.videos.length,
+                filename: fileName,
+                img: canvas,
+                deleteAfterUsing: false
+            },
                 this.loadedCallback.bind(this), this.errorCallback.bind(this));
             this.positioned = false;
             par.frame = 0;
             par.paused = false;
             return;
         }
-        
+
         Globals.pendingActions++;
         this.videoLoadPending = true;
-        
+
         const videoIndex = this.videos.length;
         const videoDataId = this.id + "_data_" + videoIndex;
         console.log(`[VideoNew] Creating video[${videoIndex}]: "${fileName}", id="${videoDataId}"`);
-        
+
         // Check if it's an audio-only file based on extension
         if (isAudioOnlyFormat(fileName)) {
             console.log(`[VideoNew] Using audio-only handler for video[${videoIndex}]`);
-            this.videoData = new CVideoAudioOnly({id: videoDataId, filename: fileName, videoSpeed: this.videoSpeed},
+            this.videoData = new CVideoAudioOnly({ id: videoDataId, filename: fileName, videoSpeed: this.videoSpeed },
                 this.loadedCallback.bind(this), this.errorCallback.bind(this))
         } else {
             console.log(`[VideoNew] Using CVideoMp4Data for video[${videoIndex}]`);
-            this.videoData = new CVideoMp4Data({id: videoDataId, file: fileName, videoSpeed: this.videoSpeed},
+            this.videoData = new CVideoMp4Data({ id: videoDataId, file: fileName, videoSpeed: this.videoSpeed },
                 this.loadedCallback.bind(this), this.errorCallback.bind(this))
         }
-        
+
         console.log(`[VideoNew] Created videoData for video[${videoIndex}]: imageCache.length=${this.videoData?.imageCache?.length}`);
 
         // loaded from a URL, so we can set the staticURL
@@ -205,7 +205,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
 
     loadedCallback(videoData) {
-        if (this.videoLoadPending) {
+        if (this.videoLoadPending || this.pendingVideoRestore) {
             Globals.pendingActions--;
             this.videoLoadPending = false;
         }
@@ -218,7 +218,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         if (videoData === undefined)
             videoData = this.videoData;
 
-        assert (videoData, "CNodeVideoView loadedCallback called with no videoData, possibly because it's called in the constructor before the this.videoData is assigned");
+        assert(videoData, "CNodeVideoView loadedCallback called with no videoData, possibly because it's called in the constructor before the this.videoData is assigned");
 
         const vd = videoData;
         console.log(`[VideoLoaded] ========== Video Load Complete ==========`);
@@ -244,33 +244,42 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         }
 
         // Handle pending multi-video restore
+        // Pass vd (the videoData from callback parameter) since this.videoData may not be set yet
+        // (CVideoImageData calls loadedCallback synchronously from within its constructor)
         if (this.pendingVideoRestore) {
-            this.continueVideoRestore();
+            this.continueVideoRestore(vd);
         }
     }
-    
-    continueVideoRestore() {
+
+    continueVideoRestore(loadedVideoData) {
         if (!this.pendingVideoRestore) return;
-        
+
         const { videos, targetIndex } = this.pendingVideoRestore;
         const loadedCount = this.videos.length;
         const totalCount = videos.length;
-        
+
         console.log(`[VideoRestore] Video loaded callback - loaded=${loadedCount}/${totalCount}, targetIndex=${targetIndex}`);
-        console.log(`[VideoRestore] Current videoData: filename=${this.videoData?.filename}, frames=${this.videoData?.frames}, imageCache.length=${this.videoData?.imageCache?.length}, groups=${this.videoData?.groups?.length}`);
-        
+        console.log(`[VideoRestore] Loaded videoData: filename=${loadedVideoData?.filename}, frames=${loadedVideoData?.frames}, imageCache.length=${loadedVideoData?.imageCache?.length}, groups=${loadedVideoData?.groups?.length}`);
+
         // Add the just-loaded video to the array
+        // Use the passed loadedVideoData since this.videoData may not be assigned yet
+        // Add the just-loaded video to the array
+        // Use the passed loadedVideoData since this.videoData may not be assigned yet
         if (loadedCount < totalCount) {
-            const entry = videos[loadedCount];
+            const skippedCount = this.pendingVideoRestore.skippedCount || 0;
+            const entryIndex = loadedCount + skippedCount;
+            const entry = videos[entryIndex];
             if (entry) {
-                console.log(`[VideoRestore] Adding video[${loadedCount}]: "${entry.fileName}"`);
-                this.addVideoEntry(entry.fileName, entry.staticURL, entry.isImage || false, entry.imageFileID);
+                console.log(`[VideoRestore] Adding video[${loadedCount}] (source index ${entryIndex}): "${entry.fileName}"`);
+                this.addVideoEntry(entry.fileName, entry.staticURL, entry.isImage || false, entry.imageFileID, loadedVideoData);
             }
         }
-        
+
         // Check if more videos need to be loaded
-        if (this.videos.length < totalCount) {
-            const nextIdx = this.videos.length;
+        // We need to check against totalCount, but remember that videos.length doesn't include skipped
+        const skippedCount = this.pendingVideoRestore.skippedCount || 0;
+        if (this.videos.length + skippedCount < totalCount) {
+            const nextIdx = this.videos.length + skippedCount;
             const nextEntry = videos[nextIdx];
             if (nextEntry) {
                 console.log(`[VideoRestore] Starting load for video[${nextIdx}]: "${nextEntry.fileName}"`);
@@ -284,9 +293,12 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
             if (targetIndex !== this.currentVideoIndex && targetIndex < this.videos.length) {
                 this.selectVideo(targetIndex);
             }
+            // Ensure video selector is updated after GUI is ready
+            // (guiMenus.view might not exist yet during early restore)
+            this.ensureVideoSelectorUpdated();
         }
     }
-    
+
     logVideoArrayState() {
         console.log(`[VideoState] videos array (${this.videos.length} entries):`);
         this.videos.forEach((v, i) => {
@@ -295,7 +307,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         });
         console.log(`[VideoState] currentVideoIndex=${this.currentVideoIndex}, this.videoData.filename=${this.videoData?.filename}`);
     }
-    
+
     isValidVideoURL(url) {
         if (!url) return false;
         return url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:');
@@ -308,25 +320,29 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         if (entry.isImage && entry.imageFileID) {
             const { FileManager } = require("../Globals");
             const fileEntry = FileManager.list[entry.imageFileID];
-            if (fileEntry && fileEntry.data) {
+            // Use .original which contains the ArrayBuffer (not .data which may be the parsed Image object)
+            if (fileEntry && fileEntry.original) {
                 console.log(`[VideoLoad] Loading image[${nextIdx}] from FileManager`);
+                Globals.pendingActions++;
                 const ext = entry.fileName.split('.').pop().toLowerCase();
                 const mimeType = ext === 'png' ? 'image/png' :
                                 ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' :
                                 ext === 'gif' ? 'image/gif' :
                                 ext === 'webp' ? 'image/webp' : 'image/png';
-                const blob = new Blob([fileEntry.data], { type: mimeType });
+                const blob = new Blob([fileEntry.original], { type: mimeType });
                 const blobURL = URL.createObjectURL(blob);
                 const img = new Image();
                 img.onload = () => {
                     console.log(`[VideoLoad] Image[${nextIdx}] loaded: ${img.width}x${img.height}`);
                     this.makeImageVideo(entry.fileName, img);
                     this.imageFileID = entry.imageFileID;
-                    this.loadedCallback(this.videoData);
+                    // NOTE: Don't call loadedCallback here - CVideoImageData constructor
+                    // already queues it via queueMicrotask. Calling it twice would
+                    // corrupt the video array by adding duplicate entries.
                 };
                 img.src = blobURL;
             } else {
-                console.warn(`[VideoLoad] Cannot restore image[${nextIdx}] "${entry.fileName}" - file data not available`);
+                console.warn(`[VideoLoad] Cannot restore image[${nextIdx}] "${entry.fileName}" - file original data not available`);
                 this.skipCurrentVideoRestore();
             }
         } else {
@@ -340,7 +356,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
             }
         }
     }
-    
+
     skipCurrentVideoRestore() {
         if (!this.pendingVideoRestore) return;
         
@@ -364,7 +380,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
     }
 
     errorCallback() {
-        if (this.videoLoadPending) {
+        if (this.videoLoadPending || this.pendingVideoRestore) {
             Globals.pendingActions--;
             this.videoLoadPending = false;
         }
@@ -373,6 +389,15 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
             this.overlay.removeText("videoLoading")
             this.overlay.addText("videoError", "Error Loading", 50, 45, 5, "#f0f000", "center")
             this.overlay.addText("videoErrorName", this.fileName, 50, 55, 1.5, "#f0f000", "center")
+        }
+
+        // If we are in a restore sequence, an error means we should probably skip this video
+        // and try to load the rest, rather than stalling the entire chain.
+        if (this.pendingVideoRestore) {
+            console.warn(`[VideoRestore] Error loading video "${this.fileName}", skipping and continuing restore...`);
+            // Add a small delay so the user might see the error momentarily (optional), 
+            // or just proceed immediately. For robustness, proceed.
+            this.skipCurrentVideoRestore();
         }
     }
 
@@ -407,12 +432,12 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
             wheel: (e) => {
 
-//                console.log(e.deltaY)
+                //                console.log(e.deltaY)
                 var scale = 0.90;
                 if (e.deltaY > 0) {
-//                    this.in.zoom.value *= 0.6666
+                    //                    this.in.zoom.value *= 0.6666
                 } else {
-//                    this.in.zoom.value *= 1 / 0.6666
+                    //                    this.in.zoom.value *= 1 / 0.6666
                     scale = 1 / scale
                 }
 
@@ -444,7 +469,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
 
             centerDrag: (e) => {
-                this.zoomView(100/(100-this.mouse.dx))
+                this.zoomView(100 / (100 - this.mouse.dx))
             },
 
             dblClick: (e) => {
@@ -462,14 +487,14 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
     toSerializeCNodeVideoView = ["posLeft", "posRight", "posTop", "posBot"]
 
     modSerialize() {
-            const result = {
-                ...super.modSerialize(),
-                ...this.simpleSerialize(this.toSerializeCNodeVideoView)
-            };
-            if (this.videos && this.videos.length > 1) {
-                result.currentVideoIndex = this.currentVideoIndex;
-            }
-            return result;
+        const result = {
+            ...super.modSerialize(),
+            ...this.simpleSerialize(this.toSerializeCNodeVideoView)
+        };
+        if (this.videos && this.videos.length > 1) {
+            result.currentVideoIndex = this.currentVideoIndex;
+        }
+        return result;
     }
 
     modDeserialize(v) {
@@ -500,7 +525,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         const newIndex = this.videos.length;
         console.log(`[VideoEntry] Adding video[${newIndex}]: "${fileName}"`);
         console.log(`[VideoEntry]   videoData: filename=${vd?.filename}, frames=${vd?.frames}, imageCache.length=${vd?.imageCache?.length}, groups=${vd?.groups?.length}`);
-        
+
         const entry = {
             fileName: fileName,
             staticURL: staticURL,
@@ -523,10 +548,12 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
     }
 
     updateCurrentVideoEntry() {
+        if (this.videoLoadPending || this.pendingVideoRestore) {
+            return;
+        }
         const entry = this.getCurrentVideoEntry();
         if (entry) {
             entry.staticURL = this.staticURL;
-            entry.fileName = this.fileName;
             entry.videoData = this.videoData;
             if (this.imageFileID) {
                 entry.imageFileID = this.imageFileID;
@@ -557,15 +584,13 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         this.fileName = entry.fileName;
         this.staticURL = entry.staticURL;
         this.videoData = entry.videoData;
-        if (entry.imageFileID) {
-            this.imageFileID = entry.imageFileID;
-        }
-        
+        this.imageFileID = entry.imageFileID || null;
+
         this.positioned = false;
         this.defaultPosition();
         this._lastSwitchDebug = true;
         setRenderOne(true);
-        
+
         this.updateVideoSelector();
     }
 
@@ -582,9 +607,15 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
     }
 
     updateVideoSelector() {
-        if (!guiMenus.view) return;
+        console.log(`[VideoSelector] updateVideoSelector called: guiMenus.view=${!!guiMenus.view}, videos.length=${this.videos.length}`);
+
+        if (!guiMenus.view) {
+            console.log(`[VideoSelector] Skipping - guiMenus.view not available`);
+            return;
+        }
 
         if (this.videos.length <= 1) {
+            console.log(`[VideoSelector] Skipping - only ${this.videos.length} video(s)`);
             if (this.videoSelectorController) {
                 this.videoSelectorController.destroy();
                 this.videoSelectorController = null;
@@ -602,11 +633,21 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         }
 
         this.currentVideoSelection = this.currentVideoIndex;
+        console.log(`[VideoSelector] Creating selector with ${Object.keys(options).length} options`);
         this.videoSelectorController = guiMenus.view.add(this, "currentVideoSelection", options)
             .name("Current Video")
             .onChange((value) => {
                 this.selectVideo(value);
             });
+        console.log(`[VideoSelector] Selector created: ${!!this.videoSelectorController}`);
+    }
+
+    ensureVideoSelectorUpdated(retries = 10) {
+        if (guiMenus.view) {
+            this.updateVideoSelector();
+        } else if (retries > 0) {
+            setTimeout(() => this.ensureVideoSelectorUpdated(retries - 1), 100);
+        }
     }
 
     async promptAddOrReplace() {
@@ -622,15 +663,15 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
     removeVideo(index) {
         if (index < 0 || index >= this.videos.length) return;
-        
+
         const removedEntry = this.videos.splice(index, 1)[0];
-        
+
         // Dispose the removed video's data
         if (removedEntry && removedEntry.videoData) {
             removedEntry.videoData.stopStreaming?.();
             removedEntry.videoData.dispose?.();
         }
-        
+
         if (this.videos.length === 0) {
             this.currentVideoIndex = -1;
             this.videoData = null;
@@ -642,10 +683,10 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         } else if (index < this.currentVideoIndex) {
             this.currentVideoIndex--;
         }
-        
+
         this.updateVideoSelector();
     }
-    
+
     disposeAllVideos() {
         for (const entry of this.videos) {
             if (entry.videoData) {
@@ -700,11 +741,11 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         this.fileName = filename;
 
         this.videoData = new CVideoImageData({
-                id: this.id + "_data_" + this.videos.length,
-                filename:filename,
-                img: img,
-                deleteAfterUsing: deleteAfterUsing
-            },
+            id: this.id + "_data_" + this.videos.length,
+            filename: filename,
+            img: img,
+            deleteAfterUsing: deleteAfterUsing
+        },
             this.loadedCallback.bind(this), this.errorCallback.bind(this))
         this.positioned = false;
         par.frame = 0;
@@ -713,7 +754,8 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         // this.addDownloadButton()
         EventManager.dispatchEvent("videoLoaded", {
             width: img.width, height: img.height,
-            videoData: this});
+            videoData: this
+        });
     }
 
     renderCanvas(frame = 0) {
@@ -740,8 +782,8 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
             const ctx = this.ctx;
 
-           //  ctx.fillstyle = "#FF00FFFF"
-           //  ctx.fillRect(0, 0, this.canvas.width/3, this.canvas.height);
+            //  ctx.fillstyle = "#FF00FFFF"
+            //  ctx.fillRect(0, 0, this.canvas.width/3, this.canvas.height);
 
             // video width might change, for example, with the tiny images used by the old Gimbal video
             if (this.videoWidth !== image.width) {
@@ -761,26 +803,26 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
             var filter = ''
             const effectsEnabled = this.in.enableVideoEffects ? this.in.enableVideoEffects.v0 : true;
             if (effectsEnabled) {
-                if (this.in.contrast && this.in.contrast.v0 !== 1){
-                    filter += "contrast("+this.in.contrast.v0+") "
+                if (this.in.contrast && this.in.contrast.v0 !== 1) {
+                    filter += "contrast(" + this.in.contrast.v0 + ") "
                 }
-                if (this.in.brightness && this.in.brightness.v0 !== 1){
-                    filter += "brightness("+this.in.brightness.v0+") "
+                if (this.in.brightness && this.in.brightness.v0 !== 1) {
+                    filter += "brightness(" + this.in.brightness.v0 + ") "
                 }
-                if (this.in.blur && this.in.blur.v0 !== 0){
-                 filter += "blur("+this.in.blur.v0+"px) "
+                if (this.in.blur && this.in.blur.v0 !== 0) {
+                    filter += "blur(" + this.in.blur.v0 + "px) "
                 }
-                if (this.in.greyscale && this.in.greyscale.v0 !== 0){
-                    filter += "grayscale("+this.in.greyscale.v0+") "
+                if (this.in.greyscale && this.in.greyscale.v0 !== 0) {
+                    filter += "grayscale(" + this.in.greyscale.v0 + ") "
                 }
-                if (this.in.hue && this.in.hue.v0 !== 0){
-                    filter += "hue-rotate("+this.in.hue.v0+"deg) "
+                if (this.in.hue && this.in.hue.v0 !== 0) {
+                    filter += "hue-rotate(" + this.in.hue.v0 + "deg) "
                 }
-                if (this.in.invert && this.in.invert.v0 !== 0){
-                    filter += "invert("+this.in.invert.v0+") "
+                if (this.in.invert && this.in.invert.v0 !== 0) {
+                    filter += "invert(" + this.in.invert.v0 + ") "
                 }
-                if (this.in.saturate && this.in.saturate.v0 !== 1){
-                    filter += "saturate("+this.in.saturate.v0+") "
+                if (this.in.saturate && this.in.saturate.v0 !== 1) {
+                    filter += "saturate(" + this.in.saturate.v0 + ") "
                 }
             }
 
@@ -804,7 +846,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
             if (this.in.zoom !== undefined) {
 
                 this.getSourceAndDestCoords();
-                ctx.drawImage(image,this.sx, this.sy, this.sWidth, this.sHeight,
+                ctx.drawImage(image, this.sx, this.sy, this.sWidth, this.sHeight,
                     this.dx, this.dy, this.dWidth, this.dHeight);
 
             } else {
@@ -812,12 +854,12 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
                 // which zooming in and out around the mouse
                 ctx.drawImage(image,
                     0, 0, this.videoWidth, this.videoHeight,
-                    this.widthPx*(0.5+this.posLeft), this.heightPx*0.5+this.widthPx*this.posTop,
-                    this.widthPx*(this.posRight-this.posLeft), this.widthPx*(this.posBot-this.posTop))
+                    this.widthPx * (0.5 + this.posLeft), this.heightPx * 0.5 + this.widthPx * this.posTop,
+                    this.widthPx * (this.posRight - this.posLeft), this.widthPx * (this.posBot - this.posTop))
                 ctx.imageSmoothingEnabled = true;
 
             }
-            
+
             if (flowRotation !== 0) {
                 ctx.restore();
             }
@@ -909,7 +951,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
             // if the sourceW or sourceH is not set, then we can't calculate the coordinates correctly
             // so we just use the canvas size for now
             // when the is loaded, this will be updated
-//            showError("CNodeVideoView.getSourceAndDestCoords called with invalid image dimensions, video not loaded? this="+this.id+", sourceW="+sourceW+", sourceH="+sourceH);
+            //            showError("CNodeVideoView.getSourceAndDestCoords called with invalid image dimensions, video not loaded? this="+this.id+", sourceW="+sourceW+", sourceH="+sourceH);
             sourceW = this.widthPx;
             sourceH = this.heightPx;
         }
@@ -965,12 +1007,12 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
             // entire vertical FOV is covered by the video
             this.fovCoverage = 1;
 
-            this.dx  = (this.widthPx - this.heightPx * aspectSource) / 2;
+            this.dx = (this.widthPx - this.heightPx * aspectSource) / 2;
             this.dy = 0;
             this.dWidth = this.heightPx * aspectSource;
             this.dHeight = this.heightPx;
         }
-        assert(!isNaN(this.dWidth) && !isNaN(this.dHeight), "getSourceAndDestCoords returned NaN for dWidth or dHeight, this="+this.id+", zoom="+this.in.zoom.v0);
+        assert(!isNaN(this.dWidth) && !isNaN(this.dHeight), "getSourceAndDestCoords returned NaN for dWidth or dHeight, this=" + this.id + ", zoom=" + this.in.zoom.v0);
 
     }
 
@@ -1013,11 +1055,11 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
     canvasToVideoCoordsOriginal(x, y) {
         // First convert to display video coordinates
         const [displayX, displayY] = this.canvasToVideoCoords(x, y);
-        
+
         // Scale from display to original coordinates
         const scaleX = this.originalVideoWidth / this.videoWidth;
         const scaleY = this.originalVideoHeight / this.videoHeight;
-        
+
         return [displayX * scaleX, displayY * scaleY];
     }
 
@@ -1030,10 +1072,10 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         // Scale from original to display coordinates
         const scaleX = this.videoWidth / this.originalVideoWidth;
         const scaleY = this.videoHeight / this.originalVideoHeight;
-        
+
         const displayX = vX * scaleX;
         const displayY = vY * scaleY;
-        
+
         // Then convert display video coordinates to canvas
         return this.videoToCanvasCoords(displayX, displayY);
     }
@@ -1086,28 +1128,28 @@ export function addFiltersToVideoNode(videoNode) {
     }
 
     if (!NodeMan.exists("videoBrightness")) {
-        brightness = new CNodeGUIValue({id: "videoBrightness", value: 1, start: 0, end: 5, step: 0.01, desc: "Brightness"}, guiVideoEffectsFolder),
-        contrast =  new CNodeGUIValue({id: "videoContrast", value: 1, start: 0, end: 5, step: 0.01, desc: "Contrast"}, guiVideoEffectsFolder),
-        blur = new CNodeGUIValue({id: "videoBlur", value: 0, start: 0, end: 20, step: 1, desc: "Blur Px"}, guiVideoEffectsFolder),
-        greyscale = new CNodeGUIValue({id: "videoGreyscale", value: 0, start: 0, end: 1, step: 0.01, desc: "Greyscale"}, guiVideoEffectsFolder),
-        hue = new CNodeGUIValue({id: "videoHue", value: 0, start: 0, end: 360, step: 1, desc: "Hue Rotate"}, guiVideoEffectsFolder),
-        invert = new CNodeGUIValue({id: "videoInvert", value: 0, start: 0, end: 1, step: 0.01, desc: "Invert"}, guiVideoEffectsFolder),
-        saturate = new CNodeGUIValue({id: "videoSaturate", value: 1, start: 0, end: 5, step: 0.01, desc: "Saturate"}, guiVideoEffectsFolder),
-        enableVideoEffects = new CNodeGUIFlag({id: "videoEnableEffects", value: true, desc: "Enable Video Effects"}, guiVideoEffectsFolder),
-        sharpenAmount = new CNodeGUIValue({id: "videoSharpenAmount", value: 1, start: 0, end: 5, step: 0.1, desc: "Sharpen Amount"}, guiVideoEffectsFolder),
-        edgeDetectThreshold = new CNodeGUIValue({id: "videoEdgeDetectThreshold", value: 0, start: 0, end: 255, step: 1, desc: "Edge Threshold"}, guiVideoEffectsFolder),
-        embossDepth = new CNodeGUIValue({id: "videoEmbossDepth", value: 1, start: 0, end: 3, step: 0.1, desc: "Emboss Depth"}, guiVideoEffectsFolder),
-        convolutionFilter = new CNodeConstant({id: "videoConvolutionFilter", value: 'none'}),
-        convolutionFilterDropdown = guiVideoEffectsFolder.add(filterOptions, "convolutionFilterValue", ['none', 'sharpen', 'edgeDetect', 'emboss']).name("Convolution Filter").onChange(value => {
-            convolutionFilter.value = value;
-            updateConvolutionControlVisibility();
-            setRenderOne(true);
-        }),
-        sharpenAmountControl = sharpenAmount.guiEntry,
-        edgeDetectThresholdControl = edgeDetectThreshold.guiEntry,
-        embossDepthControl = embossDepth.guiEntry,
-        updateConvolutionControlVisibility(),
-        guiVideoEffectsFolder.add(reset, "resetFilters").name("Reset Video Adjustments")
+        brightness = new CNodeGUIValue({ id: "videoBrightness", value: 1, start: 0, end: 5, step: 0.01, desc: "Brightness" }, guiVideoEffectsFolder),
+            contrast = new CNodeGUIValue({ id: "videoContrast", value: 1, start: 0, end: 5, step: 0.01, desc: "Contrast" }, guiVideoEffectsFolder),
+            blur = new CNodeGUIValue({ id: "videoBlur", value: 0, start: 0, end: 20, step: 1, desc: "Blur Px" }, guiVideoEffectsFolder),
+            greyscale = new CNodeGUIValue({ id: "videoGreyscale", value: 0, start: 0, end: 1, step: 0.01, desc: "Greyscale" }, guiVideoEffectsFolder),
+            hue = new CNodeGUIValue({ id: "videoHue", value: 0, start: 0, end: 360, step: 1, desc: "Hue Rotate" }, guiVideoEffectsFolder),
+            invert = new CNodeGUIValue({ id: "videoInvert", value: 0, start: 0, end: 1, step: 0.01, desc: "Invert" }, guiVideoEffectsFolder),
+            saturate = new CNodeGUIValue({ id: "videoSaturate", value: 1, start: 0, end: 5, step: 0.01, desc: "Saturate" }, guiVideoEffectsFolder),
+            enableVideoEffects = new CNodeGUIFlag({ id: "videoEnableEffects", value: true, desc: "Enable Video Effects" }, guiVideoEffectsFolder),
+            sharpenAmount = new CNodeGUIValue({ id: "videoSharpenAmount", value: 1, start: 0, end: 5, step: 0.1, desc: "Sharpen Amount" }, guiVideoEffectsFolder),
+            edgeDetectThreshold = new CNodeGUIValue({ id: "videoEdgeDetectThreshold", value: 0, start: 0, end: 255, step: 1, desc: "Edge Threshold" }, guiVideoEffectsFolder),
+            embossDepth = new CNodeGUIValue({ id: "videoEmbossDepth", value: 1, start: 0, end: 3, step: 0.1, desc: "Emboss Depth" }, guiVideoEffectsFolder),
+            convolutionFilter = new CNodeConstant({ id: "videoConvolutionFilter", value: 'none' }),
+            convolutionFilterDropdown = guiVideoEffectsFolder.add(filterOptions, "convolutionFilterValue", ['none', 'sharpen', 'edgeDetect', 'emboss']).name("Convolution Filter").onChange(value => {
+                convolutionFilter.value = value;
+                updateConvolutionControlVisibility();
+                setRenderOne(true);
+            }),
+            sharpenAmountControl = sharpenAmount.guiEntry,
+            edgeDetectThresholdControl = edgeDetectThreshold.guiEntry,
+            embossDepthControl = embossDepth.guiEntry,
+            updateConvolutionControlVisibility(),
+            guiVideoEffectsFolder.add(reset, "resetFilters").name("Reset Video Adjustments")
     } else {
         brightness = NodeMan.get("videoBrightness");
         contrast = NodeMan.get("videoContrast");
@@ -1152,45 +1194,45 @@ export function addFiltersToVideoNode(videoNode) {
 
 const CONVOLUTION_KERNELS = {
     none: { kernel: null, divisor: 1, offset: 0 },
-    sharpen: { 
+    sharpen: {
         kernel: [
-            0, -1,  0,
+            0, -1, 0,
             -1, 5, -1,
-            0, -1,  0
-        ], 
-        divisor: 1, 
-        offset: 0 
+            0, -1, 0
+        ],
+        divisor: 1,
+        offset: 0
     },
-    edgeDetect: { 
+    edgeDetect: {
         kernel: [
             -1, -1, -1,
-            -1,  8, -1,
+            -1, 8, -1,
             -1, -1, -1
-        ], 
-        divisor: 1, 
-        offset: 0 
+        ],
+        divisor: 1,
+        offset: 0
     },
-    emboss: { 
+    emboss: {
         kernel: [
-            -2, -1,  0,
-            -1,  1,  1,
-            0,  1,  2
-        ], 
-        divisor: 1, 
-        offset: 128 
+            -2, -1, 0,
+            -1, 1, 1,
+            0, 1, 2
+        ],
+        divisor: 1,
+        offset: 128
     }
 };
 
 export function applyConvolution(ctx, width, height, kernelName, params = {}) {
     if (kernelName === 'none' || !CONVOLUTION_KERNELS[kernelName]) return;
-    
+
     let { kernel, divisor, offset } = CONVOLUTION_KERNELS[kernelName];
     if (!kernel) return;
-    
+
     const amount = params.amount ?? 1;
     const threshold = params.threshold ?? 0;
     const strength = params.strength ?? 1;
-    
+
     if (kernelName === 'sharpen') {
         kernel = [
             0, -1 * amount, 0,
@@ -1208,14 +1250,14 @@ export function applyConvolution(ctx, width, height, kernelName, params = {}) {
         divisor = 1;
         offset = 128;
     }
-    
+
     const imageData = ctx.getImageData(0, 0, width, height);
     const data = imageData.data;
     const output = new Uint8ClampedArray(data.length);
-    
+
     const w = width;
     const h = height;
-    
+
     for (let y = 1; y < h - 1; y++) {
         for (let x = 1; x < w - 1; x++) {
             for (let c = 0; c < 4; c++) {
@@ -1239,7 +1281,7 @@ export function applyConvolution(ctx, width, height, kernelName, params = {}) {
             output[((y * w + x) * 4 + 3)] = data[((y * w + x) * 4 + 3)];
         }
     }
-    
+
     for (let i = 0; i < data.length; i += 4) {
         if (output[i] !== 0 || output[i + 1] !== 0 || output[i + 2] !== 0 || output[i + 3] !== 0) {
             data[i] = output[i];
@@ -1247,6 +1289,6 @@ export function applyConvolution(ctx, width, height, kernelName, params = {}) {
             data[i + 2] = output[i + 2];
         }
     }
-    
+
     ctx.putImageData(imageData, 0, 0);
 }

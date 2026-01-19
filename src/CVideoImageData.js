@@ -15,7 +15,10 @@ export class CVideoImageData extends CVideoData {
 
         this.filename = v.filename;
         this.deleteAfterUsing = v.deleteAfterUsing ?? true;
-        loadedCallback(this);
+        
+        // Defer callback until after constructor returns and assignment completes
+        // This ensures this.videoData is set before loadedCallback runs
+        queueMicrotask(() => loadedCallback(this));
     }
 
     getImage(frame) {

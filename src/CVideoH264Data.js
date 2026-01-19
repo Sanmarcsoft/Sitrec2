@@ -436,10 +436,12 @@ export class CVideoH264Data extends CVideoWebCodecBase {
             updateSitFrames();
 
             this.loaded = true;
-            
+
             // Only call the callback if it hasn't been cleared (disposed)
+            // Pass this so the callback knows which videoData loaded
+            // (important when multiple videos are loading concurrently)
             if (this.loadedCallback) {
-                this.loadedCallback();
+                this.loadedCallback(this);
             }
 
             EventManager.dispatchEvent("videoLoaded", {
@@ -695,8 +697,9 @@ export class CVideoH264Data extends CVideoWebCodecBase {
         }
         
         // Call loaded callback to indicate we're "ready" (even if in fallback mode)
+        // Pass this so the callback knows which videoData loaded
         if (this.loadedCallback) {
-            this.loadedCallback();
+            this.loadedCallback(this);
         }
     }
     

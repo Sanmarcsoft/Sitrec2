@@ -726,6 +726,10 @@ export async function SetupFromKeyAndData(key, _data, depth=0) {
             }
 
 
+            // When restoring from Sit.videos array, don't pass file to constructor
+            // to avoid dual loading race condition (constructor loads + restore loads)
+            const constructorFile = (Sit.videos && Sit.videos.length > 0) ? undefined : videoFile;
+
             node = new CNodeVideoWebCodecView({
                     id: /*data.id ?? */"video",
                     inputs: {
@@ -735,11 +739,11 @@ export async function SetupFromKeyAndData(key, _data, depth=0) {
                     draggable: true, resizable: true,
                     frames: Sit.frames,
                     videoSpeed: Sit.videoSpeed,
-                    file: videoFile,
+                    file: constructorFile,
                     ...data,
                 }
             )
-            
+
             // Restore multi-video state if present (new format)
             // Check for videos array first - this is the new multi-video format
             if (Sit.videos && Sit.videos.length > 0) {

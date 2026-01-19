@@ -4047,7 +4047,8 @@ export class CCustomManager {
                                     FileManager.list[fileID].kmzHref = metadata.kmzHref;
                                     // Create blobURL from buffer if not already set
                                     if (!FileManager.list[fileID].blobURL) {
-                                        const buffer = FileManager.list[fileID].data;
+                                        // Use .original which contains the ArrayBuffer
+                                        const buffer = FileManager.list[fileID].original;
                                         const ext = metadata.kmzHref.split('.').pop().toLowerCase();
                                         const mimeType = ext === 'png' ? 'image/png' :
                                             ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' :

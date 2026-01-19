@@ -1355,8 +1355,19 @@ export class CFileManager extends CManager {
 
         // Handle image files that were imported as video source
         if (fileManagerEntry.dataType === "videoImage") {
+            // If a multi-video restore is in progress, skip this - loadVideoFromEntry will handle it
+            // Calling makeImageVideo here would trigger loadedCallback and corrupt the restore sequence
+            if (NodeMan.exists("video")) {
+                const videoNode = NodeMan.get("video");
+                if (videoNode.pendingVideoRestore) {
+                    console.log(`[CFileManager] Skipping video image restore for "${filename}" - pendingVideoRestore active`);
+                    return;
+                }
+            }
+
             // Load image and set as video source
-            const buffer = fileManagerEntry.data || fileManagerEntry.original;
+            // Use .original which contains the ArrayBuffer (not .data which is the parsed Image object)
+            const buffer = fileManagerEntry.original;
             if (buffer) {
                 const ext = getFileExtension(filename).toLowerCase();
                 const mimeType = ext === 'png' ? 'image/png' :
@@ -1383,7 +1394,8 @@ export class CFileManager extends CManager {
         // Handle image files for ground overlays - just create blobURL
         // The overlay itself is restored via C3DSynthManager serialization
         if (fileManagerEntry.dataType === "groundOverlayImage") {
-            const buffer = fileManagerEntry.data || fileManagerEntry.original;
+            // Use .original which contains the ArrayBuffer (not .data which is the parsed Image object)
+            const buffer = fileManagerEntry.original;
             if (buffer && !fileManagerEntry.blobURL) {
                 const ext = getFileExtension(filename).toLowerCase();
                 const mimeType = ext === 'png' ? 'image/png' :
@@ -2260,9 +2272,23 @@ export class CFileManager extends CManager {
                 assert(rehostFilename !== undefined, "Rehost filename is undefined for key " + key);
 
                 console.log("Dynamic Rehost: " + rehostFilename + " length=" + f.original.byteLength + " staticURL=" + f.staticURL)
+                const fileKey = key;
+                const fileEntry = f;
                 const rehostPromise = this.rehoster.rehostFile(rehostFilename, f.original).then((staticURL) => {
                     console.log("AS PROMISED: " + staticURL)
-                    f.staticURL = staticURL;
+                    fileEntry.staticURL = staticURL;
+                    
+                    if (fileEntry.dataType === "videoImage" && NodeMan.exists("video")) {
+                        const videoNode = NodeMan.get("video");
+                        const videoEntry = videoNode.videos?.find(v => v.imageFileID === fileKey);
+                        if (videoEntry) {
+                            console.log(`[rehostDynamicLinks] Updated video entry staticURL for image ${fileKey}`);
+                            videoEntry.staticURL = staticURL;
+                            if (videoNode.imageFileID === fileKey) {
+                                videoNode.staticURL = staticURL;
+                            }
+                        }
+                    }
                 }).catch((error) => {
                     console.error("Rehost failed for " + rehostFilename + ":", error);
                     throw error; // Re-throw to propagate to Promise.all

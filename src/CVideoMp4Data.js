@@ -228,8 +228,10 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
                     updateSitFrames()
 
                     // Only call the callback if it hasn't been cleared (disposed)
+                    // Pass this so the callback knows which videoData loaded
+                    // (important when multiple videos are loading concurrently)
                     if (this.loadedCallback) {
-                        this.loadedCallback();
+                        this.loadedCallback(this);
                     }
 
                     // videoLoaded event already dispatched earlier for view setup
