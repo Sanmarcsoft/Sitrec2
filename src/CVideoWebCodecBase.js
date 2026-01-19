@@ -578,7 +578,18 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
             return this.errorImage;
         }
 
-        // Safety checks - if not initialized yet, return blank frame if possible
+        if (this._loadingId && (!this.groups || this.groups.length === 0 || !this.imageCache || !this.chunks)) {
+            if (!this._loadingPlaceholder) {
+                const {VideoLoadingManager} = require("./CVideoLoadingManager");
+                this._loadingPlaceholder = VideoLoadingManager.createLoadingImageForVideo(
+                    this.filename,
+                    this.videoWidth || 640,
+                    this.videoHeight || 480
+                );
+            }
+            return this._loadingPlaceholder;
+        }
+
         if (!this.groups || this.groups.length === 0 || !this.imageCache || !this.chunks) {
             return this.createBlankFrame();
         }

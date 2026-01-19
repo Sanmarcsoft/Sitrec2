@@ -7,6 +7,7 @@ import {CVideoMp4Data} from "../CVideoMp4Data";
 import {CVideoH264Data} from "../CVideoH264Data";
 import {CVideoAudioOnly} from "../CVideoAudioOnly";
 import {isAudioOnlyFormat} from "../AudioFormats";
+import {VideoLoadingManager} from "../CVideoLoadingManager";
 
 export class CNodeVideoWebCodecView extends CNodeVideoView {
     constructor(v) {
@@ -134,7 +135,6 @@ export class CNodeVideoWebCodecView extends CNodeVideoView {
         }
 
         this._doUploadFile(file);
-        this.addVideoEntry(file.name, undefined, false);
     }
 
     _doUploadFile(file) {
@@ -162,6 +162,13 @@ export class CNodeVideoWebCodecView extends CNodeVideoView {
             this.videoData = new CVideoMp4Data({id: this.id + "_data_" + this.videos.length, dropFile: file},
                 this.loadedCallback.bind(this), this.errorCallback.bind(this));
         }
+        
+        const videoDataId = this.videoData.id;
+        VideoLoadingManager.registerLoading(videoDataId, file.name);
+        this.videoData._loadingId = videoDataId;
+        
+        // Add to videos array immediately so menu is populated during loading
+        this.addVideoEntry(file.name, undefined, false);
         
         par.frame = 0;
         par.paused = false;

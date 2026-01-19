@@ -5,6 +5,7 @@ import {CVideoWebCodecBase} from "./CVideoWebCodecBase";
 import {updateSitFrames} from "./UpdateSitFrames";
 import {EventManager} from "./CEventManager";
 import {showError} from "./showError";
+import {VideoLoadingManager} from "./CVideoLoadingManager";
 
 /**
  * MP4 video data handler using WebCodec API
@@ -277,11 +278,11 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
 
                         this.frames++;
                         Sit.videoFrames = this.frames * this.videoSpeed;
-                        // Sit.aFrame = 0;
-                        // Sit.bFrame = Sit.videoFrames-1;
 
-                        // decoding is now deferred
-                        //            decoder.decode(chunk);
+                        if (this._loadingId && demuxer.source.totalFrames > 0) {
+                            const progress = (this.frames / demuxer.source.totalFrames) * 100;
+                            VideoLoadingManager.updateProgress(this._loadingId, progress);
+                        }
                     },
                     (track_id, samples) => {
                         // Audio samples callback
@@ -316,6 +317,11 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
                     }
                     this.frames++;
                     Sit.videoFrames = this.frames * this.videoSpeed;
+
+                    if (this._loadingId && demuxer.source.totalFrames > 0) {
+                        const progress = (this.frames / demuxer.source.totalFrames) * 100;
+                        VideoLoadingManager.updateProgress(this._loadingId, progress);
+                    }
                 }, null, completeExtraction);
             }).catch(err => {
                 // Error will be ignored if callbacks are cleared

@@ -361,10 +361,9 @@ class CDragDropHandler {
         return new Promise((resolve, reject) => {
             const img = new Image();
             img.onload = () => {
-                videoNode.makeImageVideo(file.name, img);
+                videoNode.makeImageVideo(file.name, img, false, file.name);
                 // Store reference to the FileManager entry
                 videoNode.imageFileID = file.name;
-                videoNode.addVideoEntry(file.name, undefined, true, file.name);
                 console.log(`Loaded image "${file.name}" as video source (${img.width}x${img.height})`);
                 resolve();
             };

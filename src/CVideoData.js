@@ -2,6 +2,7 @@ import {assert} from "./assert.js";
 
 export class CVideoData {
     constructor(v) {
+        this.id = v.id;
         this.percentLoaded = 0;
 
         this.frames = v.frames

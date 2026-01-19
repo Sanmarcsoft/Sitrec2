@@ -43,6 +43,7 @@ import {isAudioOnlyFormat} from "../AudioFormats";
 import {assert} from "../assert";
 import {EventManager} from "../CEventManager";
 import {getFlowAlignRotation} from "../FlowAlignment";
+import {VideoLoadingManager} from "../CVideoLoadingManager";
 
 
 export class CNodeVideoView extends CNodeViewCanvas2D {
@@ -164,8 +165,16 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
         console.log(`[VideoNew] Created videoData for video[${videoIndex}]: imageCache.length=${this.videoData?.imageCache?.length}`);
 
+        VideoLoadingManager.registerLoading(videoDataId, fileName);
+        this.videoData._loadingId = videoDataId;
+
         // loaded from a URL, so we can set the staticURL
         this.staticURL = this.fileName;
+
+        // Add to videos array immediately (not during restore - that's handled by continueVideoRestore)
+        if (!this.pendingVideoRestore) {
+            this.addVideoEntry(fileName, this.staticURL, false);
+        }
 
         this.positioned = false;
         par.frame = 0;
@@ -205,10 +214,6 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
 
     loadedCallback(videoData) {
-        if (this.videoLoadPending || this.pendingVideoRestore) {
-            Globals.pendingActions--;
-            this.videoLoadPending = false;
-        }
         this.removeText();
 
 
@@ -219,6 +224,21 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
             videoData = this.videoData;
 
         assert(videoData, "CNodeVideoView loadedCallback called with no videoData, possibly because it's called in the constructor before the this.videoData is assigned");
+
+        // Decrement pendingActions if this video was registered with the VideoLoadingManager
+        // Use _loadingId to track per-video pending state (not videoLoadPending which is shared)
+        console.log(`[VideoLoaded] _loadingId check: "${videoData._loadingId}", filename: "${videoData?.filename}"`);
+        if (videoData._loadingId) {
+            console.log(`[VideoLoaded] Calling completeLoading for: ${videoData._loadingId}`);
+            VideoLoadingManager.completeLoading(videoData._loadingId);
+            Globals.pendingActions--;
+            console.log(`[VideoLoaded] pendingActions decremented to: ${Globals.pendingActions}`);
+        } else if (this.videoLoadPending || this.pendingVideoRestore) {
+            // Fallback for videos without _loadingId (legacy path)
+            Globals.pendingActions--;
+            console.log(`[VideoLoaded] pendingActions decremented (legacy) to: ${Globals.pendingActions}`);
+        }
+        this.videoLoadPending = false;
 
         const vd = videoData;
         console.log(`[VideoLoaded] ========== Video Load Complete ==========`);
@@ -736,7 +756,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         super.dispose();
     }
 
-    makeImageVideo(filename, img, deleteAfterUsing = false) {
+    makeImageVideo(filename, img, deleteAfterUsing = false, imageFileID = undefined) {
 
         this.fileName = filename;
 
@@ -747,11 +767,15 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
             deleteAfterUsing: deleteAfterUsing
         },
             this.loadedCallback.bind(this), this.errorCallback.bind(this))
+        
+        // Add to videos array immediately (not during restore - that's handled by continueVideoRestore)
+        if (!this.pendingVideoRestore) {
+            this.addVideoEntry(filename, undefined, true, imageFileID);
+        }
+        
         this.positioned = false;
         par.frame = 0;
         par.paused = false; // unpause, otherwise we see nothing.
-        // this.addLoadingMessage()
-        // this.addDownloadButton()
         EventManager.dispatchEvent("videoLoaded", {
             width: img.width, height: img.height,
             videoData: this
