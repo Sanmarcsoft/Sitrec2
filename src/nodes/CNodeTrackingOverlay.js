@@ -290,7 +290,7 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
         })
             .tooltip("Limit the A and B frames to the range of the video tracking keyframes.")
 
-        this.curveType = "Spline";
+        this.curveType = "Spline2";
         this.manualTrackingFolder.add(this, "curveType", ["Spline", "Spline2", "Linear", "Perspective"]).name("Curve Type").listen().onChange(() => {
             if (this.curveType === "Perspective") {
                 const traverseSelect = NodeMan.get("LOSTraverseSelectTrack", false);
