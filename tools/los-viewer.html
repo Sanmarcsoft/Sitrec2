@@ -72,9 +72,35 @@
             font-weight: normal;
             margin-left: 5px;
         }
+        #dropOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 100, 200, 0.3);
+            border: 4px dashed #0066cc;
+            display: none;
+            z-index: 1000;
+            pointer-events: none;
+            box-sizing: border-box;
+        }
+        #dropOverlay.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #dropOverlay span {
+            font-size: 24px;
+            color: white;
+            background: rgba(0, 100, 200, 0.8);
+            padding: 20px 40px;
+            border-radius: 10px;
+        }
     </style>
 </head>
 <body>
+    <div id="dropOverlay"><span>Drop CSV file to load</span></div>
     <div id="container"></div>
     <div id="controls">
         <h3>LOS CSV Viewer</h3>
@@ -184,6 +210,43 @@
             });
             document.getElementById('showBasePlane').addEventListener('change', (e) => {
                 if (basePlane) basePlane.visible = e.target.checked;
+            });
+
+            // Drag and drop handlers
+            const dropOverlay = document.getElementById('dropOverlay');
+            let dragCounter = 0;
+
+            document.body.addEventListener('dragenter', (e) => {
+                e.preventDefault();
+                dragCounter++;
+                dropOverlay.classList.add('active');
+            });
+
+            document.body.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                dragCounter--;
+                if (dragCounter === 0) {
+                    dropOverlay.classList.remove('active');
+                }
+            });
+
+            document.body.addEventListener('dragover', (e) => {
+                e.preventDefault();
+            });
+
+            document.body.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dragCounter = 0;
+                dropOverlay.classList.remove('active');
+
+                const files = e.dataTransfer.files;
+                if (files.length > 0 && files[0].name.endsWith('.csv')) {
+                    const reader = new FileReader();
+                    reader.onload = function(ev) {
+                        parseAndRenderCSV(ev.target.result);
+                    };
+                    reader.readAsText(files[0]);
+                }
             });
 
             // Start animation loop
