@@ -323,6 +323,14 @@ export class CFileManager extends CManager {
             }).moveAfter("Open (A-Z)")
                 .tooltip("Delete a saved sitch from your personal folder on the server");
 
+            this.versionsList = ["-"];
+            this.versionsData = [];
+            this.versionName = "-";
+            this.guiVersions = this.guiServer.add(this, "versionName", this.versionsList).name("Versions").perm().onChange((value) => {
+                this.loadVersion(value);
+            }).moveAfter("Delete")
+                .tooltip("Load a specific version of the currently selected sitch");
+
         }).catch(error => {
             console.warn("Could not fetch user files from server (non-critical):", error.message);
         })
@@ -433,16 +441,17 @@ export class CFileManager extends CManager {
         console.log(this.loadName);
 
         if (this.loadName === "-") {
+            this.updateVersionsDropdown([]);
             return;
         }
 
         this.getVersions(this.loadName).then((versions) => {
-            // the last version is the most recent
+            this.updateVersionsDropdown(versions);
+            
             const latestVersion = versions[versions.length - 1].url;
             console.log("Loading " + name + " version " + latestVersion)
 
             this.loadURL = latestVersion;
-            /// load the file, convert to an object, and call setNewSitchObject with it.
             fetch(latestVersion).then(response => response.arrayBuffer()).then(data => {
                 console.log("Loaded " + name + " version " + latestVersion)
 
@@ -453,6 +462,63 @@ export class CFileManager extends CManager {
 
                 setNewSitchObject(sitchObject);
             })
+        })
+    }
+
+    updateVersionsDropdown(versions) {
+        if (!this.guiVersions) return;
+        
+        while (this.versionsList.length > 1) {
+            removeOptionFromGUIMenu(this.guiVersions, this.versionsList[this.versionsList.length - 1]);
+            this.versionsList.pop();
+        }
+        
+        this.versionsData = versions;
+        
+        for (let i = versions.length - 1; i >= 0; i--) {
+            const v = versions[i];
+            const versionFile = v.version;
+            const dateMatch = versionFile.match(/(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})-(\d{2})/);
+            let displayName;
+            if (dateMatch) {
+                displayName = `${dateMatch[1]} ${dateMatch[2]}:${dateMatch[3]}:${dateMatch[4]}`;
+            } else {
+                displayName = versionFile.replace(/\.sitch\.js$/, '');
+            }
+            if (i === versions.length - 1) {
+                displayName += " (latest)";
+            }
+            this.versionsList.push(displayName);
+            addOptionToGUIMenu(this.guiVersions, displayName, displayName);
+        }
+        
+        this.versionName = "-";
+        this.guiVersions.updateDisplay();
+    }
+
+    loadVersion(displayName) {
+        if (displayName === "-" || !this.versionsData.length) return;
+        
+        const index = this.versionsList.indexOf(displayName);
+        if (index <= 0) return;
+        
+        const versionIndex = this.versionsData.length - index;
+        const versionData = this.versionsData[versionIndex];
+        
+        if (!versionData) return;
+        
+        console.log("Loading version: " + versionData.version + " from " + versionData.url);
+        
+        this.loadURL = versionData.url;
+        fetch(versionData.url).then(response => response.arrayBuffer()).then(data => {
+            console.log("Loaded version " + versionData.version)
+
+            const decoder = new TextDecoder('utf-8');
+            const decodedString = decoder.decode(data);
+
+            let sitchObject = textSitchToObject(decodedString);
+
+            setNewSitchObject(sitchObject);
         })
     }
 
@@ -520,6 +586,7 @@ export class CFileManager extends CManager {
                     addOptionToGUIMenu(this.guiLoad, Sit.sitchName);
                     addOptionToGUIMenu(this.guiLoadAlphabetical, Sit.sitchName);
                     addOptionToGUIMenu(this.guiDelete, Sit.sitchName);
+                    return this.refreshVersions();
                 }
             }).catch((error) => {
                 console.log("Failed to input sitch name:", error);
@@ -529,10 +596,22 @@ export class CFileManager extends CManager {
         } else {
             return this.saveSitchNamed(Sit.sitchName, local).then(() => {
                 console.log("Sitch saved as " + Sit.sitchName);
+                if (!local) {
+                    return this.refreshVersions();
+                }
             }).catch((error) => {
                 console.log("Error in saveSitchNamed:", error);
             })
         }
+    }
+
+    refreshVersions() {
+        if (!Sit.sitchName) return Promise.resolve();
+        return this.getVersions(Sit.sitchName).then((versions) => {
+            this.updateVersionsDropdown(versions);
+        }).catch((error) => {
+            console.warn("Failed to refresh versions:", error);
+        });
     }
 
     /**
