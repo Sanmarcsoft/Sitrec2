@@ -146,101 +146,85 @@ $sitches = getUserSitches($targetUserId);
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
             min-height: 100vh;
             color: #e4e4e4;
-            padding: 20px;
+            padding: 10px;
+            font-size: 13px;
         }
-        .container { max-width: 800px; margin: 0 auto; }
-        h1 {
-            text-align: center;
-            margin-bottom: 30px;
-            font-weight: 300;
-            font-size: 2em;
-            color: #fff;
-        }
-        .back-link {
-            display: inline-block;
-            margin-bottom: 20px;
-            color: #64ffda;
-            text-decoration: none;
-        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header-row { display: flex; align-items: center; gap: 20px; margin-bottom: 12px; flex-wrap: wrap; }
+        h1 { font-weight: 300; font-size: 1.6em; color: #fff; margin: 0; }
+        .back-link { color: #64ffda; text-decoration: none; font-size: 0.9em; }
         .back-link:hover { text-decoration: underline; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
+        @media (min-width: 900px) { .grid { grid-template-columns: 300px 1fr; } }
         .card {
             background: rgba(255,255,255,0.05);
-            border-radius: 16px;
-            padding: 24px;
+            border-radius: 10px;
+            padding: 12px;
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255,255,255,0.1);
-            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-            margin-bottom: 20px;
         }
         .card h2 {
-            font-size: 1.1em;
+            font-size: 0.85em;
             font-weight: 500;
             color: #8892b0;
-            margin-bottom: 16px;
+            margin-bottom: 8px;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
         }
-        .info-row {
-            display: flex;
-            padding: 12px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-        }
+        .info-row { display: flex; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
         .info-row:last-child { border-bottom: none; }
-        .info-label { color: #8892b0; width: 120px; flex-shrink: 0; }
+        .info-label { color: #8892b0; width: 80px; flex-shrink: 0; font-size: 0.85em; }
         .info-value { color: #ccd6f6; }
         table { width: 100%; border-collapse: collapse; }
-        th, td {
-            padding: 12px 8px;
-            text-align: left;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-        }
-        th { color: #8892b0; font-weight: 500; font-size: 0.85em; text-transform: uppercase; }
+        th, td { padding: 6px 4px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        th { color: #8892b0; font-weight: 500; font-size: 0.75em; text-transform: uppercase; }
         td { color: #ccd6f6; }
         tr:hover { background: rgba(255,255,255,0.02); }
-        .sitch-link {
-            color: #64ffda;
-            text-decoration: none;
-        }
+        .sitch-link { color: #64ffda; text-decoration: none; }
         .sitch-link:hover { text-decoration: underline; }
         .empty { color: #8892b0; font-style: italic; }
     </style>
 </head>
 <body>
     <div class="container">
-        <a href="admin_dashboard.php" class="back-link">&larr; Back to Dashboard</a>
-        <h1>User Info</h1>
-        
-        <div class="card">
-            <h2>User Details</h2>
-            <div class="info-row">
-                <span class="info-label">User ID</span>
-                <span class="info-value"><?= htmlspecialchars($targetUserId) ?></span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Username</span>
-                <span class="info-value"><?= htmlspecialchars($targetUserInfo['username']) ?></span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Last IP</span>
-                <span class="info-value"><?= htmlspecialchars($targetUserInfo['ip']) ?></span>
-            </div>
+        <div class="header-row">
+            <a href="admin_dashboard.php" class="back-link">&larr; Dashboard</a>
+            <h1>User: <?= htmlspecialchars($targetUserInfo['username']) ?> #<?= htmlspecialchars($targetUserId) ?></h1>
         </div>
         
-        <div class="card">
-            <h2>Saved Sitches (<?= count($sitches) ?>)</h2>
-            <?php if (empty($sitches)): ?>
-            <p class="empty">No saved sitches found</p>
-            <?php else: ?>
-            <table>
-                <tr><th>Name</th><th>Last Modified</th></tr>
-                <?php foreach ($sitches as $sitch): ?>
-                <tr>
-                    <td><?php if ($sitch['url']): ?><a href="../?custom=<?= urlencode($sitch['url']) ?>" class="sitch-link"><?= htmlspecialchars($sitch['name']) ?></a><?php else: ?><?= htmlspecialchars($sitch['name']) ?><?php endif; ?></td>
-                    <td><?= htmlspecialchars($sitch['lastModified']) ?></td>
-                </tr>
-                <?php endforeach; ?>
-            </table>
-            <?php endif; ?>
+        <div class="grid">
+            <div class="card">
+                <h2>User Details</h2>
+                <div class="info-row">
+                    <span class="info-label">User ID</span>
+                    <span class="info-value"><?= htmlspecialchars($targetUserId) ?></span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Username</span>
+                    <span class="info-value"><?= htmlspecialchars($targetUserInfo['username']) ?></span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Last IP</span>
+                    <span class="info-value"><?= htmlspecialchars($targetUserInfo['ip']) ?></span>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>Saved Sitches (<?= count($sitches) ?>)</h2>
+                <?php if (empty($sitches)): ?>
+                <p class="empty">No saved sitches found</p>
+                <?php else: ?>
+                <table>
+                    <tr><th>Name</th><th>Last Modified</th></tr>
+                    <?php foreach ($sitches as $sitch): ?>
+                    <tr>
+                        <td><?php if ($sitch['url']): ?><a href="../?custom=<?= urlencode($sitch['url']) ?>" class="sitch-link"><?= htmlspecialchars($sitch['name']) ?></a><?php else: ?><?= htmlspecialchars($sitch['name']) ?><?php endif; ?></td>
+                        <td><?= htmlspecialchars($sitch['lastModified']) ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </table>
+                <?php endif; ?>
+            </div>
         </div>
     </div>
 </body>

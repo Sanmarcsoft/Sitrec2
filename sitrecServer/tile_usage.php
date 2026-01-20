@@ -34,7 +34,7 @@ if ($userId <= 0) {
 
 // Tile service rate limits by user group (tiles per hour)
 // Groups: admin=3, registered=2, verified=9, sitrec=14
-// Services: mapbox, maptiler, aws, osm, eox, other
+// Services: mapbox, maptiler, aws, osm, eox, esri, other
 $TILE_RATE_LIMITS = [
     3 => [ // admin - effectively unlimited
         'mapbox' => 1000000,
@@ -42,6 +42,7 @@ $TILE_RATE_LIMITS = [
         'aws' => 1000000,
         'osm' => 1000000,
         'eox' => 1000000,
+        'esri' => 1000000,
         'other' => 1000000,
     ],
     14 => [ // sitrec - premium
@@ -50,6 +51,7 @@ $TILE_RATE_LIMITS = [
         'aws' => 50000,
         'osm' => 50000,
         'eox' => 20000,
+        'esri' => 50000,
         'other' => 10000,
     ],
     9 => [ // verified - mid tier
@@ -58,6 +60,7 @@ $TILE_RATE_LIMITS = [
         'aws' => 20000,
         'osm' => 20000,
         'eox' => 10000,
+        'esri' => 20000,
         'other' => 5000,
     ],
     2 => [ // registered - basic
@@ -66,6 +69,7 @@ $TILE_RATE_LIMITS = [
         'aws' => 10000,
         'osm' => 10000,
         'eox' => 5000,
+        'esri' => 10000,
         'other' => 2000,
     ],
     0 => [ // guest - minimal
@@ -74,6 +78,7 @@ $TILE_RATE_LIMITS = [
         'aws' => 5000,
         'osm' => 5000,
         'eox' => 2000,
+        'esri' => 5000,
         'other' => 1000,
     ],
 ];
@@ -85,6 +90,7 @@ $DEFAULT_LIMITS = [
     'aws' => 5000,
     'osm' => 5000,
     'eox' => 2000,
+    'esri' => 5000,
     'other' => 1000,
 ];
 

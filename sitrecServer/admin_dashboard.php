@@ -208,7 +208,9 @@ function getS3Usage() {
         } while ($response['IsTruncated'] ?? false);
         
         usort($objects, fn($a, $b) => $b['LastModified'] <=> $a['LastModified']);
-        $result['recent_files'] = array_slice($objects, 0, 3);
+        $result['recent_files'] = array_slice($objects, 0, 8);
+        $result['bucket'] = $bucket;
+        $result['region'] = $s3creds['region'];
         
         uasort($result['users'], fn($a, $b) => $b['size'] <=> $a['size']);
         $result['users'] = array_slice($result['users'], 0, 10, true);
@@ -257,166 +259,122 @@ $userNames = getUserNames($allUserIds);
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
             min-height: 100vh;
             color: #e4e4e4;
-            padding: 20px;
+            padding: 10px;
+            font-size: 13px;
             user-select: text;
             -webkit-user-select: text;
         }
-        .dashboard {
-            max-width: 1860px;
-            margin: 0 auto;
-        }
+        .dashboard { max-width: 1900px; margin: 0 auto; }
         h1 {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 12px;
             font-weight: 300;
-            font-size: 2.5em;
+            font-size: 1.8em;
             color: #fff;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.3);
         }
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        @media (min-width: 1400px) {
+            .grid { grid-template-columns: repeat(4, 1fr); }
+            .grid-3 { grid-template-columns: repeat(3, 1fr); }
+        }
+        @media (min-width: 1700px) {
+            .grid { grid-template-columns: repeat(5, 1fr); }
         }
         .card {
             background: rgba(255,255,255,0.05);
-            border-radius: 16px;
-            padding: 24px;
+            border-radius: 10px;
+            padding: 12px;
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255,255,255,0.1);
-            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
         }
         .card h2 {
-            font-size: 1.1em;
+            font-size: 0.85em;
             font-weight: 500;
             color: #8892b0;
-            margin-bottom: 16px;
+            margin-bottom: 8px;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
         }
         .stat-value {
-            font-size: 2.5em;
+            font-size: 1.8em;
             font-weight: 700;
             color: #64ffda;
-            margin-bottom: 8px;
+            margin-bottom: 2px;
         }
-        .stat-label {
-            font-size: 0.9em;
-            color: #8892b0;
-        }
+        .stat-label { font-size: 0.8em; color: #8892b0; }
         .progress-bar {
-            height: 8px;
+            height: 6px;
             background: rgba(255,255,255,0.1);
-            border-radius: 4px;
+            border-radius: 3px;
             overflow: hidden;
-            margin: 12px 0;
+            margin: 6px 0;
         }
-        .progress-fill {
-            height: 100%;
-            border-radius: 4px;
-            transition: width 0.3s ease;
-        }
+        .progress-fill { height: 100%; border-radius: 3px; }
         .progress-green { background: linear-gradient(90deg, #00c853, #64ffda); }
         .progress-yellow { background: linear-gradient(90deg, #ffd600, #ffab00); }
         .progress-red { background: linear-gradient(90deg, #ff5252, #ff1744); }
-        .service-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
-        }
+        .service-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
         .service-item {
             background: rgba(255,255,255,0.03);
-            padding: 12px;
-            border-radius: 8px;
+            padding: 6px 8px;
+            border-radius: 4px;
         }
-        .service-name {
-            font-size: 0.8em;
-            color: #8892b0;
-            text-transform: uppercase;
-        }
-        .service-value {
-            font-size: 1.4em;
-            font-weight: 600;
-            color: #ccd6f6;
-        }
+        .service-name { font-size: 0.75em; color: #8892b0; text-transform: uppercase; }
+        .service-value { font-size: 1.1em; font-weight: 600; color: #ccd6f6; }
         .full-width { grid-column: 1 / -1; }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 12px;
-        }
+        table { width: 100%; border-collapse: collapse; margin-top: 6px; }
         th, td {
-            padding: 12px 8px;
+            padding: 6px 4px;
             text-align: left;
             border-bottom: 1px solid rgba(255,255,255,0.05);
         }
-        th {
-            color: #8892b0;
-            font-weight: 500;
-            font-size: 0.85em;
-            text-transform: uppercase;
-        }
+        th { color: #8892b0; font-weight: 500; font-size: 0.75em; text-transform: uppercase; }
         td { color: #ccd6f6; }
         tr:hover { background: rgba(255,255,255,0.02); }
-        .user-id { color: #8892b0; font-size: 0.85em; }
+        .user-id { color: #8892b0; font-size: 0.8em; }
         .user-link { color: #ccd6f6; text-decoration: none; }
         .user-link:hover { color: #64ffda; text-decoration: underline; }
+        .sitch-link { color: #64ffda; text-decoration: none; }
+        .sitch-link:hover { text-decoration: underline; }
         .highlight { color: #64ffda; font-weight: 600; }
         .prompt-text {
-            max-width: 600px;
+            max-width: 500px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            font-size: 0.9em;
+            font-size: 0.85em;
         }
-        .prompt-text:hover {
-            white-space: normal;
-            word-break: break-word;
-        }
+        .prompt-text:hover { white-space: normal; word-break: break-word; }
         .model-tag {
-            font-size: 0.75em;
+            font-size: 0.7em;
             color: #8892b0;
             background: rgba(255,255,255,0.05);
-            padding: 2px 6px;
-            border-radius: 4px;
+            padding: 1px 4px;
+            border-radius: 3px;
         }
-        .log-table { max-height: 600px; overflow-y: auto; }
-        .disk-item {
-            margin-bottom: 16px;
-        }
+        .log-table { max-height: 400px; overflow-y: auto; }
+        .disk-item { margin-bottom: 10px; }
         .disk-item:last-child { margin-bottom: 0; }
-        .disk-label {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 4px;
-        }
-        .disk-path {
-            font-size: 0.75em;
-            color: #5a6a8a;
-            word-break: break-all;
-        }
-        .timestamp {
-            text-align: center;
-            color: #5a6a8a;
-            font-size: 0.85em;
-            margin-top: 20px;
-        }
+        .disk-label { display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 0.9em; }
+        .disk-path { font-size: 0.7em; color: #5a6a8a; word-break: break-all; }
+        .timestamp { text-align: center; color: #5a6a8a; font-size: 0.8em; margin-top: 10px; }
         .refresh-btn {
             display: inline-block;
-            margin-left: 10px;
-            padding: 4px 12px;
+            margin-left: 8px;
+            padding: 3px 10px;
             background: rgba(100, 255, 218, 0.1);
             border: 1px solid #64ffda;
             color: #64ffda;
-            border-radius: 4px;
+            border-radius: 3px;
             text-decoration: none;
-            font-size: 0.85em;
-            transition: all 0.2s;
+            font-size: 0.8em;
         }
-        .refresh-btn:hover {
-            background: rgba(100, 255, 218, 0.2);
-        }
+        .refresh-btn:hover { background: rgba(100, 255, 218, 0.2); }
     </style>
 </head>
 <body>
@@ -568,10 +526,16 @@ $userNames = getUserNames($allUserIds);
                 <?php elseif (empty($s3Usage['recent_files'])): ?>
                 <div class="stat-label">No files</div>
                 <?php else: ?>
-                <?php foreach ($s3Usage['recent_files'] as $file): ?>
+                <?php foreach ($s3Usage['recent_files'] as $file): 
+                    $key = $file['Key'];
+                    $s3Url = 'https://' . $s3Usage['bucket'] . '.s3.' . $s3Usage['region'] . '.amazonaws.com/' . $key;
+                    $keyParts = explode('/', $key);
+                    $isSitch = count($keyParts) >= 3 && is_numeric($keyParts[0]) && str_ends_with($key, '.js');
+                    $linkUrl = $isSitch ? '../?custom=' . urlencode($s3Url) : $s3Url;
+                ?>
                 <div class="disk-item">
                     <div class="disk-label">
-                        <span style="word-break: break-all;"><?= htmlspecialchars($file['Key']) ?></span>
+                        <a href="<?= htmlspecialchars($linkUrl) ?>" target="_blank" rel="noopener" class="sitch-link" style="word-break: break-all;"><?= htmlspecialchars($key) ?></a>
                     </div>
                     <div class="disk-path"><?= formatBytes($file['Size']) ?> - <?= $file['LastModified']->format('Y-m-d H:i:s') ?></div>
                 </div>
