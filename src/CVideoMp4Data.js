@@ -1,5 +1,4 @@
 import {FileManager, Sit} from "./Globals";
-import {assert} from "./assert";
 import {MP4Demuxer, MP4Source} from "./js/mp4-decode/mp4_demuxer";
 import {CVideoWebCodecBase} from "./CVideoWebCodecBase";
 import {updateSitFrames} from "./UpdateSitFrames";
@@ -269,7 +268,6 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
                             )
                         } else {
                             const lastGroup = this.groups[this.groups.length - 1]
-                            assert(chunk.timestamp >= lastGroup.timestamp, "out of group chunk timestamp")
                             lastGroup.length++;
                         }
 
@@ -312,7 +310,6 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
                         )
                     } else {
                         const lastGroup = this.groups[this.groups.length - 1]
-                        assert(chunk.timestamp >= lastGroup.timestamp, "out of group chunk timestamp")
                         lastGroup.length++;
                     }
                     this.frames++;
@@ -332,9 +329,12 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
             });
 
         }).catch(err => {
-            // Error will be ignored if callbacks are cleared
+            console.error("Error getting config:", err);
+            showError("Video loading error: " + (err.message || err));
+            if (this._loadingId) {
+                VideoLoadingManager.completeLoading(this._loadingId);
+            }
             if (this.errorCallback) {
-                console.error("Error getting config:", err);
                 this.errorCallback(err);
             }
         });

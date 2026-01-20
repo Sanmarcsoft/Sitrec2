@@ -400,11 +400,16 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
     }
 
     errorCallback() {
+        if (this.videoData?._loadingId) {
+            VideoLoadingManager.completeLoading(this.videoData._loadingId);
+        }
         if (this.videoLoadPending || this.pendingVideoRestore) {
             Globals.pendingActions--;
             this.videoLoadPending = false;
         }
-        this.videoData.error = false;
+        if (this.videoData) {
+            this.videoData.error = true;
+        }
         if (this.overlay) {
             this.overlay.removeText("videoLoading")
             this.overlay.addText("videoError", "Error Loading", 50, 45, 5, "#f0f000", "center")

@@ -169,14 +169,28 @@ export class MP4Source {
     });
   }
 
+  getCodecConfigBox() {
+    const traks = this.file.moov.traks;
+    for (const trak of traks) {
+      const entry = trak.mdia?.minf?.stbl?.stsd?.entries?.[0];
+      if (!entry) continue;
+      
+      if (entry.avcC) {
+        return { box: entry.avcC, type: 'avc' };
+      }
+      if (entry.hvcC) {
+        return { box: entry.hvcC, type: 'hevc' };
+      }
+    }
+    return null;
+  }
+
   getAvccBox() {
-    // TODO: make sure this is coming from the right track.
-    //return this.file.moov.traks[0].mdia.minf.stbl.stsd.entries[0].avcC
-
-    // https://github.com/w3c/webcodecs/pull/525/commits/520b4165d7d7a698d56ee6b94ed60105f6e9085d
-    const traks = this.file.moov.traks.filter(trak => trak.mdia.minf.stbl.stsd.entries[0].avcC);
-    return traks[0].mdia.minf.stbl.stsd.entries[0].avcC;
-
+    const config = this.getCodecConfigBox();
+    if (!config || config.type !== 'avc') {
+      return null;
+    }
+    return config.box;
   }
 
   start(track, onChunk) {
@@ -315,12 +329,18 @@ class Writer {
   }
 
   writeUint16(value) {
-    // TODO: find a more elegant solution to endianess.
-    var arr = new Uint16Array(1);
-    arr[0] = value;
-    var buffer = new Uint8Array(arr.buffer);
-    this.data.set([buffer[1], buffer[0]], this.idx);
-    this.idx +=2;
+    this.data.set([(value >> 8) & 0xFF, value & 0xFF], this.idx);
+    this.idx += 2;
+  }
+
+  writeUint32(value) {
+    this.data.set([
+      (value >> 24) & 0xFF,
+      (value >> 16) & 0xFF,
+      (value >> 8) & 0xFF,
+      value & 0xFF
+    ], this.idx);
+    this.idx += 4;
   }
 
   writeUint8Array(value) {
@@ -363,11 +383,9 @@ export class MP4Demuxer {
     var i;
     var size = 7;
     for (i = 0; i < avccBox.SPS.length; i++) {
-      // nalu length is encoded as a uint16.
       size+= 2 + avccBox.SPS[i].length;
     }
     for (i = 0; i < avccBox.PPS.length; i++) {
-      // nalu length is encoded as a uint16.
       size+= 2 + avccBox.PPS[i].length;
     }
 
@@ -394,11 +412,80 @@ export class MP4Demuxer {
     return writer.getData();
   }
 
+  getHvccExtradata(hvccBox) {
+    var size = 23;
+    for (const naluArray of hvccBox.nalu_arrays) {
+      size += 3;
+      for (const nalu of naluArray) {
+        if (nalu.data) {
+          size += 2 + nalu.data.length;
+        }
+      }
+    }
+
+    var writer = new Writer(size);
+
+    writer.writeUint8(hvccBox.configurationVersion);
+    writer.writeUint8(
+      (hvccBox.general_profile_space << 6) |
+      ((hvccBox.general_tier_flag ? 1 : 0) << 5) |
+      hvccBox.general_profile_idc
+    );
+    writer.writeUint32(hvccBox.general_profile_compatibility);
+    for (var i = 0; i < 6; i++) {
+      writer.writeUint8(hvccBox.general_constraint_indicator[i]);
+    }
+    writer.writeUint8(hvccBox.general_level_idc);
+    writer.writeUint16(0xF000 | hvccBox.min_spatial_segmentation_idc);
+    writer.writeUint8(0xFC | hvccBox.parallelismType);
+    writer.writeUint8(0xFC | hvccBox.chroma_format_idc);
+    writer.writeUint8(0xF8 | hvccBox.bit_depth_luma_minus8);
+    writer.writeUint8(0xF8 | hvccBox.bit_depth_chroma_minus8);
+    writer.writeUint16(hvccBox.avgFrameRate);
+    writer.writeUint8(
+      (hvccBox.constantFrameRate << 6) |
+      (hvccBox.numTemporalLayers << 3) |
+      ((hvccBox.temporalIdNested ? 1 : 0) << 2) |
+      hvccBox.lengthSizeMinusOne
+    );
+    writer.writeUint8(hvccBox.nalu_arrays.length);
+
+    for (const naluArray of hvccBox.nalu_arrays) {
+      writer.writeUint8(
+        ((naluArray.completeness ? 1 : 0) << 7) | naluArray.nalu_type
+      );
+      const nalusWithData = naluArray.filter(n => n.data);
+      writer.writeUint16(nalusWithData.length);
+      for (const nalu of nalusWithData) {
+        writer.writeUint16(nalu.data.length);
+        writer.writeUint8Array(nalu.data);
+      }
+    }
+
+    return writer.getData();
+  }
+
   async getConfig() {
     let info = await this.source.getInfo();
     this.videoTrack = info.videoTracks[0];
 
-    var extradata = this.getExtradata(this.source.getAvccBox());
+    if (!this.videoTrack) {
+      throw new Error("No video track found in file");
+    }
+
+    const codecConfig = this.source.getCodecConfigBox();
+    if (!codecConfig) {
+      throw new Error("Unsupported video codec - no avcC or hvcC configuration found");
+    }
+
+    let extradata;
+    if (codecConfig.type === 'avc') {
+      extradata = this.getExtradata(codecConfig.box);
+    } else if (codecConfig.type === 'hevc') {
+      extradata = this.getHvccExtradata(codecConfig.box);
+    } else {
+      throw new Error(`Unsupported codec type: ${codecConfig.type}`);
+    }
 
     let config = {
       codec: this.videoTrack.codec,
