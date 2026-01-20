@@ -1,4 +1,4 @@
-import {GlobalURLParams, gui, Sit} from "../Globals";
+import {GlobalURLParams, gui, guiMenus, Sit} from "../Globals";
 import {setURLParameters} from "../utils";
 import {CNodeVideoWebCodecView} from "../nodes/CNodeVideoWebCodecView";
 import {DragDropHandler} from "../DragDropHandler";
@@ -67,10 +67,18 @@ export const SitVideo = {
                 autoFill: true,
                 dragDropVideo: true,
                 alwaysReplace: true,
+                doubleClickFullscreen: false,
             }
         )
 
         DragDropHandler.addDropArea();
+
+        guiMenus.view?.hide();
+        guiMenus.objects?.hide();
+        guiMenus.physics?.hide();
+        guiMenus.showhide?.hide();
+        guiMenus.lighting?.hide();
+        guiMenus.contents?.hide();
 
         this.loadFile = function() {
             this.VideoNode.requestAndLoadFile()
