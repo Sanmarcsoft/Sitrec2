@@ -291,7 +291,7 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
             .tooltip("Limit the A and B frames to the range of the video tracking keyframes.")
 
         this.curveType = "Spline";
-        this.manualTrackingFolder.add(this, "curveType", ["Spline", "Linear", "Perspective"]).name("Curve Type").listen().onChange(() => {
+        this.manualTrackingFolder.add(this, "curveType", ["Spline", "Spline2", "Linear", "Perspective"]).name("Curve Type").listen().onChange(() => {
             if (this.curveType === "Perspective") {
                 const traverseSelect = NodeMan.get("LOSTraverseSelectTrack", false);
                 if (traverseSelect && traverseSelect.inputs["Perspective"]) {
@@ -302,7 +302,7 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
             }
             this.recalculateCascade();
         })
-            .tooltip("Spline uses smooth cubic spline interpolation. Linear uses straight line segments. Perspective requires exactly 3 keyframes and models linear motion with perspective projection.")
+            .tooltip("Spline uses natural cubic spline. Spline2 uses not-a-knot spline for smoother end behavior. Linear uses straight line segments. Perspective requires exactly 3 keyframes and models linear motion with perspective projection.")
 
         this.manualTrackingFolder.add(this, "minimizeGroundSpeed").name("Minimize Ground Speed")
             .tooltip("Find the Tgt Start Dist that minimizes the ground distance traveled by the traverse path")
@@ -584,6 +584,37 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
                     ];
                 }
             }
+        } else if (this.curveType === "Spline2") {
+            const n = frames.length;
+            const startSlopeX = (xCoords[1] - xCoords[0]) / (frames[1] - frames[0]);
+            const startSlopeY = (yCoords[1] - yCoords[0]) / (frames[1] - frames[0]);
+            const endSlopeX = (xCoords[n - 1] - xCoords[n - 2]) / (frames[n - 1] - frames[n - 2]);
+            const endSlopeY = (yCoords[n - 1] - yCoords[n - 2]) / (frames[n - 1] - frames[n - 2]);
+
+            const h0 = frames[1] - frames[0];
+            const hLast = frames[n - 1] - frames[n - 2];
+
+            const extFrames = [frames[0] - h0, ...frames, frames[n - 1] + hLast];
+            const extX = [xCoords[0] - h0 * startSlopeX, ...xCoords, xCoords[n - 1] + hLast * endSlopeX];
+            const extY = [yCoords[0] - h0 * startSlopeY, ...yCoords, yCoords[n - 1] + hLast * endSlopeY];
+
+            for (let i = 0; i < this.frames; i++) {
+                if (i < frames[0]) {
+                    const t = i - frames[0];
+                    this.pointsXY[i] = [
+                        xCoords[0] + t * startSlopeX,
+                        yCoords[0] + t * startSlopeY
+                    ];
+                } else if (i > frames[n - 1]) {
+                    const t = i - frames[n - 1];
+                    this.pointsXY[i] = [
+                        xCoords[n - 1] + t * endSlopeX,
+                        yCoords[n - 1] + t * endSlopeY
+                    ];
+                } else {
+                    this.pointsXY[i] = this.centripetalCatmullRom(i, extFrames, extX, extY);
+                }
+            }
         } else if (this.curveType === "Perspective") {
             // Perspective projection model for an object moving linearly in 3D space.
             // When an object moves at constant velocity, its projected screen position
@@ -800,6 +831,271 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
             x: lastSegmentX.b + 2 * lastSegmentX.c * h + 3 * lastSegmentX.d * h * h,
             y: lastSegmentY.b + 2 * lastSegmentY.c * h + 3 * lastSegmentY.d * h * h
         };
+    }
+
+    calculateClampedSpline(x, y, startSlope, endSlope) {
+        const n = x.length;
+        const splines = new Array(n - 1);
+
+        if (n < 2) return splines;
+
+        if (n === 2) {
+            splines[0] = {
+                a: y[0],
+                b: startSlope,
+                c: 0,
+                d: 0
+            };
+            return splines;
+        }
+
+        const h = new Array(n - 1);
+        for (let i = 0; i < n - 1; i++) {
+            h[i] = x[i + 1] - x[i];
+        }
+
+        const A = [];
+        const rhs = [];
+        for (let i = 0; i < n; i++) {
+            A.push(new Array(n).fill(0));
+        }
+
+        A[0][0] = 2 * h[0];
+        A[0][1] = h[0];
+        rhs.push(3 * ((y[1] - y[0]) / h[0] - startSlope));
+
+        for (let i = 1; i < n - 1; i++) {
+            A[i][i - 1] = h[i - 1];
+            A[i][i] = 2 * (h[i - 1] + h[i]);
+            A[i][i + 1] = h[i];
+            rhs.push(3 * ((y[i + 1] - y[i]) / h[i] - (y[i] - y[i - 1]) / h[i - 1]));
+        }
+
+        A[n - 1][n - 2] = h[n - 2];
+        A[n - 1][n - 1] = 2 * h[n - 2];
+        rhs.push(3 * (endSlope - (y[n - 1] - y[n - 2]) / h[n - 2]));
+
+        const c = this.solveTridiagonal(A, rhs, n);
+
+        for (let i = 0; i < n - 1; i++) {
+            splines[i] = {
+                a: y[i],
+                b: (y[i + 1] - y[i]) / h[i] - h[i] * (c[i + 1] + 2 * c[i]) / 3,
+                c: c[i],
+                d: (c[i + 1] - c[i]) / (3 * h[i])
+            };
+        }
+
+        return splines;
+    }
+
+    calculateNotAKnotSpline(x, y) {
+        const n = x.length;
+        const splines = new Array(n - 1);
+
+        if (n < 2) return splines;
+
+        if (n === 2) {
+            splines[0] = {
+                a: y[0],
+                b: (y[1] - y[0]) / (x[1] - x[0]),
+                c: 0,
+                d: 0
+            };
+            return splines;
+        }
+
+        if (n === 3) {
+            const h0 = x[1] - x[0];
+            const h1 = x[2] - x[1];
+            const d0 = (y[1] - y[0]) / h0;
+            const d1 = (y[2] - y[1]) / h1;
+            const c1 = (d1 - d0) / (h0 + h1);
+            splines[0] = { a: y[0], b: d0 - c1 * h0, c: c1, d: 0 };
+            splines[1] = { a: y[1], b: d0 + c1 * h0, c: c1, d: 0 };
+            return splines;
+        }
+
+        const h = new Array(n - 1);
+        for (let i = 0; i < n - 1; i++) {
+            h[i] = x[i + 1] - x[i];
+        }
+
+        const A = [];
+        const rhs = [];
+
+        for (let i = 0; i < n; i++) {
+            A.push(new Array(n).fill(0));
+        }
+
+        A[0][0] = h[1];
+        A[0][1] = -(h[0] + h[1]);
+        A[0][2] = h[0];
+        rhs.push(0);
+
+        for (let i = 1; i < n - 1; i++) {
+            A[i][i - 1] = h[i - 1];
+            A[i][i] = 2 * (h[i - 1] + h[i]);
+            A[i][i + 1] = h[i];
+            rhs.push(3 * ((y[i + 1] - y[i]) / h[i] - (y[i] - y[i - 1]) / h[i - 1]));
+        }
+
+        A[n - 1][n - 3] = h[n - 2];
+        A[n - 1][n - 2] = -(h[n - 3] + h[n - 2]);
+        A[n - 1][n - 1] = h[n - 3];
+        rhs.push(0);
+
+        const c = this.solveTridiagonal(A, rhs, n);
+
+        for (let i = 0; i < n - 1; i++) {
+            splines[i] = {
+                a: y[i],
+                b: (y[i + 1] - y[i]) / h[i] - h[i] * (c[i + 1] + 2 * c[i]) / 3,
+                c: c[i],
+                d: (c[i + 1] - c[i]) / (3 * h[i])
+            };
+        }
+
+        return splines;
+    }
+
+    solveTridiagonal(A, rhs, n) {
+        const x = new Array(n).fill(0);
+        const Acopy = A.map(row => [...row]);
+        const b = [...rhs];
+
+        for (let i = 0; i < n - 1; i++) {
+            let maxRow = i;
+            for (let k = i + 1; k < n; k++) {
+                if (Math.abs(Acopy[k][i]) > Math.abs(Acopy[maxRow][i])) {
+                    maxRow = k;
+                }
+            }
+            [Acopy[i], Acopy[maxRow]] = [Acopy[maxRow], Acopy[i]];
+            [b[i], b[maxRow]] = [b[maxRow], b[i]];
+
+            for (let k = i + 1; k < n; k++) {
+                if (Math.abs(Acopy[i][i]) < 1e-12) continue;
+                const factor = Acopy[k][i] / Acopy[i][i];
+                for (let j = i; j < n; j++) {
+                    Acopy[k][j] -= factor * Acopy[i][j];
+                }
+                b[k] -= factor * b[i];
+            }
+        }
+
+        for (let i = n - 1; i >= 0; i--) {
+            let sum = b[i];
+            for (let j = i + 1; j < n; j++) {
+                sum -= Acopy[i][j] * x[j];
+            }
+            x[i] = Math.abs(Acopy[i][i]) < 1e-12 ? 0 : sum / Acopy[i][i];
+        }
+
+        return x;
+    }
+
+    getInitialSlopeNAK(xSpline, ySpline) {
+        return {
+            x: xSpline[0].b,
+            y: ySpline[0].b
+        };
+    }
+
+    getFinalSlopeNAK(xSpline, ySpline, frames) {
+        const lastSegmentX = xSpline[xSpline.length - 1];
+        const lastSegmentY = ySpline[ySpline.length - 1];
+        const h = frames[frames.length - 1] - frames[frames.length - 2];
+
+        return {
+            x: lastSegmentX.b + 2 * lastSegmentX.c * h + 3 * lastSegmentX.d * h * h,
+            y: lastSegmentY.b + 2 * lastSegmentY.c * h + 3 * lastSegmentY.d * h * h
+        };
+    }
+
+    centripetalCatmullRom(frameIdx, frames, xCoords, yCoords) {
+        const n = frames.length;
+
+        let segIdx = 0;
+        while (segIdx < n - 2 && frameIdx > frames[segIdx + 1]) segIdx++;
+
+        const i0 = Math.max(0, segIdx - 1);
+        const i1 = segIdx;
+        const i2 = segIdx + 1;
+        const i3 = Math.min(n - 1, segIdx + 2);
+
+        const p0 = { x: xCoords[i0], y: yCoords[i0], t: frames[i0] };
+        const p1 = { x: xCoords[i1], y: yCoords[i1], t: frames[i1] };
+        const p2 = { x: xCoords[i2], y: yCoords[i2], t: frames[i2] };
+        const p3 = { x: xCoords[i3], y: yCoords[i3], t: frames[i3] };
+
+        const dist = (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+
+        const d01 = Math.pow(dist(p0, p1), 0.5);
+        const d12 = Math.pow(dist(p1, p2), 0.5);
+        const d23 = Math.pow(dist(p2, p3), 0.5);
+
+        const t0 = 0;
+        const t1 = t0 + (d01 || 1);
+        const t2 = t1 + (d12 || 1);
+        const t3 = t2 + (d23 || 1);
+
+        const frameU = (frameIdx - p1.t) / (p2.t - p1.t);
+        const t = t1 + frameU * (t2 - t1);
+
+        const lerp = (a, b, aT, bT, targetT) => {
+            if (Math.abs(bT - aT) < 1e-10) return { x: a.x, y: a.y };
+            const u = (targetT - aT) / (bT - aT);
+            return { x: a.x + u * (b.x - a.x), y: a.y + u * (b.y - a.y) };
+        };
+
+        const a1 = lerp(p0, p1, t0, t1, t);
+        const a2 = lerp(p1, p2, t1, t2, t);
+        const a3 = lerp(p2, p3, t2, t3, t);
+
+        const b1 = lerp(a1, a2, t0, t2, t);
+        const b2 = lerp(a2, a3, t1, t3, t);
+
+        const c = lerp(b1, b2, t1, t2, t);
+
+        return [c.x, c.y];
+    }
+
+    catmullRomInterpolate(t, times, values) {
+        const n = times.length;
+
+        if (t <= times[0]) {
+            const slope = (values[1] - values[0]) / (times[1] - times[0]);
+            return values[0] + slope * (t - times[0]);
+        }
+        if (t >= times[n - 1]) {
+            const slope = (values[n - 1] - values[n - 2]) / (times[n - 1] - times[n - 2]);
+            return values[n - 1] + slope * (t - times[n - 1]);
+        }
+
+        let i = 1;
+        while (i < n - 1 && t > times[i]) i++;
+
+        const i0 = Math.max(0, i - 2);
+        const i1 = i - 1;
+        const i2 = i;
+        const i3 = Math.min(n - 1, i + 1);
+
+        const t0 = times[i0], t1 = times[i1], t2 = times[i2], t3 = times[i3];
+        const p0 = values[i0], p1 = values[i1], p2 = values[i2], p3 = values[i3];
+
+        const u = (t - t1) / (t2 - t1);
+
+        const m1 = (t2 - t1) * ((p1 - p0) / (t1 - t0 || 1) + (p2 - p1) / (t2 - t1)) / 2;
+        const m2 = (t2 - t1) * ((p2 - p1) / (t2 - t1) + (p3 - p2) / (t3 - t2 || 1)) / 2;
+
+        const u2 = u * u;
+        const u3 = u2 * u;
+
+        return (2 * u3 - 3 * u2 + 1) * p1 +
+               (u3 - 2 * u2 + u) * m1 +
+               (-2 * u3 + 3 * u2) * p2 +
+               (u3 - u2) * m2;
     }
 
 
