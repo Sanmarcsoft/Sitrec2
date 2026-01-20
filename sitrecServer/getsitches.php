@@ -197,9 +197,20 @@ if (isset($_GET['get'])) {
                 $folders = array();
                 foreach ($files as $file) {
                     if (is_dir($dir . '/' . $file) && $file != '.' && $file != '..' && $file != '.DS_Store') {
-                        // get the last modified date of the folder
-                        $lastModified = @filemtime($dir . '/' . $file);
-                        $lastDate = $lastModified ? date('Y-m-d H:i:s', $lastModified) : '1970-01-01 00:00:00';
+                        $sitchPath = $dir . '/' . $file;
+                        $versions = @scandir($sitchPath);
+                        $newestTime = 0;
+                        if ($versions !== false) {
+                            foreach ($versions as $v) {
+                                if ($v !== '.' && $v !== '..' && is_file($sitchPath . '/' . $v)) {
+                                    $vTime = @filemtime($sitchPath . '/' . $v);
+                                    if ($vTime > $newestTime) {
+                                        $newestTime = $vTime;
+                                    }
+                                }
+                            }
+                        }
+                        $lastDate = $newestTime ? date('Y-m-d H:i:s', $newestTime) : '1970-01-01 00:00:00';
                         $folders[] = [$file, $lastDate];
                     }
                 }
@@ -217,50 +228,29 @@ if (isset($_GET['get'])) {
                     "Bucket" => $aws['bucket'],
                     "Prefix" => $dir . '/'
                 ));
-                $folders = array();
+                $folderDates = array();
                 foreach ($objects as $object) {
                     $key = $object['Key'];
 
-                    // strip off the full dir prefix to get the filename
-                    // eg. if the dir is 99999998/ then we want to strip off the 99999998/
-                    // check that it actually starts with this dir, including the slash
-                     $startText = $dir . '/';
-                     if (strpos($key, $startText) === 0) {
-                         $key = substr($key, strlen($startText));
-                     }
-
-
-                    if ($key != "") {
-
-
-
-                        // if $key is a folder, then add it to the array
-                        // we can tell if it's a folder because it will contain a /
-                        if (strpos($key, "/") !== false) {
-                            // strip off everything from the first / onwards
-                            $key = strtok($key, "/");
-
-
-                            // check if the key is already in the array
-                            $found = false;
-                            foreach ($folders as $folder) {
-                                if ($folder[0] == $key) {
-                                    $found = true;
-                                    break;
-                                }
-                            }
-
-
-                            // if it does not already exist in the array, then add it
-                            if (!$found) {
-                                $lastModified = $object['LastModified'];
-                                $lastDate = $lastModified->format('Y-m-d H:i:s');
-                                $folders[] = [$key, $lastDate];
-                            }
-                        }
+                    $startText = $dir . '/';
+                    if (strpos($key, $startText) === 0) {
+                        $key = substr($key, strlen($startText));
                     }
 
-
+                    if ($key != "" && strpos($key, "/") !== false) {
+                        $folderName = strtok($key, "/");
+                        $lastModified = $object['LastModified'];
+                        $lastDate = $lastModified->format('Y-m-d H:i:s');
+                        
+                        if (!isset($folderDates[$folderName]) || $lastDate > $folderDates[$folderName]) {
+                            $folderDates[$folderName] = $lastDate;
+                        }
+                    }
+                }
+                
+                $folders = array();
+                foreach ($folderDates as $name => $date) {
+                    $folders[] = [$name, $date];
                 }
                 echo json_encode($folders);
                 exit();
