@@ -150,6 +150,13 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
         if (this.requestQueue) {
             this.requestQueue = [];
         }
+
+        // Recalculate dimensions based on effective rotation
+        if (this.originalVideoWidth && this.originalVideoHeight) {
+            const swap = (this.effectiveRotation === 90 || this.effectiveRotation === 270);
+            this.videoWidth = swap ? this.originalVideoHeight : this.originalVideoWidth;
+            this.videoHeight = swap ? this.originalVideoWidth : this.originalVideoHeight;
+        }
     }
 
     /**

@@ -70,6 +70,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         this.input("zoom", true); // zoom input is optional
 
         this.videoSpeed = v.videoSpeed ?? 1; // default to 1x speed
+        this.alwaysReplace = v.alwaysReplace ?? false;
 
         this.lastAudioSyncFrame = -1;
         this.wasPlayingLastFrame = false;

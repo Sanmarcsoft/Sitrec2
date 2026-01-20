@@ -1,6 +1,7 @@
 import {GlobalURLParams, gui, Sit} from "../Globals";
 import {setURLParameters} from "../utils";
 import {CNodeVideoWebCodecView} from "../nodes/CNodeVideoWebCodecView";
+import {DragDropHandler} from "../DragDropHandler";
 
 export const SitVideo = {
     name: "video",
@@ -64,11 +65,12 @@ export const SitVideo = {
                 file: this.selectableVideos[this.file],
                 background: "black",
                 autoFill: true,
-                dragDropVideo: true,  // allows the user to drag and drop a video file onto the viewer
-
+                dragDropVideo: true,
+                alwaysReplace: true,
             }
         )
-//        addFiltersToVideoNode(this.VideoNode)
+
+        DragDropHandler.addDropArea();
 
         this.loadFile = function() {
             this.VideoNode.requestAndLoadFile()

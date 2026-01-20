@@ -174,6 +174,12 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
             // This sets metadataRotation which combines with userRotation via effectiveRotation getter
             this.metadataRotation = getRotationAngleFromVideoMatrix(demuxer.videoTrack.matrix);
 
+            // Swap dimensions if metadata rotation is 90 or 270 degrees
+            if (this.metadataRotation === 90 || this.metadataRotation === 270) {
+                [this.videoWidth, this.videoHeight] = [this.videoHeight, this.videoWidth];
+                console.log("🍿Swapped dimensions for metadata rotation: ", this.videoWidth, "x", this.videoHeight);
+            }
+
             // Store the original fps from the video (will be needed for audio sync)
             this.originalFps = demuxer.source.fps;
 

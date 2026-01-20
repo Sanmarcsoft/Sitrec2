@@ -119,12 +119,16 @@ export class CNodeVideoWebCodecView extends CNodeVideoView {
         const hasExistingVideo = this.videoData !== null && this.videoData !== undefined;
         
         if (hasExistingVideo && !autoAdd) {
-            const action = await this.promptAddOrReplace();
-            if (action === "replace") {
+            if (this.alwaysReplace) {
                 this.disposeAllVideos();
             } else {
-                this.updateCurrentVideoEntry();
-                this.videoData?.stopStreaming?.();
+                const action = await this.promptAddOrReplace();
+                if (action === "replace") {
+                    this.disposeAllVideos();
+                } else {
+                    this.updateCurrentVideoEntry();
+                    this.videoData?.stopStreaming?.();
+                }
             }
         } else if (hasExistingVideo && autoAdd) {
             this.updateCurrentVideoEntry();
