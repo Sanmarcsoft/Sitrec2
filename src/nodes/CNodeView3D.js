@@ -2182,13 +2182,13 @@ export class CNodeView3D extends CNodeViewCanvas {
             standaloneMenu.add({name: celestialObject.name}, 'name').name('Name').listen().disable();
         } else if (celestialObject.type === 'star') {
             if (celestialObject.ra !== undefined) {
-                standaloneMenu.add({raHours: celestialObject.ra * 12 / Math.PI}, 'raHours').name('RA (hours)').listen().disable();
+                standaloneMenu.add({raHours: (celestialObject.ra * 12 / Math.PI).toFixed(3)}, 'raHours').name('RA (hours)').listen().disable();
             }
             if (celestialObject.dec !== undefined) {
-                standaloneMenu.add({decDegrees: celestialObject.dec * 180 / Math.PI}, 'decDegrees').name('Dec (degrees)').listen().disable();
+                standaloneMenu.add({decDegrees: (celestialObject.dec * 180 / Math.PI).toFixed(3)}, 'decDegrees').name('Dec (degrees)').listen().disable();
             }
             if (celestialObject.magnitude !== undefined && celestialObject.magnitude !== 'Unknown') {
-                standaloneMenu.add({magnitude: celestialObject.magnitude}, 'magnitude').name('Magnitude').listen().disable();
+                standaloneMenu.add({magnitude: celestialObject.magnitude.toFixed(2)}, 'magnitude').name('Magnitude').listen().disable();
             }
         }
         
