@@ -751,6 +751,19 @@ export class CSatellite {
             scene: scene,
         });
 
+        this.lightCloud.createMainViewMaterial({
+            nearDist: 20000000,
+            farDist: 100000000,
+            nearScale: 1.0,
+            farScale: 0.1,
+            baseScale: 10,
+            minPointSize: 1.0,
+            maxPointSize: 20.0,
+        });
+
+        this.lightCloud.points.layers.mask = LAYER.MASK_LOOK;
+        this.lightCloud.mainViewPoints.layers.mask = LAYER.MASK_MAIN;
+
         for (let i = 0; i < len; i++) {
             const sat = this.TLEData.satData[i];
             sat.eus = V3();

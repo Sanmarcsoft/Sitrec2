@@ -135,6 +135,11 @@ export class CPointLightCloud extends CNode3D {
         this.geometry = null;
         /** @type {THREE.ShaderMaterial|null} */
         this.material = null;
+        
+        /** @type {THREE.Points|null} - Secondary points for main view with different attenuation */
+        this.mainViewPoints = null;
+        /** @type {THREE.ShaderMaterial|null} */
+        this.mainViewMaterial = null;
 
         /** @type {Float32Array|null} */
         this.positionArray = null;
@@ -320,6 +325,132 @@ export class CPointLightCloud extends CNode3D {
         }
     }
 
+    createMainViewMaterial(config = {}) {
+        const usesPerPointColor = this.singleColor === null;
+        const nearDist = config.nearDist ?? 1000000;
+        const farDist = config.farDist ?? 100000000;
+        const nearScale = config.nearScale ?? 1.0;
+        const farScale = config.farScale ?? 0.1;
+        const baseScale = config.baseScale ?? 10;
+        const minPointSize = config.minPointSize ?? this.minPointSize;
+        const maxPointSize = config.maxPointSize ?? this.maxPointSize;
+
+        const vertexShader = `
+            attribute float brightness;
+            ${usesPerPointColor ? 'attribute vec3 color;' : ''}
+            
+            uniform float baseScale;
+            uniform float minPointSize;
+            uniform float maxPointSize;
+            uniform float nearDist;
+            uniform float farDist;
+            uniform float nearScale;
+            uniform float farScale;
+            ${!usesPerPointColor ? 'uniform vec3 uColor;' : ''}
+            
+            varying vec3 vColor;
+            varying float vAlpha;
+            varying float vBrightness;
+            ${this.useLogDepth ? 'varying float vDepth;' : ''}
+            
+            void main() {
+                if (brightness <= 0.0) {
+                    gl_Position = vec4(0.0);
+                    gl_PointSize = 0.0;
+                    return;
+                }
+                
+                ${usesPerPointColor ? 'vColor = color;' : 'vColor = uColor;'}
+                vBrightness = brightness;
+                
+                vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                gl_Position = projectionMatrix * mvPosition;
+                ${this.useLogDepth ? 'vDepth = gl_Position.w;' : ''}
+                
+                float dist = length(mvPosition.xyz);
+                float t = clamp((dist - nearDist) / (farDist - nearDist), 0.0, 1.0);
+                float distScale = mix(nearScale, farScale, t);
+                
+                float brightnessSize = mix(0.0, maxPointSize, brightness) * baseScale;
+                float size = minPointSize + brightnessSize * distScale;
+                gl_PointSize = size;
+                vAlpha = 1.0;
+            }
+        `;
+
+        const fragmentShader = `
+            uniform float uRadius;
+            ${this.useLogDepth ? `
+            uniform float nearPlane;
+            uniform float farPlane;
+            ` : ''}
+            
+            varying vec3 vColor;
+            varying float vAlpha;
+            varying float vBrightness;
+            ${this.useLogDepth ? 'varying float vDepth;' : ''}
+            
+            void main() {
+                if (vBrightness <= 0.0) {
+                    discard;
+                }
+                
+                vec2 centered = gl_PointCoord - 0.5;
+                float dist = length(centered) * 2.0;
+                float alpha = 1.0 - smoothstep(uRadius, 1.0, dist);
+                alpha *= vAlpha;
+                gl_FragColor = vec4(vColor * alpha, alpha);
+                
+                ${this.useLogDepth ? `
+                float z = (log2(max(nearPlane, 1.0 + vDepth)) / log2(1.0 + farPlane)) * 2.0 - 1.0;
+                gl_FragDepthEXT = z * 0.5 + 0.5;
+                ` : ''}
+            }
+        `;
+
+        const uniforms = {
+            baseScale: { value: baseScale },
+            minPointSize: { value: minPointSize },
+            maxPointSize: { value: maxPointSize },
+            nearDist: { value: nearDist },
+            farDist: { value: farDist },
+            nearScale: { value: nearScale },
+            farScale: { value: farScale },
+            uRadius: { value: this.uRadius },
+        };
+
+        if (!usesPerPointColor) {
+            const color = new Color(this.singleColor);
+            uniforms.uColor = { value: [color.r, color.g, color.b] };
+        }
+
+        if (this.useLogDepth) {
+            Object.assign(uniforms, sharedUniforms);
+        }
+
+        this.mainViewMaterial = new ShaderMaterial({
+            vertexShader,
+            fragmentShader,
+            uniforms,
+            transparent: true,
+            depthTest: true,
+            depthWrite: false,
+            blending: CustomBlending,
+            blendEquation: MaxEquation,
+            blendSrc: OneFactor,
+            blendDst: OneFactor,
+        });
+
+        this.mainViewPoints = new Points(this.geometry, this.mainViewMaterial);
+        this.mainViewPoints.frustumCulled = false;
+
+        if (this.scene) {
+            this.scene.add(this.mainViewPoints);
+        }
+
+        return this.mainViewMaterial;
+    }
+
     setLight(index, { position, color, brightness }) {
         if (position !== undefined) {
             this.positionArray[index * 3] = position.x;
@@ -424,11 +555,17 @@ export class CPointLightCloud extends CNode3D {
         if (this.points) {
             scene.add(this.points);
         }
+        if (this.mainViewPoints) {
+            scene.add(this.mainViewPoints);
+        }
     }
 
     removeFromScene() {
         if (this.points && this.scene) {
             this.scene.remove(this.points);
+        }
+        if (this.mainViewPoints && this.scene) {
+            this.scene.remove(this.mainViewPoints);
         }
     }
 
@@ -444,11 +581,16 @@ export class CPointLightCloud extends CNode3D {
             this.material.dispose();
             this.material = null;
         }
+        if (this.mainViewMaterial) {
+            this.mainViewMaterial.dispose();
+            this.mainViewMaterial = null;
+        }
         this.positionArray = null;
         this.colorArray = null;
         this.brightnessArray = null;
         this.baseBrightnessArray = null;
         this.points = null;
+        this.mainViewPoints = null;
 
         super.dispose();
     }

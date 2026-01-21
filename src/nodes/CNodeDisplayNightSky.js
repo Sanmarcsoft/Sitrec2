@@ -1066,16 +1066,13 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         }
 
         const isLookView = (view.id === "lookView");
-        const uniforms = this.satellites.lightCloud.material.uniforms;
 
         if (isLookView) {
+            const uniforms = this.satellites.lightCloud.material.uniforms;
             let shaderScale = Sit.satScale;
             shaderScale = view.adjustPointScale(shaderScale * 2);
             uniforms.baseScale.value = shaderScale;
             uniforms.distanceReference.value = 3000000;
-        } else {
-            uniforms.baseScale.value = 10;
-            uniforms.distanceReference.value = 0;
         }
     }
 
