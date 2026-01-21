@@ -183,10 +183,11 @@ export class CPointLightCloud extends CNode3D {
                gl_PointSize = size;
                vAlpha = 1.0;`
             : `float desiredSize = brightness * baseScale;
-               float actualSize = max(desiredSize, minPointSize);
-               float sizeRatio = desiredSize / actualSize;
-               vAlpha = sizeRatio * sizeRatio;
-               gl_PointSize = actualSize;`;
+               // Clamp to minimum pixel size to prevent sub-pixel flickering
+               gl_PointSize = max(desiredSize, minPointSize);
+               // Fade alpha for sub-minimum points to conserve energy
+               float sizeRatio = clamp(desiredSize / minPointSize, 0.0, 1.0);
+               vAlpha = sizeRatio * sizeRatio;`;
 
         const vertexShader = `
             attribute float brightness;
