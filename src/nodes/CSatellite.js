@@ -926,14 +926,23 @@ export class CSatellite {
             const satrec = bestSat(satData.satrecs, date);
 
             if (satData.timeA === undefined || timeMS < satData.timeA || timeMS > satData.timeB) {
-                satData.timeA = timeMS;
-                if (satData.timeB === undefined) {
-                    satData.timeB = timeMS + Math.floor(1 + this.timeStep * (i / numSats));
+                // When crossing the boundary (timeMS > timeB), start new interval from old endpoint
+                // to ensure smooth continuity. Otherwise we'd jump from position-at-timeB to position-at-timeMS.
+                if (satData.timeB !== undefined && timeMS > satData.timeB && satData.eusB !== null) {
+                    // Carry forward: old end becomes new start
+                    satData.timeA = satData.timeB;
+                    satData.eusA = satData.eusB;
                 } else {
-                    satData.timeB = timeMS + this.timeStep;
+                    // First time or backwards jump: calculate fresh
+                    satData.timeA = timeMS;
+                    satData.eusA = this.calcSatEUS(satrec, date);
+                }
+                if (satData.timeB === undefined) {
+                    satData.timeB = satData.timeA + Math.floor(1 + this.timeStep * (i / numSats));
+                } else {
+                    satData.timeB = satData.timeA + this.timeStep;
                 }
                 const dateB = new Date(satData.timeB);
-                satData.eusA = this.calcSatEUS(satrec, date);
                 satData.eusB = this.calcSatEUS(satrec, dateB);
             }
 
