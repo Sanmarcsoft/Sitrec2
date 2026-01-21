@@ -248,7 +248,8 @@ class CSitrecAPI {
                 fn: () => {
                     const nightSky = NodeMan.get("NightSkyNode");
                     if(nightSky) {
-                        nightSky.showAllLabels = true;
+                        nightSky.satellites.showSatelliteNames = true;
+                        nightSky.satellites.showSatelliteNamesMain = true;
                         nightSky.updateSatelliteNamesVisibility();
                     }
                 }
@@ -259,7 +260,8 @@ class CSitrecAPI {
                 fn: () => {
                     const nightSky = NodeMan.get("NightSkyNode");
                     if(nightSky) {
-                        nightSky.showAllLabels = false;
+                        nightSky.satellites.showSatelliteNames = false;
+                        nightSky.satellites.showSatelliteNamesMain = false;
                         nightSky.updateSatelliteNamesVisibility();
                     }
                 }

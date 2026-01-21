@@ -305,12 +305,11 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         this.showFlareRegion = Sit.showFlareRegion;
         this.showFlareBand = Sit.showFlareBand;
 
-        this.showAllLabels = false;
-        this.maxLabelsDisplayed = 5000;
+        this.maxLabelsDisplayed = 1000;
 
         const satelliteOptions = [
             {
-                key: "showSatellites", name: "Overall Satellites Flag", object: this.satellites, action: () => {
+                key: "showSatellites", name: "Show Satellites (Global)", object: this.satellites, action: () => {
                     this.satelliteGroup.visible = this.satellites.showSatellites;
                     this.satellites.filterSatellites()
                 }
@@ -375,12 +374,6 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                 name: "Label Flares Only",
                 object: this.satellites,
                 action: () => setRenderOne(true)
-            },
-            {
-                key: "showAllLabels",
-                name: "Show all Labels",
-                object: this,
-                action: () => this.flareRegionGroup.visible = this.showFlareRegion
             },
             {
                 key: "showFlareRegion",
@@ -506,6 +499,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
 
         this.satelliteTextGroup = new Group();
+        this.viewSpriteData = new Map();
         this.updateSatelliteNamesVisibility();
 
         GlobalScene.add(this.satelliteTextGroup)
@@ -696,7 +690,15 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         this.satelliteTextGroup.layers.mask =
             (this.showSatelliteNames ? LAYER.MASK_LOOK : 0)
             | (this.showSatelliteNamesMain ? LAYER.MASK_MAIN : 0)
-        propagateLayerMaskObject(this.satelliteTextGroup);
+        for (const [viewId, viewData] of this.viewSpriteData) {
+            const viewMask = viewId === "lookView" ? LAYER.MASK_LOOK 
+                           : viewId === "mainView" ? LAYER.MASK_MAIN 
+                           : viewData.group.layers.mask;
+            viewData.group.layers.mask = viewMask;
+            for (const sprite of viewData.sprites.values()) {
+                sprite.layers.mask = viewMask;
+            }
+        }
     }
 
     // See updateArrow
@@ -1081,14 +1083,39 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         }
     }
 
+    getViewLayerMask(view) {
+        if (view.id === "lookView") return LAYER.MASK_LOOK;
+        if (view.id === "mainView") return LAYER.MASK_MAIN;
+        return view.camera.layers.mask;
+    }
+
+    getViewSpriteData(view) {
+        if (!this.viewSpriteData.has(view.id)) {
+            const group = new Group();
+            group.layers.mask = this.getViewLayerMask(view);
+            this.satelliteTextGroup.add(group);
+            this.viewSpriteData.set(view.id, { group: group, sprites: new Map() });
+        }
+        return this.viewSpriteData.get(view.id);
+    }
+
     // per-viewport satellite sprite text update for scale and screen offset
     updateSatelliteText(view) {
-        const layerMask = this.satelliteTextGroup.layers.mask;
-        if (!layerMask) {
-            // if not visible in either the main or helpers layer, skip the update
+        if (!this.satellites.showSatelliteNames
+            && !this.satellites.showSatelliteNamesMain 
+            && !this.satellites.labelFlares) {
+            return;
+        }
+        
+        const combinedMask = this.satelliteTextGroup.layers.mask;
+        if (!combinedMask) {
             return;
         }
 
+        const viewData = this.getViewSpriteData(view);
+        const layerMask = this.getViewLayerMask(view);
+        viewData.group.layers.mask = layerMask;
+        const sprites = viewData.sprites;
 
         const camera = view.camera;
         const cameraForward = new Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
@@ -1106,7 +1133,6 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
         const numSats = this.satellites.TLEData.satData.length;
         const maxLabels = this.maxLabelsDisplayed;
-        let labelCount = 0;
         const raycaster = new Raycaster();
         const hitPoint = V3();
         const hitPoint2 = V3();
@@ -1116,90 +1142,73 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
         frustum.setFromProjectionMatrix(projScreenMatrix);
         
+        const candidates = [];
+        
         for (let i = 0; i < numSats; i++) {
             const satData = this.satellites.TLEData.satData[i];
+            const distSq = satData.eus.distanceToSquared(cameraPos);
 
-            // Check if satellite qualifies for a label (visible, valid, in range, flags enabled)
             const qualifiesForLabel = satData.visible
                 && !satData.invalidPosition
-                && (satData.userFiltered || satData.eus.distanceTo(cameraPos) < this.satellites.arrowRange * 1000)
-                && (this.showAllLabels
-                    || this.satellites.showSatelliteNames
+                && (satData.userFiltered || distSq < (this.satellites.arrowRange * 1000) ** 2)
+                && (this.satellites.showSatelliteNames
                     || this.satellites.showSatelliteNamesMain
                     || (this.satellites.labelFlares && satData.isFlaring));
 
             if (qualifiesForLabel) {
-                // Full frustum culling: skip satellites outside the view frustum
                 if (!frustum.containsPoint(satData.eus)) {
-                    if (satData.spriteText) {
-                        this.satelliteTextGroup.remove(satData.spriteText);
-                        satData.spriteText.dispose();
-                        satData.spriteText = null;
-                    }
                     continue;
                 }
                 
                 const camToSat = satData.eus.clone().sub(cameraPos);
-                const distToSat = camToSat.length();
+                const distToSat = Math.sqrt(distSq);
                 
                 raycaster.set(cameraPos, camToSat.normalize());
                 const isOccluded = intersectSphere2(raycaster.ray, this.globe, hitPoint, hitPoint2)
                     && hitPoint.distanceTo(cameraPos) < distToSat;
 
                 if (isOccluded) {
-                    if (satData.spriteText) {
-                        this.satelliteTextGroup.remove(satData.spriteText);
-                        satData.spriteText.dispose();
-                        satData.spriteText = null;
-                    }
                     continue;
                 }
 
-                labelCount++;
-                if (labelCount > maxLabels) {
-                    if (satData.spriteText) {
-                        this.satelliteTextGroup.remove(satData.spriteText);
-                        satData.spriteText.dispose();
-                        satData.spriteText = null;
-                    }
-                    continue;
-                }
-                if (!satData.spriteText) {
-                    var name = satData.name.replace("0 STARLINK", "SL").replace("STARLINK", "SL");
-                    name = name.replace(/\s+$/, '');
-                    satData.spriteText = new SpriteText(name, 0.01, "white", {depthTest: true});
-                    satData.spriteText.layers.mask = layerMask;
-                    this.satelliteTextGroup.add(satData.spriteText);
-                }
-                const sprite = satData.spriteText;
-                if (sprite) {
-                    const satPosition = satData.eus;
-                    // scaling based on the view camera
-                    // whereas satellite dot scaling is done with the look Camera?????
-                    const camToSatVec = satPosition.clone().sub(cameraPos)
-                    // get the perpendicular distance to the satellite, and use that to scale the name
-                    const perpDistToSat = camToSatVec.dot(cameraForward);
-                    const nameScale = viewScale * perpDistToSat * tanHalfFOV;
-                    sprite.scale.set(nameScale * sprite.aspect, nameScale, 1);
-
-                    const pos = satData.eus;
-                    const offsetPost = view.offsetScreenPixels(pos, 0, 30);
-                    sprite.position.copy(offsetPost);
-                }
-            } else {
-                // if not visible dispose it
-                if (satData.spriteText) {
-                    // remove the sprite from the group
-                    this.satelliteTextGroup.remove(satData.spriteText);
-                    satData.spriteText.dispose();
-                    satData.spriteText = null;
-                }
-
-
-                //satData.spriteText.scale.set(0,0,0);
+                candidates.push({ index: i, distSq: distSq });
             }
         }
-        console.log("Satellite labels displayed: " + labelCount)
+        
+        candidates.sort((a, b) => a.distSq - b.distSq);
+        
+        const activeIndices = new Set();
+        for (let i = 0; i < candidates.length && i < maxLabels; i++) {
+            const satIndex = candidates[i].index;
+            const satData = this.satellites.TLEData.satData[satIndex];
+            activeIndices.add(satIndex);
+            
+            let sprite = sprites.get(satIndex);
+            if (!sprite) {
+                var name = satData.name.replace("0 STARLINK", "SL").replace("STARLINK", "SL");
+                name = name.replace(/\s+$/, '');
+                sprite = new SpriteText(name, 0.01, "white", {depthTest: true});
+                sprite.layers.mask = layerMask;
+                viewData.group.add(sprite);
+                sprites.set(satIndex, sprite);
+            }
+            const satPosition = satData.eus;
+            const camToSatVec = satPosition.clone().sub(cameraPos);
+            const perpDistToSat = camToSatVec.dot(cameraForward);
+            const nameScale = viewScale * perpDistToSat * tanHalfFOV;
+            sprite.scale.set(nameScale * sprite.aspect, nameScale, 1);
+
+            const offsetPost = view.offsetScreenPixels(satPosition, 0, 30);
+            sprite.position.copy(offsetPost);
+        }
+        
+        for (const [satIndex, sprite] of sprites) {
+            if (!activeIndices.has(satIndex)) {
+                viewData.group.remove(sprite);
+                sprite.dispose();
+                sprites.delete(satIndex);
+            }
+        }
     }
 
 
