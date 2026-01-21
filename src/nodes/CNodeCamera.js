@@ -52,8 +52,7 @@ export class CNodeCamera extends CNode3D {
 
 
     modSerialize() {
-    // calculate the current position and lookAt in LLA format
-        // dump a camera location to the console
+        this.camera.updateMatrixWorld();
         const p = this.camera.position.clone()
         const v = new Vector3();
         v.setFromMatrixColumn(this.camera.matrixWorld,2);
@@ -61,23 +60,23 @@ export class CNodeCamera extends CNode3D {
         v.add(p)
         const posLLA = EUSToLLA(this.camera.position)
         const atLLA = EUSToLLA(v)
+        const upLLA = EUSToLLA(this.camera.position.clone().add(this.camera.up.clone().multiplyScalar(1000)))
 
         return {
             ...super.modSerialize(),
             startPosLLA: [posLLA.x, posLLA.y, posLLA.z],
             lookAtLLA: [atLLA.x, atLLA.y, atLLA.z],
+            upLLA: [upLLA.x, upLLA.y, upLLA.z],
             fov: this.camera.fov,
         }
     }
 
-    // cameras with controllers can overwrite this
-    // but it's useful for cameras like the main camera
     modDeserialize(v) {
         super.modDeserialize(v);
         this.startPosLLA = v.startPosLLA;
         this.lookAtLLA = v.lookAtLLA;
+        this.upLLA = v.upLLA;
         this.camera.fov = v.fov;
-        // console.log("🎥🎥🎥 "+this.id+" modDeserialize camera startLLA = " + this.startPosLLA);
 
         this.resetCamera()
     }
@@ -92,43 +91,32 @@ export class CNodeCamera extends CNode3D {
 
     resetCamera() {
 
-
         if (this.startPos !== undefined) {
-            this._object.position.copy(MV3(this.startPos));  // MV3 converts from array to a Vector3
-            // console.log("🎥🎥🎥 " + this.id + " resetCamera by startPos to " + vdump(this.camera.position));
+            this._object.position.copy(MV3(this.startPos));
         }
 
         if (this.startPosLLA !== undefined) {
-            this._object.position.copy(LLAVToEUS(MV3(this.startPosLLA)));  // MV3 converts from array to a Vector3
-            // console.log("🎥🎥🎥 " + this.id + " resetCamera by startPosLLA to " + vdump(this.camera.position));
+            this._object.position.copy(LLAVToEUS(MV3(this.startPosLLA)));
         }
 
-        // set the up vector to be the local up vector at the camera position
-        const localUp = getLocalUpVector(this._object.position);
-        this._object.up.copy(localUp);
-
+        if (this.upLLA !== undefined) {
+            const upWorld = LLAVToEUS(MV3(this.upLLA));
+            this._object.up.copy(upWorld.sub(this._object.position).normalize());
+        } else {
+            const localUp = getLocalUpVector(this._object.position);
+            this._object.up.copy(localUp);
+        }
 
         if (this.lookAt !== undefined) {
             this._object.lookAt(MV3(this.lookAt));
-            // console.log("🎥🎥🎥 " + this.id + " resetCamera lookAt to " + vdump(this.lookAt));
         }
-
 
         if (this.lookAtLLA !== undefined) {
             this._object.lookAt(LLAVToEUS(MV3(this.lookAtLLA)));
-            // console.log("🎥🎥🎥 " + this.id + " resetCamera lookAtLLA to " + vdump(this.lookAtLLA));
-
         }
 
         this.camera.updateMatrix();
         this.camera.updateMatrixWorld();
-
-
-        const v = new Vector3();
-        v.setFromMatrixColumn(this.camera.matrixWorld,2);
-        // console.log("🎥-> " + this.id + " resetCamera fwd vector is now " + vdump(v))
-
-
     }
 
 
@@ -141,6 +129,7 @@ export class CNodeCamera extends CNode3D {
         v.add(p)
         this.startPosLLA = EUSToLLA(this.camera.position)
         this.lookAtLLA = EUSToLLA(v)
+        this.upLLA = EUSToLLA(this.camera.position.clone().add(this.camera.up.clone().multiplyScalar(1000)))
     }
 
 
