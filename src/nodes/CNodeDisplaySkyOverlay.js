@@ -189,11 +189,14 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
             const distSq = sat.eus.distanceToSquared(cameraPos);
             if (!sat.userFiltered && distSq >= arrowRangeSq) continue;
 
+            const viewPos = sat.eus.clone().applyMatrix4(camera.matrixWorldInverse);
+            if (viewPos.z >= 0) continue;
+            
             const satScreenPos = sat.eus.clone().project(camera);
-            if (satScreenPos.z < -1 || satScreenPos.z > 1 ||
-                satScreenPos.x < -1 || satScreenPos.x > 1 ||
-                satScreenPos.y < -1 || satScreenPos.y > 1) {
-
+            const isInsideFrustum = satScreenPos.x >= -1 && satScreenPos.x <= 1 &&
+                satScreenPos.y >= -1 && satScreenPos.y <= 1;
+            
+            if (!isInsideFrustum) {
                 if (satScreenPos.x < -1) {
                     const zoomedX = satScreenPos.x * this.zoom;
                     const pixelX = (zoomedX + 1) * this.widthPx / 2;
@@ -213,7 +216,7 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
                 && hitPoint.distanceTo(cameraPos) < distToSat;
             if (isOccluded) continue;
 
-            if (isLookView) {
+            if (isLookView && isInsideFrustum) {
                 sat.visibleInLook = true;
             }
 

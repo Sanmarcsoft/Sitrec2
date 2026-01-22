@@ -994,7 +994,9 @@ export class CSatellite {
                     }
 
                     let arrowsDrawn = false;
-                    if (satData.visible && satData.eusA.distanceTo(lookPos) < this.arrowRange * 1000) {
+                    const inRange = satData.eusA.distanceTo(lookPos) < this.arrowRange * 1000;
+                    
+                    if (satData.visible && inRange) {
                         if (this.showSatelliteTracks && options.satelliteTrackGroup) {
                             let dir = satData.eusB.clone().sub(satData.eusA).normalize();
                             DebugArrow(satData.name + "_t", dir, satData.eus, 500000, "#FFFF00", true, options.satelliteTrackGroup, 20, LAYER.MASK_LOOKRENDER);
