@@ -49,7 +49,7 @@ export class CSatellite {
         this.fromSun = V3(0, 0, -1);
 
         // Arrow display range in km
-        this.arrowRange = 4000;
+        this.arrowRange = 100000;
 
         // Internal timing for position calculations
         this.timeStep = 2000;
