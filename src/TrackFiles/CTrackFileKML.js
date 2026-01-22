@@ -538,7 +538,8 @@ export class CTrackFileKML extends CTrackFile {
             rotation: rotation,
             imageURL: imageURL,
             imageFileID: imageFileID,
-            name: overlayName
+            name: overlayName,
+            gotoOnCreate: true,
         });
 
         CustomManager.ignore(ignoreID);

@@ -1792,6 +1792,7 @@ export class CFileManager extends CManager {
             rotation: 0,
             imageURL: blobURL,
             imageFileID: fileID,
+            gotoOnCreate: true,
         });
         CustomManager.saveGlobalSettings();
         console.log(`Created ground overlay from GeoTIFF: ${filename} (fileID: ${fileID})`);

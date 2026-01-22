@@ -288,9 +288,14 @@ export class C3DSynthManager extends CManager {
     
     /**
      * Add a new ground overlay
+     * @param {Object} overlayData - Overlay configuration
+     * @param {boolean} [overlayData.gotoOnCreate] - If true, camera will go to overlay after creation
      */
     addOverlay(overlayData) {
         const id = overlayData.id || `groundOverlay_${this.nextOverlayID++}`;
+        const gotoOnCreate = overlayData.gotoOnCreate;
+        delete overlayData.gotoOnCreate;
+        
         const overlay = new CNodeGroundOverlay({
             ...overlayData,
             id: id
@@ -299,6 +304,11 @@ export class C3DSynthManager extends CManager {
         this.overlaysList[id] = overlay;
         console.log(`Added overlay: ${id}`);
         setRenderOne(true);
+        
+        if (gotoOnCreate) {
+            overlay.gotoOverlay();
+        }
+        
         return overlay;
     }
     

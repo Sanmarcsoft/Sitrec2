@@ -1090,7 +1090,20 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         const centerLon = (this.east + this.west) / 2;
         const centerEUS = LLAToEUS(centerLat, centerLon, 0);
         const groundPos = getPointBelow(centerEUS);
-        NodeMan.get("mainCamera").goToPoint(groundPos);
+        
+        const northEUS = LLAToEUS(this.north, centerLon, 0);
+        const southEUS = LLAToEUS(this.south, centerLon, 0);
+        const eastEUS = LLAToEUS(centerLat, this.east, 0);
+        const westEUS = LLAToEUS(centerLat, this.west, 0);
+        
+        const nsDistance = northEUS.distanceTo(southEUS);
+        const ewDistance = eastEUS.distanceTo(westEUS);
+        const longestEdge = Math.max(nsDistance, ewDistance);
+        
+        const above = longestEdge * 5;
+        const back = longestEdge * 0.1;
+        
+        NodeMan.get("mainCamera").goToPoint(groundPos, above, back);
     }
     
     captureState() {
