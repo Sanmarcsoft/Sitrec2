@@ -206,7 +206,7 @@ export class CNodeLabel3D extends CNode3DGroup {
         if (this.in.position !== undefined) {
             const pos = this.in.position.p(f);
             this.position.copy(pos);
-            this.textPosition.copy(pos);
+     //       this.textPosition.copy(pos);
         }
     }
 
@@ -349,10 +349,10 @@ export class CNodeLabeledArrow extends CNodeLabel3D {
 
         this.recalculate(0);
         
-        // For negative lengths, initialize textPosition to start (preRender will fix to end)
-        if (this.length < 0) {
-            this.textPosition.copy(this.start);
-        }
+        // // For negative lengths, initialize textPosition to start (preRender will fix to end)
+        // if (this.length < 0) {
+        //     this.textPosition.copy(this.start);
+        // }
     }
 
     recalculate(f) {
@@ -384,7 +384,7 @@ export class CNodeLabeledArrow extends CNodeLabel3D {
         // Only set textPosition for positive lengths
         // For negative length (pixel-based), textPosition is set in preRender
       //  if (this.length >= 0) {
-            this.textPosition.copy(this.end);
+      //      this.textPosition.copy(this.end);
       //  }
     }
 

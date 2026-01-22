@@ -246,6 +246,12 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
             if (!(label.layerMask & viewLayerMask)) continue;
             if (!label.shouldRender(viewLayerMask)) continue;
 
+            // Call preRender to ensure textPosition is calculated for THIS view
+            // (view-dependent for negative-length arrows that use pixelsToMeters)
+            if (label.preRender) {
+                label.preRender(this.overlayView);
+            }
+
             let pos = label.textPosition.clone();
             if (label.offset) {
                 pos = this.overlayView.offsetScreenPixels(pos, label.offset.x, label.offset.y);
@@ -275,8 +281,8 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
             let y = (-zoomedY + 1) * this.heightPx / 2;
             
             if (textAlign === 'left') {
-                x += 5;
-                y -= 5;
+                x -= 5;
+                y += 5;
             }
 
             const fontSize = label.size || 12;
