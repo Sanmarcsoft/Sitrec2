@@ -260,7 +260,7 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
 
         for (const label of registeredLabels) {
             if (!label.group || !label.group.visible) continue;
-            if (!(label.layerMask & viewLayerMask)) continue;
+            if (!(label.groupNode.group.layers.mask & viewLayerMask)) continue;
             if (!label.shouldRender(viewLayerMask)) continue;
 
             // Call preRender to ensure textPosition is calculated for THIS view
