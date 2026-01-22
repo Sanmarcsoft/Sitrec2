@@ -662,7 +662,6 @@ export class CNode3DObject extends CNode3DGroup {
             id: this.id + "_label",
             text: label,
             position: this,
-            layers: (Globals.showLabelsMain ? LAYER.MASK_MAIN : 0) | (Globals.showLabelsLook ? LAYER.MASK_LOOK : 0),
             offsetY:40, // this is vertical offset in screen pixels.
             color: "white",
             size:12,

@@ -79,23 +79,30 @@ export function setupMeasurementUI() {
 
     labelsControllerMain = guiShowHide.add(Globals, "showLabelsMain").name("Labels in Main").listen().onChange( (value) => {
        refreshLabelVisibility();
+       setRenderOne(true);
     });
 
     labelsControllerLook = guiShowHide.add(Globals, "showLabelsLook").name("Labels in Look").listen().onChange( (value) => {
-
         refreshLabelVisibility();
+        setRenderOne(true);
     })
+
+    refreshLabelVisibility();
 
     Globals.showFeaturesMain = true;
     Globals.showFeaturesLook = false;
 
     featuresControllerMain = guiShowHide.add(Globals, "showFeaturesMain").name("Features in Main").listen().onChange( (value) => {
         refreshFeatureVisibility();
+        setRenderOne(true);
     });
 
     featuresControllerLook = guiShowHide.add(Globals, "showFeaturesLook").name("Features in Look").listen().onChange( (value) => {
         refreshFeatureVisibility();
+        setRenderOne(true);
     })
+
+    refreshFeatureVisibility();
 
 }
 
@@ -188,7 +195,15 @@ export class CNodeLabel3D extends CNode3DGroup {
         }
 
         this.color = color;
-        this.layerMask = v.layers ?? LAYER.MASK_HELPERS;
+        
+        const groupNodeId = v.groupNode ?? "MeasurementsGroupNode";
+        if (v.layers !== undefined) {
+            this.layerMask = v.layers;
+        } else if (groupNodeId === "LabelsGroupNode" || groupNodeId === "FeaturesGroupNode") {
+            this.layerMask = LAYER.MASK_MAIN | LAYER.MASK_LOOK;
+        } else {
+            this.layerMask = LAYER.MASK_HELPERS;
+        }
         
         this.isMeasurement = groupNode.isMeasurement ?? false;
 
@@ -480,9 +495,6 @@ export class CNodeFeatureMarker extends CNodeLabel3D {
         this.arrowColor = v.arrowColor ?? 0xFF0000;
         this.textColor = textColor;
         this.text = v.text ?? "";
-        
-        this.layerMask = this.groupNode.group.layers.mask;
-        this.group.layers.mask = this.groupNode.group.layers.mask;
         
         const hexString = '#' + textColor.toString(16).padStart(6, '0');
         this.color = hexString;
