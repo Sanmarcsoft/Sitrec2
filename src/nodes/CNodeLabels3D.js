@@ -206,7 +206,7 @@ export class CNodeLabel3D extends CNode3DGroup {
         if (this.in.position !== undefined) {
             const pos = this.in.position.p(f);
             this.position.copy(pos);
-     //       this.textPosition.copy(pos);
+            this.textPosition.copy(pos);
         }
     }
 
