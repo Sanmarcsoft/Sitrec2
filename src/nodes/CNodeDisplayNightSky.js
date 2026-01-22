@@ -781,6 +781,13 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
     modDeserialize(v) {
         super.modDeserialize(v);
+
+        if (Globals.exportTagNumber <= 2025003) {
+            console.log("Old save with Dispay Range, updating from " + this.arrowRange + " to 100000");
+            this.arrowRange = 100000;
+        }
+
+
         // a guid value's .listen() only updates the gui, so we need to do it manually
         // perhaps better to flag the gui system to update it?
         this.satellites.filterSatellites();
