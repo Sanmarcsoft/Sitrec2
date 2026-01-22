@@ -32,6 +32,75 @@ Example entry format:
 
 ---
 
+## Version 2.25.5 (2026-01-22)
+
+### New Features
+- **Lit Only filter** for satellite labels to show only sun-illuminated satellites
+- **Look View Visible Only filter** for main view satellite labels
+
+### Improvements
+- Satellite arrows now use same visibility settings as labels
+- Backwards compatibility patch for satellite display range in older saves
+
+### Bug Fixes
+- Fixed overlay memory leak
+- Fixed satellite visibility rendering in look view
+
+---
+
+## Version 2.25.4 (2026-01-22)
+
+### Improvements
+- **Replaced sprite text with overlay text** for labels - higher resolution and simpler rendering
+- Increased default ambient lighting from 0.2 to 0.3
+
+### Bug Fixes
+- Fixed labeled arrows displaying at wrong end for celestial objects
+
+---
+
+## Version 2.25.3 (2026-01-21)
+
+### Improvements
+- Satellite display range now defaults to 100,000m
+- Ignore satellites with TLE data more than 90 days out of date
+
+### Bug Fixes
+- Fixed satellite cutoff value to match previous behavior
+- Fixed interpolation continuing when paused
+
+---
+
+## Version 2.25.2 (2026-01-21)
+
+### Improvements
+- **Improved satellite rendering** with refactored point light cloud system
+- Satellite labels now limited to N closest satellites per view to prevent browser crashes
+- Better satellite brightness range in main view
+- Main view satellites size-attenuated by distance while remaining visible when zoomed out
+- Separated brightness calculation (sun illumination) from view-specific size attenuation
+- Stars rendered without subpixel flickering using minimum size and alpha blending
+- Saved sitches now correctly restore exact camera orientation via local up vector serialization
+
+### Bug Fixes
+- Fixed right-click context menu on satellites and stars
+- Fixed jerky satellite motion when playing at 20x+ speed
+- Fixed stand-alone video viewer issues
+
+---
+
+## Version 2.24.2 (2026-01-20)
+
+### New Features
+- **HEVC/H.265 video support** with improved error handling
+- **Rotated video support** for properly oriented playback
+
+### Improvements
+- Stand-alone LOS view now supports drag-and-drop
+- Admin debug dashboard improvements
+
+---
+
 ## Version 2.24.1 (2026-01-19)
 
 ### New Features

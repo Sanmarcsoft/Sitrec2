@@ -14,6 +14,7 @@ My goal here is to create a tool to effectively analyze UAP/UFO cases, and to sh
 - [The Custom Sitch Tool - Drag and Drop Sitches](docs/CustomSitchTool.md)
 - [Custom Models and 3D Object - add your own planes](docs/CustomModels.md)
 - [Recreating Starlink Situations - Horizon Flares](docs/Starlink.md)
+- [What's New](docs/WhatsNew.md)
 
 
 ### Technical Documentation (for coders and webmasters)
@@ -42,12 +43,15 @@ Sitrec uses or ingests a variety of data sources
 - ADS-B files in KML format from ADSB Exchange, FlightAware, Planefinder, and others
 - TLE files in Two or Three Line Element format (for satellites, mostly Starlink)
 - Star catalogs (BSC, etc.)
-- Video (mp4, limited support)
+- Video (mp4, mov, H.264, H.265 )
 - DJI Drone tracks from Airdata as .csv
 - GLB (Binary GLTF 3D models)
 - Generic custom data in .csv
+- PBA (Pico Balloon Archive) .txt files
 - MISB style 3d Track data in KLV or CSV format
-- Image files (jpg, png, etc)
+- Image files (jpg, png, etc) as single frame videos or ground overlays
+- Image Overlays in KMZ format
+
  
 Some types of situations covered:
 

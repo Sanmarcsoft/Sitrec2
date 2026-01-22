@@ -533,6 +533,8 @@ export class CNodeSynthClouds extends CNode3DGroup {
         
         const handle = this.getHandleAtMouse(event.clientX, event.clientY);
         if (handle) {
+            this.stateBeforeDrag = this.captureState();
+            
             // Store initial values for relative dragging
             this.dragInitialAltitude = this.altitude;
             this.dragInitialRadius = this.radius;
@@ -651,12 +653,40 @@ export class CNodeSynthClouds extends CNode3DGroup {
     onPointerUp(event) {
         if (this.isDragging) {
             const wasMoveHandle = this.draggingHandle === 'move';
-            this.isDragging = false;
-            this.draggingHandle = null;
+            const handleType = this.draggingHandle;
             
             if (wasMoveHandle) {
                 this.buildCloudMesh();
             }
+            
+            // Create undo action if state changed
+            if (this.stateBeforeDrag && UndoManager) {
+                const stateAfterDrag = this.captureState();
+                const stateBefore = this.stateBeforeDrag;
+                const stateChanged = JSON.stringify(stateBefore) !== JSON.stringify(stateAfterDrag);
+                
+                if (stateChanged) {
+                    const actionDescription = handleType === 'altitude' 
+                        ? `Change cloud altitude "${this.name}"`
+                        : handleType === 'radius'
+                        ? `Change cloud radius "${this.name}"`
+                        : `Move cloud layer "${this.name}"`;
+                    
+                    UndoManager.add({
+                        undo: () => {
+                            this.restoreState(stateBefore);
+                        },
+                        redo: () => {
+                            this.restoreState(stateAfterDrag);
+                        },
+                        description: actionDescription
+                    });
+                }
+            }
+            
+            this.stateBeforeDrag = null;
+            this.isDragging = false;
+            this.draggingHandle = null;
             
             // Re-enable camera controls
             const view = ViewMan.get("mainView");
@@ -863,6 +893,27 @@ export class CNodeSynthClouds extends CNode3DGroup {
         if (this.radiusController) {
             this.radiusController.setSIValue(this.radius);
         }
+    }
+    
+    captureState() {
+        return {
+            centerLat: this.centerLat,
+            centerLon: this.centerLon,
+            altitude: this.altitude,
+            radius: this.radius,
+        };
+    }
+    
+    restoreState(state) {
+        this.centerLat = state.centerLat;
+        this.centerLon = state.centerLon;
+        this.altitude = state.altitude;
+        this.radius = state.radius;
+        this.updateGroupPosition();
+        this.buildCloudMesh();
+        this.createControlHandles();
+        this.updateGUIControllers();
+        setRenderOne(true);
     }
     
     serialize() {

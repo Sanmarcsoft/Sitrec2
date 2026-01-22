@@ -16,6 +16,7 @@ import {V3} from "./threeUtils";
 import {ViewMan} from "./CViewManager";
 import {mouseInViewOnly, mouseToViewNormalized} from "./ViewUtils";
 import {setRenderOne} from "./Globals";
+import {undoManager as UndoManager} from "./UndoManager";
 import * as LAYER from "./LayerMasks";
 import {CNodePositionXYZ} from "./nodes/CNodePositionLLA";
 import {CNodeMeasureAltitude, setupMeasurementUI} from "./nodes/CNodeLabels3D";
@@ -54,6 +55,31 @@ export class PointEditor {
         this.transformControl.addEventListener('change', () => setRenderOne());
         this.transformControl.addEventListener('dragging-changed', (event) => {
             controls.enabled = !event.value;
+            
+            if (event.value) {
+                // Drag started - capture state
+                this.stateBeforeDrag = this.captureState();
+            } else {
+                // Drag ended - create undo action if state changed
+                if (this.stateBeforeDrag && UndoManager) {
+                    const stateAfterDrag = this.captureState();
+                    const stateBefore = this.stateBeforeDrag;
+                    const stateChanged = JSON.stringify(stateBefore) !== JSON.stringify(stateAfterDrag);
+                    
+                    if (stateChanged) {
+                        UndoManager.add({
+                            undo: () => {
+                                this.restoreState(stateBefore);
+                            },
+                            redo: () => {
+                                this.restoreState(stateAfterDrag);
+                            },
+                            description: "Move track control point"
+                        });
+                    }
+                }
+                this.stateBeforeDrag = null;
+            }
         });
         const gizmo = this.transformControl.getHelper();
         
@@ -662,6 +688,28 @@ export class PointEditor {
         }
     }
 
+    captureState() {
+        return {
+            positions: this.positions.map(p => ({x: p.x, y: p.y, z: p.z})),
+            frameNumbers: [...this.frameNumbers]
+        };
+    }
+    
+    restoreState(state) {
+        for (let i = 0; i < state.positions.length && i < this.positions.length; i++) {
+            this.positions[i].x = state.positions[i].x;
+            this.positions[i].y = state.positions[i].y;
+            this.positions[i].z = state.positions[i].z;
+            this.frameNumbers[i] = state.frameNumbers[i];
+        }
+        this.updatePointEditorGraphics();
+        if (this.transformControl && this.transformControl.object) {
+            const obj = this.transformControl.object;
+            this.transformControl.attach(obj);
+        }
+        if (this.onChange) this.onChange();
+    }
+    
     /**
      * Clean up resources when the editor is disposed
      */

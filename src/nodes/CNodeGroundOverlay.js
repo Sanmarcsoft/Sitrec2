@@ -18,6 +18,7 @@ import {EUSToLLA, LLAToEUS} from "../LLA-ECEF-ENU";
 import {makeMouseRay} from "../mouseMoveView";
 import {ViewMan} from "../CViewManager";
 import {CustomManager, FileManager, Globals, guiMenus, NodeMan, setRenderOne, Synth3DManager} from "../Globals";
+import {undoManager as UndoManager} from "../UndoManager";
 import {mouseInViewOnly} from "../ViewUtils";
 import {getPointBelow, pointAbove} from "../threeExt";
 import {EventManager} from "../CEventManager";
@@ -689,6 +690,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         if (handle) {
             this.isDragging = true;
             this.draggingHandle = handle;
+            this.stateBeforeDrag = this.captureState();
 
             // For rotation or move handle, store initial state for relative dragging
             if (handle.type === 'rotation' || handle.type === 'move') {
@@ -918,9 +920,35 @@ export class CNodeGroundOverlay extends CNode3DGroup {
             if (view && view.controls) {
                 view.controls.enabled = true;
             }
+            
+            if (this.stateBeforeDrag && UndoManager) {
+                const stateAfterDrag = this.captureState();
+                const stateBefore = this.stateBeforeDrag;
+                const stateChanged = JSON.stringify(stateBefore) !== JSON.stringify(stateAfterDrag);
+                
+                if (stateChanged) {
+                    const handleType = this.draggingHandle?.type || 'edit';
+                    const actionDescription = handleType === 'rotation' 
+                        ? `Rotate overlay "${this.name}"`
+                        : handleType === 'move'
+                        ? `Move overlay "${this.name}"`
+                        : `Resize overlay "${this.name}"`;
+                    
+                    UndoManager.add({
+                        undo: () => {
+                            this.restoreState(stateBefore);
+                        },
+                        redo: () => {
+                            this.restoreState(stateAfterDrag);
+                        },
+                        description: actionDescription
+                    });
+                }
+            }
+            
+            this.stateBeforeDrag = null;
             this.isDragging = false;
             this.draggingHandle = null;
-          //  CustomManager.saveGlobalSettings();
         }
     }
     
@@ -1000,6 +1028,21 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         
         this.guiFolder.add({remove: () => {
             if (confirm(`Delete overlay "${this.name}"?`)) {
+                if (UndoManager) {
+                    const overlayState = this.serialize();
+                    const overlayID = this.overlayID;
+                    
+                    UndoManager.add({
+                        undo: () => {
+                            Synth3DManager.addOverlay(overlayState);
+                        },
+                        redo: () => {
+                            Synth3DManager.removeOverlay(overlayID);
+                        },
+                        description: `Delete overlay "${this.name}"`
+                    });
+                }
+                
                 Synth3DManager.removeOverlay(this.overlayID);
             }
         }}, 'remove').name('Delete Overlay');
@@ -1047,6 +1090,27 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         const centerEUS = LLAToEUS(centerLat, centerLon, 0);
         const groundPos = getPointBelow(centerEUS);
         NodeMan.get("mainCamera").goToPoint(groundPos);
+    }
+    
+    captureState() {
+        return {
+            north: this.north,
+            south: this.south,
+            east: this.east,
+            west: this.west,
+            rotation: this.rotation,
+        };
+    }
+    
+    restoreState(state) {
+        this.north = state.north;
+        this.south = state.south;
+        this.east = state.east;
+        this.west = state.west;
+        this.rotation = state.rotation;
+        this.updateMesh();
+        this.updateGUIControllers();
+        setRenderOne(true);
     }
     
     serialize() {
