@@ -1066,8 +1066,8 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                 satData.isFlaring = false;
             }
 
-            // need the /2 as brightness calculation has changed
-            if (brightness < Sit.satCutOff/2) {
+            // need the /5 as brightness calculation has changed
+            if (brightness < Sit.satCutOff/5) {
                 brightness = 0;
             }
 
