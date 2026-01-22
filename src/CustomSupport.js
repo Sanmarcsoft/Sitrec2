@@ -2461,17 +2461,9 @@ export class CCustomManager {
                 console.log(`Created feature ${featureID} at ${lat}, ${lon}, ${alt}m`);
             },
             addBuilding: () => {
-                // Close the menu
                 this.groundContextMenu = null;
                 menu.destroy();
 
-                // First, exit edit mode on the currently edited building (if any)
-                if (Globals.editingBuilding) {
-                    console.log(`  Exiting edit mode on previous building: ${Globals.editingBuilding.buildingID}`);
-                    Globals.editingBuilding.setEditMode(false);
-                }
-
-                // Create a default 7x7x4 building centered at the ground point
                 const building = Synth3DManager.createBuildingAtPoint(groundPoint);
 
                 // Add undo action for building creation
@@ -2503,11 +2495,6 @@ export class CCustomManager {
                 this.groundContextMenu = null;
                 menu.destroy();
 
-                if (Globals.editingClouds) {
-                    console.log(`  Exiting edit mode on previous clouds: ${Globals.editingClouds.cloudsID}`);
-                    Globals.editingClouds.setEditMode(false);
-                }
-
                 const clouds = Synth3DManager.createCloudsAtPoint(groundPoint);
 
                 if (clouds && UndoManager) {
@@ -2534,11 +2521,6 @@ export class CCustomManager {
             addOverlay: () => {
                 this.groundContextMenu = null;
                 menu.destroy();
-
-                if (Globals.editingOverlay) {
-                    console.log(`  Exiting edit mode on previous overlay: ${Globals.editingOverlay.overlayID}`);
-                    Globals.editingOverlay.setEditMode(false);
-                }
 
                 const overlay = Synth3DManager.createOverlayAtPoint(groundPoint);
 
@@ -2575,9 +2557,7 @@ export class CCustomManager {
                     overlayAtPoint.setEditMode(false);
                     console.log(`Exited edit mode for overlay: ${overlayAtPoint.id}`);
                 } else {
-                    if (Globals.editingOverlay && Globals.editingOverlay !== overlayAtPoint) {
-                        Globals.editingOverlay.setEditMode(false);
-                    }
+                    Synth3DManager.exitAllEditModes(overlayAtPoint);
                     overlayAtPoint.setEditMode(true);
                     console.log(`Editing overlay: ${overlayAtPoint.id}`);
                 }
@@ -2595,9 +2575,7 @@ export class CCustomManager {
                     cloudsAtPoint.setEditMode(false);
                     console.log(`Exited edit mode for clouds: ${cloudsAtPoint.id}`);
                 } else {
-                    if (Globals.editingClouds && Globals.editingClouds !== cloudsAtPoint) {
-                        Globals.editingClouds.setEditMode(false);
-                    }
+                    Synth3DManager.exitAllEditModes(cloudsAtPoint);
                     cloudsAtPoint.setEditMode(true);
                     console.log(`Editing clouds: ${cloudsAtPoint.id}`);
                 }

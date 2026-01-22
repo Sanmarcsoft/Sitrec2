@@ -27,9 +27,33 @@ export class C3DSynthManager extends CManager {
     }
     
     /**
+     * Exit all synth editing modes cleanly
+     * @param {Object} [except] - Optional object to exclude from exiting (e.g., the one being edited)
+     */
+    exitAllEditModes(except = null) {
+        if (Globals.editingTrack && Globals.editingTrack !== except) {
+            Globals.editingTrack.editMode = false;
+            if (Globals.editingTrack.splineEditor) {
+                Globals.editingTrack.splineEditor.setEnable(false);
+            }
+            Globals.editingTrack = null;
+        }
+        if (Globals.editingBuilding && Globals.editingBuilding !== except) {
+            Globals.editingBuilding.setEditMode(false);
+        }
+        if (Globals.editingClouds && Globals.editingClouds !== except) {
+            Globals.editingClouds.setEditMode(false);
+        }
+        if (Globals.editingOverlay && Globals.editingOverlay !== except) {
+            Globals.editingOverlay.setEditMode(false);
+        }
+    }
+    
+    /**
      * Add a new building
      */
     addBuilding(buildingData) {
+        this.exitAllEditModes();
         const id = buildingData.id || `synthBuilding_${this.nextBuildingID++}`;
         const building = new CNodeSynthBuilding({
             ...buildingData,
@@ -83,11 +107,6 @@ export class C3DSynthManager extends CManager {
      * @returns {CNodeSynthBuilding} The created building
      */
     createBuildingAtPoint(centerPoint) {
-        if (Globals.editingBuilding) {
-            alert("Please exit edit mode before creating a new building");
-            return null;
-        }
-        
         // Get local coordinate system at the center point
         const localUp = getLocalUpVector(centerPoint);
         
@@ -209,6 +228,7 @@ export class C3DSynthManager extends CManager {
      * Add a new cloud layer
      */
     addClouds(cloudsData) {
+        this.exitAllEditModes();
         const id = cloudsData.id || `synthClouds_${this.nextCloudsID++}`;
         const clouds = new CNodeSynthClouds({
             ...cloudsData,
@@ -274,11 +294,6 @@ export class C3DSynthManager extends CManager {
      * @returns {CNodeSynthClouds} The created cloud layer
      */
     createCloudsAtPoint(groundPoint, altitude = f2m(10000)) {
-        if (Globals.editingClouds) {
-            alert("Please exit edit mode before creating new clouds");
-            return null;
-        }
-        
         const lla = EUSToLLA(groundPoint);
         
         const clouds = this.addClouds({
@@ -311,6 +326,7 @@ export class C3DSynthManager extends CManager {
      * @param {boolean} [overlayData.gotoOnCreate] - If true, camera will go to overlay after creation
      */
     addOverlay(overlayData) {
+        this.exitAllEditModes();
         const id = overlayData.id || `groundOverlay_${this.nextOverlayID++}`;
         const gotoOnCreate = overlayData.gotoOnCreate;
         delete overlayData.gotoOnCreate;
@@ -381,11 +397,6 @@ export class C3DSynthManager extends CManager {
      * @returns {CNodeGroundOverlay} The created overlay
      */
     createOverlayAtPoint(groundPoint) {
-        if (Globals.editingOverlay) {
-            alert("Please exit edit mode before creating a new overlay");
-            return null;
-        }
-        
         const lla = EUSToLLA(groundPoint);
         const offset = 0.01;
         
