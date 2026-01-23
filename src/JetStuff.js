@@ -1293,12 +1293,17 @@ export function initJetStuff() {
         this.camera.layers.mask = LAYER.MASK_LOOKRENDER;
 
         if (!Ball) return;
-        if (this.camera.parent === null) {
-            // PROBLEM, MAYBE - the ball has scale.
-
-            Ball.add(this.camera)
+        
+        if (this.camera.parent === Ball) {
+            Ball.remove(this.camera)
         }
-
+        
+        PodFrame.updateMatrixWorld(true)
+        Ball.updateMatrixWorld(true)
+        
+        const ballWorldPos = V3(0, 0, 0)
+        Ball.getWorldPosition(ballWorldPos)
+        this.camera.position.copy(ballWorldPos)
 
         this.camera.up = V3(Ball.matrixWorld.elements[4],
             Ball.matrixWorld.elements[5],
@@ -1320,6 +1325,22 @@ export function initJetStuff() {
     }
 
     VG("lookView").postRenderFunction = function () {
+
+        // re-attach to Ball for legacy reasons
+        if (this.camera.parent === null && Ball) {
+            Ball.add(this.camera)
+            // normalize the camera position to be local to the ball
+            const localPos = V3(0, 0, 0)
+            this.camera.getWorldPosition(localPos)
+            this.camera.position.copy(localPos)
+            // reset rotation
+            this.camera.rotation.set(0, 0, 0)
+            // scale
+            this.camera.scale.set(1, 1, 1)
+        }
+
+
+
         if (Sit.showGlare) {
             glareSprite.material.rotation = 0
         }
