@@ -59,6 +59,7 @@ import {TSParser} from "./TSParser";
 import {showError} from "./showError";
 import {asyncOperationRegistry} from "./AsyncOperationRegistry";
 import {ECEFToLLAVD_Sphere, EUSToECEF} from "./LLA-ECEF-ENU";
+import {projectedBoundsToWGS84} from "./proj4Loader";
 import {V3} from "./threeUtils";
 import {isAudioOnlyFormat} from "./AudioFormats";
 import {extractFeaturesFromFile, isFeaturesCSV} from "./ParseFeaturesCSV";
@@ -1755,12 +1756,16 @@ export class CFileManager extends CManager {
         const imageData = ctx.createImageData(width, height);
         
         const numBands = rasters.length;
+        const photometricInterpretation = image.fileDirectory.PhotometricInterpretation;
+        const extraSamples = image.fileDirectory.ExtraSamples;
+        const hasAlpha = extraSamples && (extraSamples[0] === 1 || extraSamples[0] === 2);
+        
         for (let i = 0; i < width * height; i++) {
             if (numBands >= 3) {
                 imageData.data[i * 4] = rasters[0][i];
                 imageData.data[i * 4 + 1] = rasters[1][i];
                 imageData.data[i * 4 + 2] = rasters[2][i];
-                imageData.data[i * 4 + 3] = numBands >= 4 ? rasters[3][i] : 255;
+                imageData.data[i * 4 + 3] = (numBands >= 4 && hasAlpha) ? rasters[3][i] : 255;
             } else {
                 const val = rasters[0][i];
                 imageData.data[i * 4] = val;
@@ -2027,18 +2032,30 @@ export class CFileManager extends CManager {
                                                           east >= -180 && east <= 180 && 
                                                           west >= -180 && west <= 180;
                                     
+                                    let finalBounds = { north, south, east, west };
+                                    
                                     if (!isWGS84Geographic && !isValidLatLon) {
-                                        console.warn(`GeoTIFF has projected CRS (Geographic: ${geographicType}, Projected: ${projectedType}). ` +
-                                            `Bounds [${west}, ${south}, ${east}, ${north}] are not valid lat/lon. ` +
-                                            `Only WGS84 (EPSG:4326) GeoTIFFs are supported as ground overlays.`);
-                                        dataType = "image";
-                                        return createImageFromArrayBuffer(buffer, 'image/tiff');
+                                        if (projectedType) {
+                                            try {
+                                                finalBounds = await projectedBoundsToWGS84(projectedType, west, south, east, north);
+                                                console.log(`Converted EPSG:${projectedType} bounds to WGS84:`, finalBounds);
+                                            } catch (e) {
+                                                console.warn(`GeoTIFF has unsupported projected CRS (EPSG:${projectedType}): ${e.message}`);
+                                                dataType = "image";
+                                                return createImageFromArrayBuffer(buffer, 'image/tiff');
+                                            }
+                                        } else {
+                                            console.warn(`GeoTIFF has unknown CRS (Geographic: ${geographicType}). ` +
+                                                `Bounds [${west}, ${south}, ${east}, ${north}] are not valid lat/lon.`);
+                                            dataType = "image";
+                                            return createImageFromArrayBuffer(buffer, 'image/tiff');
+                                        }
                                     }
                                     
                                     dataType = "geotiff";
                                     return {
                                         buffer: buffer,
-                                        bounds: { north, south, east, west },
+                                        bounds: finalBounds,
                                         width: image.getWidth(),
                                         height: image.getHeight()
                                     };

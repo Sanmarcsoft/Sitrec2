@@ -574,3 +574,191 @@ export function ECEFCelestialToAzEl(ecef, lat, lon) {
 
 
 //var mENU2ECEF = new Matrix3().getInverse(ECEF2ENU);
+
+/**
+ * Convert UTM coordinates to latitude/longitude (WGS84)
+ * @param {number} easting - UTM easting in meters
+ * @param {number} northing - UTM northing in meters
+ * @param {number} zone - UTM zone number (1-60)
+ * @param {boolean} northern - true for northern hemisphere, false for southern
+ * @returns {{lat: number, lon: number}} Latitude and longitude in degrees
+ */
+export function utmToLatLon(easting, northing, zone, northern = true) {
+    const a = 6378137.0;
+    const f = 1 / 298.257223563;
+    const k0 = 0.9996;
+    
+    const e = Math.sqrt(2 * f - f * f);
+    const e2 = e * e;
+    const e1 = (1 - Math.sqrt(1 - e2)) / (1 + Math.sqrt(1 - e2));
+    const ep2 = e2 / (1 - e2);
+    
+    const x = easting - 500000;
+    const y = northern ? northing : northing - 10000000;
+    
+    const M = y / k0;
+    const mu = M / (a * (1 - e2 / 4 - 3 * e2 * e2 / 64 - 5 * e2 * e2 * e2 / 256));
+    
+    const phi1 = mu + 
+        (3 * e1 / 2 - 27 * e1 * e1 * e1 / 32) * Math.sin(2 * mu) +
+        (21 * e1 * e1 / 16 - 55 * e1 * e1 * e1 * e1 / 32) * Math.sin(4 * mu) +
+        (151 * e1 * e1 * e1 / 96) * Math.sin(6 * mu) +
+        (1097 * e1 * e1 * e1 * e1 / 512) * Math.sin(8 * mu);
+    
+    const sinPhi1 = Math.sin(phi1);
+    const cosPhi1 = Math.cos(phi1);
+    const tanPhi1 = Math.tan(phi1);
+    
+    const N1 = a / Math.sqrt(1 - e2 * sinPhi1 * sinPhi1);
+    const T1 = tanPhi1 * tanPhi1;
+    const C1 = ep2 * cosPhi1 * cosPhi1;
+    const R1 = a * (1 - e2) / Math.pow(1 - e2 * sinPhi1 * sinPhi1, 1.5);
+    const D = x / (N1 * k0);
+    
+    const lat = phi1 - (N1 * tanPhi1 / R1) * (
+        D * D / 2 -
+        (5 + 3 * T1 + 10 * C1 - 4 * C1 * C1 - 9 * ep2) * D * D * D * D / 24 +
+        (61 + 90 * T1 + 298 * C1 + 45 * T1 * T1 - 252 * ep2 - 3 * C1 * C1) * D * D * D * D * D * D / 720
+    );
+    
+    const lonOrigin = ((zone - 1) * 6 - 180 + 3) * Math.PI / 180;
+    const lon = lonOrigin + (
+        D -
+        (1 + 2 * T1 + C1) * D * D * D / 6 +
+        (5 - 2 * C1 + 28 * T1 - 3 * C1 * C1 + 8 * ep2 + 24 * T1 * T1) * D * D * D * D * D / 120
+    ) / cosPhi1;
+    
+    return {
+        lat: lat * 180 / Math.PI,
+        lon: lon * 180 / Math.PI
+    };
+}
+
+/**
+ * Parse EPSG code to extract UTM zone and hemisphere info
+ * Supports NAD83 (269xx) and WGS84 (326xx/327xx) UTM zones
+ * @param {number} epsgCode - EPSG code (e.g., 26911, 32611)
+ * @returns {{zone: number, northern: boolean}|null} Zone info or null if not UTM
+ */
+export function parseUTMFromEPSG(epsgCode) {
+    if (epsgCode >= 26901 && epsgCode <= 26923) {
+        return { zone: epsgCode - 26900, northern: true };
+    }
+    if (epsgCode >= 32601 && epsgCode <= 32660) {
+        return { zone: epsgCode - 32600, northern: true };
+    }
+    if (epsgCode >= 32701 && epsgCode <= 32760) {
+        return { zone: epsgCode - 32700, northern: false };
+    }
+    return null;
+}
+
+const CA_STATE_PLANE_ZONES = {
+    2225: { zone: 1, units: 'ft', feM: 2000000, fnM: 500000 },
+    2226: { zone: 2, units: 'ft', feM: 2000000, fnM: 500000 },
+    2227: { zone: 3, units: 'ft', feM: 2000000, fnM: 500000 },
+    2228: { zone: 4, units: 'ft', feM: 2000000, fnM: 500000 },
+    2229: { zone: 5, units: 'ft', feM: 2000000, fnM: 500000 },
+    2230: { zone: 6, units: 'ft', feM: 2000000, fnM: 500000 },
+    2766: { zone: 1, units: 'm', feM: 2000000, fnM: 500000 },
+    2767: { zone: 2, units: 'm', feM: 2000000, fnM: 500000 },
+    2768: { zone: 3, units: 'm', feM: 2000000, fnM: 500000 },
+    2769: { zone: 4, units: 'm', feM: 2000000, fnM: 500000 },
+    2770: { zone: 5, units: 'm', feM: 2000000, fnM: 500000 },
+    2771: { zone: 6, units: 'm', feM: 2000000, fnM: 500000 },
+    2870: { zone: 1, units: 'ftUS', feM: 2000000, fnM: 500000 },
+    2871: { zone: 2, units: 'ftUS', feM: 2000000, fnM: 500000 },
+    2872: { zone: 3, units: 'ftUS', feM: 2000000, fnM: 500000 },
+    2873: { zone: 4, units: 'ftUS', feM: 2000000, fnM: 500000 },
+    2874: { zone: 5, units: 'ftUS', feM: 2000000, fnM: 500000 },
+    2875: { zone: 6, units: 'ftUS', feM: 2000000, fnM: 500000 },
+    6414: { zone: 1, units: 'ftUS', feM: 2000000, fnM: 500000 },
+    6415: { zone: 2, units: 'ftUS', feM: 2000000, fnM: 500000 },
+    6416: { zone: 3, units: 'ftUS', feM: 2000000, fnM: 500000 },
+    6417: { zone: 4, units: 'ftUS', feM: 2000000, fnM: 500000 },
+    6418: { zone: 5, units: 'ftUS', feM: 2000000, fnM: 500000 },
+    6419: { zone: 6, units: 'ftUS', feM: 2000000, fnM: 500000 },
+};
+
+const CA_ZONE_PARAMS = {
+    1: { lat0: 39.333333, lon0: -122, sp1: 40, sp2: 41.666667 },
+    2: { lat0: 37.666667, lon0: -122, sp1: 38.333333, sp2: 39.833333 },
+    3: { lat0: 36.5, lon0: -120.5, sp1: 37.066667, sp2: 38.433333 },
+    4: { lat0: 35.333333, lon0: -119, sp1: 36, sp2: 37.25 },
+    5: { lat0: 33.5, lon0: -118, sp1: 34.033333, sp2: 35.466667 },
+    6: { lat0: 32.166667, lon0: -116.25, sp1: 32.783333, sp2: 33.883333 },
+};
+
+/**
+ * Parse California State Plane EPSG code
+ * @param {number} epsgCode - EPSG code
+ * @returns {{zone: number, units: string}|null} Zone info or null if not CA State Plane
+ */
+export function parseCAStatePlaneFromEPSG(epsgCode) {
+    return CA_STATE_PLANE_ZONES[epsgCode] || null;
+}
+
+/**
+ * Convert California State Plane coordinates to lat/lon (NAD83)
+ * Uses Lambert Conformal Conic projection
+ * @param {number} easting - Easting coordinate
+ * @param {number} northing - Northing coordinate
+ * @param {number} zone - CA State Plane zone (1-6)
+ * @param {string} units - 'm', 'ft', or 'ftUS'
+ * @param {number} feM - False easting in meters
+ * @param {number} fnM - False northing in meters
+ * @returns {{lat: number, lon: number}} Latitude and longitude in degrees
+ */
+export function caStatePlaneToLatLon(easting, northing, zone, units = 'ftUS', feM = 2000000, fnM = 500000) {
+    const p = CA_ZONE_PARAMS[zone];
+    if (!p) return null;
+    
+    let e = easting, n = northing;
+    if (units === 'ftUS') {
+        e *= 0.3048006096012192;
+        n *= 0.3048006096012192;
+    } else if (units === 'ft') {
+        e *= 0.3048;
+        n *= 0.3048;
+    }
+    
+    const a = 6378137.0;
+    const f = 1 / 298.257222101;
+    const e2 = 2 * f - f * f;
+    const ec = Math.sqrt(e2);
+    
+    const toRad = Math.PI / 180;
+    const lat0 = p.lat0 * toRad;
+    const lon0 = p.lon0 * toRad;
+    const sp1 = p.sp1 * toRad;
+    const sp2 = p.sp2 * toRad;
+    
+    const m1 = Math.cos(sp1) / Math.sqrt(1 - e2 * Math.sin(sp1) * Math.sin(sp1));
+    const m2 = Math.cos(sp2) / Math.sqrt(1 - e2 * Math.sin(sp2) * Math.sin(sp2));
+    const t0 = Math.tan(Math.PI / 4 - lat0 / 2) / Math.pow((1 - ec * Math.sin(lat0)) / (1 + ec * Math.sin(lat0)), ec / 2);
+    const t1 = Math.tan(Math.PI / 4 - sp1 / 2) / Math.pow((1 - ec * Math.sin(sp1)) / (1 + ec * Math.sin(sp1)), ec / 2);
+    const t2 = Math.tan(Math.PI / 4 - sp2 / 2) / Math.pow((1 - ec * Math.sin(sp2)) / (1 + ec * Math.sin(sp2)), ec / 2);
+    
+    const nn = (Math.log(m1) - Math.log(m2)) / (Math.log(t1) - Math.log(t2));
+    const F = m1 / (nn * Math.pow(t1, nn));
+    const rho0 = a * F * Math.pow(t0, nn);
+    
+    const x = e - feM;
+    const y = rho0 - (n - fnM);
+    const rho = Math.sign(nn) * Math.sqrt(x * x + y * y);
+    const t = Math.pow(rho / (a * F), 1 / nn);
+    const theta = Math.atan2(x, y);
+    
+    let lat = Math.PI / 2 - 2 * Math.atan(t);
+    for (let i = 0; i < 10; i++) {
+        const eSinLat = ec * Math.sin(lat);
+        lat = Math.PI / 2 - 2 * Math.atan(t * Math.pow((1 - eSinLat) / (1 + eSinLat), ec / 2));
+    }
+    
+    const lon = theta / nn + lon0;
+    
+    return {
+        lat: lat * 180 / Math.PI,
+        lon: lon * 180 / Math.PI
+    };
+}
