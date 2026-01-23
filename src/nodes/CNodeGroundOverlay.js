@@ -22,7 +22,7 @@ import {undoManager as UndoManager} from "../UndoManager";
 import {mouseInViewOnly} from "../ViewUtils";
 import {getPointBelow, pointAbove} from "../threeExt";
 import {EventManager} from "../CEventManager";
-import {degrees, radians} from "../utils";
+import {degrees, radians, scaleF2M} from "../utils";
 import {sharedUniforms} from "../js/map33/material/SharedUniforms";
 
 export class CNodeGroundOverlay extends CNode3DGroup {
@@ -46,8 +46,10 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         this.extractClouds = v.extractClouds !== undefined ? v.extractClouds : false;
         this.cloudColor = v.cloudColor !== undefined ? v.cloudColor : '#E0E0E0';
         this.cloudFuzziness = v.cloudFuzziness !== undefined ? v.cloudFuzziness : 50;
+        this.altitude = v.altitude !== undefined ? v.altitude : 0;
         
         this.originalTexture = null;
+        this.flatMesh = null;
         this.overlayTileMeshes = new Map();
         this.overlayMaterial = null;
         this.texture = null;
@@ -345,6 +347,13 @@ export class CNodeGroundOverlay extends CNode3DGroup {
     
     buildMesh() {
         this.disposeTileMeshes();
+        this.disposeFlatMesh();
+        
+        if (this.altitude > 0) {
+            this.buildFlatMesh();
+            setRenderOne(true);
+            return;
+        }
         
         if (!NodeMan.exists("TerrainModel")) {
             return;
@@ -390,6 +399,74 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         });
         
         setRenderOne(true);
+    }
+    
+    disposeFlatMesh() {
+        if (this.flatMesh) {
+            this.group.remove(this.flatMesh);
+            if (this.flatMesh.geometry) this.flatMesh.geometry.dispose();
+            this.flatMesh = null;
+        }
+    }
+    
+    buildFlatMesh() {
+        const segments = 100;
+        const altitudeMeters = this.altitude * scaleF2M;
+        
+        const centerLat = (this.north + this.south) / 2;
+        const centerLon = (this.east + this.west) / 2;
+        const centerEUS = LLAToEUS(centerLat, centerLon, altitudeMeters);
+        this.group.position.copy(centerEUS);
+        
+        const positions = [];
+        const uvs = [];
+        const indices = [];
+        
+        for (let j = 0; j <= segments; j++) {
+            for (let i = 0; i <= segments; i++) {
+                const u = i / segments;
+                const v = j / segments;
+                
+                let lat = this.south + (this.north - this.south) * (1 - v);
+                let lon = this.west + (this.east - this.west) * u;
+                
+                if (this.rotation !== 0) {
+                    const relLat = lat - centerLat;
+                    const relLon = lon - centerLon;
+                    const cos = Math.cos(radians(this.rotation));
+                    const sin = Math.sin(radians(this.rotation));
+                    lat = centerLat + relLat * cos - relLon * sin;
+                    lon = centerLon + relLat * sin + relLon * cos;
+                }
+                
+                const pos = LLAToEUS(lat, lon, altitudeMeters);
+                positions.push(pos.x - centerEUS.x, pos.y - centerEUS.y, pos.z - centerEUS.z);
+                uvs.push(u, v);
+            }
+        }
+        
+        for (let j = 0; j < segments; j++) {
+            for (let i = 0; i < segments; i++) {
+                const a = j * (segments + 1) + i;
+                const b = a + 1;
+                const c = a + (segments + 1);
+                const d = c + 1;
+                indices.push(a, c, b);
+                indices.push(b, c, d);
+            }
+        }
+        
+        const geometry = new BufferGeometry();
+        geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+        geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
+        geometry.setIndex(indices);
+        geometry.computeVertexNormals();
+        
+        this.flatMesh = new Mesh(geometry, this.overlayMaterial);
+        this.flatMesh.layers.mask = LAYER.MASK_MAIN | LAYER.MASK_LOOK;
+        this.flatMesh.frustumCulled = false;
+        this.flatMesh.userData.ignoreContextMenu = true;
+        this.group.add(this.flatMesh);
     }
     
     createOverlayTileFromTerrainTile(tile, mapProjection, layerMask) {
@@ -708,6 +785,8 @@ export class CNodeGroundOverlay extends CNode3DGroup {
     }
     
     onTileVisibilityChanged({tile, oldMask, newMask}) {
+        if (this.altitude > 0) return;
+        
         const terrainMap = this.getTerrainMap();
         if (!terrainMap || tile.map !== terrainMap) {
             return;
@@ -737,6 +816,8 @@ export class CNodeGroundOverlay extends CNode3DGroup {
     }
     
     onTileChanged(tile) {
+        if (this.altitude > 0) return;
+        
         const terrainMap = this.getTerrainMap();
         if (!terrainMap || tile.map !== terrainMap) return;
         
@@ -1098,6 +1179,10 @@ export class CNodeGroundOverlay extends CNode3DGroup {
             this.updateMesh();
         }).onFinishChange(() => { CustomManager.saveGlobalSettings(true); });
         
+        propsFolder.add(this, 'altitude', 0, 50000, 100).name('Altitude (ft)').onChange(() => {
+            this.updateMesh();
+        }).onFinishChange(() => { CustomManager.saveGlobalSettings(true); });
+        
         propsFolder.add(this, 'wireframe').name('Wireframe').onChange(() => {
             if (this.overlayMaterial) {
                 this.overlayMaterial.wireframe = this.wireframe;
@@ -1250,6 +1335,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
             extractClouds: this.extractClouds,
             cloudColor: this.cloudColor,
             cloudFuzziness: this.cloudFuzziness,
+            altitude: this.altitude,
         };
     }
 
@@ -1262,6 +1348,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
             east: data.east,
             west: data.west,
             rotation: data.rotation,
+            altitude: data.altitude,
             imageURL: data.imageURL,
             imageFileID: data.imageFileID,
             wireframe: data.wireframe,
@@ -1321,6 +1408,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         
         this.removeControlPoints();
         this.disposeTileMeshes();
+        this.disposeFlatMesh();
         
         if (this.overlayMaterial) this.overlayMaterial.dispose();
         if (this.texture) this.texture.dispose();
