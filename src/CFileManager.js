@@ -1793,6 +1793,7 @@ export class CFileManager extends CManager {
             imageURL: blobURL,
             imageFileID: fileID,
             gotoOnCreate: true,
+            lockShape: true,
         });
         CustomManager.saveGlobalSettings();
         console.log(`Created ground overlay from GeoTIFF: ${filename} (fileID: ${fileID})`);

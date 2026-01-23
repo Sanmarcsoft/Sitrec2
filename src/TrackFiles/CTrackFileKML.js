@@ -540,6 +540,7 @@ export class CTrackFileKML extends CTrackFile {
             imageFileID: imageFileID,
             name: overlayName,
             gotoOnCreate: true,
+            lockShape: true,
         });
 
         CustomManager.ignore(ignoreID);

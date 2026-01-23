@@ -47,6 +47,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         this.cloudColor = v.cloudColor !== undefined ? v.cloudColor : '#E0E0E0';
         this.cloudFuzziness = v.cloudFuzziness !== undefined ? v.cloudFuzziness : 50;
         this.altitude = v.altitude !== undefined ? v.altitude : 0;
+        this.lockShape = v.lockShape !== undefined ? v.lockShape : false;
         
         this.originalTexture = null;
         this.flatMesh = null;
@@ -722,7 +723,9 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         if (enable) {
             Globals.editingOverlay = this;
             this.updateGroupPosition();
-            this.createControlPoints();
+            if (!this.lockShape) {
+                this.createControlPoints();
+            }
             CustomManager.showOverlayEditingMenu(this, 100, 100);
         } else {
             if (Globals.editingOverlay === this) {
@@ -1151,6 +1154,17 @@ export class CNodeGroundOverlay extends CNode3DGroup {
             this.setEditMode(value);
         });
         
+        this.guiFolder.add(this, 'lockShape').name('Lock Shape').onChange(() => {
+            if (this.editMode) {
+                if (this.lockShape) {
+                    this.removeControlPoints();
+                } else {
+                    this.createControlPoints();
+                }
+                setRenderOne(true);
+            }
+        }).onFinishChange(() => { CustomManager.saveGlobalSettings(true); });
+        
         const propsFolder = this.guiFolder.addFolder('Properties').close();
         
         propsFolder.add(this, 'imageURL').name('Image URL').onChange(() => {
@@ -1336,6 +1350,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
             cloudColor: this.cloudColor,
             cloudFuzziness: this.cloudFuzziness,
             altitude: this.altitude,
+            lockShape: this.lockShape,
         };
     }
 
@@ -1356,6 +1371,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
             extractClouds: data.extractClouds,
             cloudColor: data.cloudColor,
             cloudFuzziness: data.cloudFuzziness,
+            lockShape: data.lockShape,
         });
     }
     
