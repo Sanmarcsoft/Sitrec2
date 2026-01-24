@@ -751,6 +751,54 @@ export class CNodeView3D extends CNodeViewCanvas {
         return 2 * Math.atan(Math.tan(vfov / 2) * aspect);
     }
 
+    applyCameraOffset() {
+        let ptzController = null;
+        for (const inputID in this.cameraNode.inputs) {
+            const input = this.cameraNode.in[inputID];
+            if (input && input.xOffset !== undefined) {
+                ptzController = input;
+                break;
+            }
+        }
+        if (!ptzController) return null;
+        const xOffset = ptzController.xOffset || 0;
+        const yOffset = ptzController.yOffset || 0;
+        if (xOffset === 0 && yOffset === 0) return null;
+        
+        const savedQuaternion = this.camera.quaternion.clone();
+        const xOffsetRad = xOffset * Math.PI / 180;
+        const yOffsetRad = yOffset * Math.PI / 180;
+        
+        const up = V3(0, 1, 0).applyQuaternion(this.camera.quaternion);
+        this.camera.rotateOnWorldAxis(up, -xOffsetRad);
+        
+        const right = V3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+        this.camera.rotateOnWorldAxis(right, -yOffsetRad);
+        
+        return savedQuaternion;
+    }
+
+    removeCameraOffset(savedQuaternion) {
+        if (savedQuaternion) {
+            this.camera.quaternion.copy(savedQuaternion);
+        }
+    }
+
+    getCameraOffset() {
+        let ptzController = null;
+        for (const inputID in this.cameraNode.inputs) {
+            const input = this.cameraNode.in[inputID];
+            if (input && input.xOffset !== undefined) {
+                ptzController = input;
+                break;
+            }
+        }
+        if (!ptzController) return { xOffset: 0, yOffset: 0 };
+        return { 
+            xOffset: ptzController.xOffset || 0, 
+            yOffset: ptzController.yOffset || 0 
+        };
+    }
 
     setupRenderPipeline(v) {
         this.setFromDiv(this.div); // This will set the widthDiv, heightDiv
@@ -1084,6 +1132,8 @@ export class CNodeView3D extends CNodeViewCanvas {
                     sunNode.update();
                 }
 
+                const savedQuaternion = this.applyCameraOffset();
+
                 // [DBG] Render sky
                 if (Globals.renderDebugFlags.dbg_renderSky) {
                     this.renderSky();
@@ -1175,9 +1225,10 @@ export class CNodeView3D extends CNodeViewCanvas {
                         sharedUniforms.cameraFocalLength.value = focalLength;
                     }
                     
-                    // Render the scene to the off-screen canvas or render target
                     this.renderer.render(GlobalScene, this.camera);
                 }
+
+                this.removeCameraOffset(savedQuaternion);
 
 
                 this.camera.layers.mask = oldLayers;

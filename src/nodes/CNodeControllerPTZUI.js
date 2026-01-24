@@ -118,6 +118,8 @@ export class CNodeControllerPTZUI extends CNodeControllerAzElZoom {
         this.el = v.el
         this.fov = v.fov
         this.roll = v.roll
+        this.xOffset = v.xOffset ?? 0;
+        this.yOffset = v.yOffset ?? 0;
         this.relative = false;
 
         assert(v.fov !== undefined, "CNodeControllerPTZUI: initial fov is undefined")
@@ -137,6 +139,8 @@ export class CNodeControllerPTZUI extends CNodeControllerAzElZoom {
             if (this.roll !== undefined ) {
                 guiPTZ.add(this, "roll", -180, 180, 0.005).listen().name("Roll").onChange(v => this.refresh()).setLabelColor(pszUIColor)
             }
+            guiPTZ.add(this, "xOffset", -10, 10, 0.001).listen().name("xOffset").onChange(v => this.refresh()).setLabelColor(pszUIColor)
+            guiPTZ.add(this, "yOffset", -10, 10, 0.001).listen().name("yOffset").onChange(v => this.refresh()).setLabelColor(pszUIColor)
             guiPTZ.add(this, "relative").listen().name("Relative").onChange(v => this.refresh())
         }
        // this.refresh()
@@ -149,6 +153,8 @@ export class CNodeControllerPTZUI extends CNodeControllerAzElZoom {
             el: this.el,
             fov: this.fov,
             roll: this.roll,
+            xOffset: this.xOffset,
+            yOffset: this.yOffset,
             relative: this.relative
         }
     }
@@ -161,6 +167,8 @@ export class CNodeControllerPTZUI extends CNodeControllerAzElZoom {
         this.el = v.el;
         this.fov = v.fov;
         this.roll = v.roll;
+        this.xOffset = v.xOffset ?? 0;
+        this.yOffset = v.yOffset ?? 0;
         this.relative = v.relative ?? false;
     }
 

@@ -5,7 +5,7 @@ import {GlobalDateTimeNode, guiShowHide, setRenderOne, Sit} from "../Globals";
 import {getCelestialDirectionFromRaDec, raDec2Celestial} from "../CelestialMath";
 import {wgs84} from "../LLA-ECEF-ENU";
 import {intersectSphere2, V3} from "../threeUtils";
-import {Ray, Raycaster, Sphere} from "three";
+import {Ray, Raycaster, Sphere, Vector3} from "three";
 import {calculateAltitude} from "../threeExt";
 
 const registeredLabels = new Set();
@@ -79,6 +79,7 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
             }
             starCamera.position.set(0, 0, 0);
             starCamera.aspect = this.widthPx / this.heightPx;
+            this.applyCameraOffset(starCamera);
             starCamera.updateMatrix();
             starCamera.matrixWorld.copy(starCamera.matrix);
             starCamera.matrixWorldInverse.copy(starCamera.matrixWorld).invert();
@@ -89,6 +90,21 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
         if (showSatelliteNames) {
             this.renderSatelliteNames(earthSphere);
         }
+    }
+
+    applyCameraOffset(camera) {
+        if (!this.overlayView || !this.overlayView.getCameraOffset) return;
+        const { xOffset, yOffset } = this.overlayView.getCameraOffset();
+        if (xOffset === 0 && yOffset === 0) return;
+        
+        const xOffsetRad = xOffset * Math.PI / 180;
+        const yOffsetRad = yOffset * Math.PI / 180;
+        
+        const up = new Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+        camera.rotateOnWorldAxis(up, -xOffsetRad);
+        
+        const right = new Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+        camera.rotateOnWorldAxis(right, -yOffsetRad);
     }
 
     renderStarNames(camera, earthSphere, actualCameraPosition, date) {
@@ -157,9 +173,10 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
             camera.fov = this.camera.renderedFOV;
         }
         camera.aspect = this.widthPx / this.heightPx;
-        camera.updateProjectionMatrix()
-        camera.matrixWorld.copy(this.camera.matrixWorld);
-        camera.matrixWorldInverse.copy(this.camera.matrixWorldInverse);
+        this.applyCameraOffset(camera);
+        camera.updateMatrix();
+        camera.updateMatrixWorld();
+        camera.updateProjectionMatrix();
 
         const cameraPos = this.camera.position;
         const satData = satellites.TLEData.satData;
@@ -254,9 +271,10 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
             camera.fov = this.camera.renderedFOV;
         }
         camera.aspect = this.widthPx / this.heightPx;
+        this.applyCameraOffset(camera);
+        camera.updateMatrix();
+        camera.updateMatrixWorld();
         camera.updateProjectionMatrix();
-        camera.matrixWorld.copy(this.camera.matrixWorld);
-        camera.matrixWorldInverse.copy(this.camera.matrixWorldInverse);
 
         for (const label of registeredLabels) {
             if (!label.group || !label.group.visible) continue;

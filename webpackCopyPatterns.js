@@ -30,6 +30,12 @@ patterns.push({ from: "./src/PixelFilters.js", to:"./src" });
 // Copy tools directory
 patterns.push({ from: "tools", to: "./tools" });
 
+// Copy tests directory (for browser-based benchmarks/tests) - dev only
+// DOCKER_BUILD is set in Dockerfile for production builds
+if (!process.env.DOCKER_BUILD && !isServerlessBuild) {
+    patterns.push({ from: "tests", to: "./tests" });
+}
+
 // Only copy sitrecServer and config.php in non-serverless, non-Docker environments
 // - Docker dev: Apache serves sitrecServer via proxy, so don't copy
 // - Serverless: Zero PHP files in output
