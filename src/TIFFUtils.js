@@ -2,6 +2,44 @@
 // image is a TIFF image loaded by GeoTIFF
 // the data is in an ArrayBufferSource with contains an arrayBuffer
 import {assert} from "./assert";
+import {fromArrayBuffer as geotiffFromArrayBuffer} from 'geotiff';
+
+export async function convertTiffBufferToBlobURL(buffer) {
+    const tiff = await geotiffFromArrayBuffer(buffer);
+    const image = await tiff.getImage();
+    const width = image.getWidth();
+    const height = image.getHeight();
+    const rasters = await image.readRasters();
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.createImageData(width, height);
+
+    const numBands = rasters.length;
+    const extraSamples = image.fileDirectory.ExtraSamples;
+    const hasAlpha = extraSamples && (extraSamples[0] === 1 || extraSamples[0] === 2);
+
+    for (let i = 0; i < width * height; i++) {
+        if (numBands >= 3) {
+            imageData.data[i * 4] = rasters[0][i];
+            imageData.data[i * 4 + 1] = rasters[1][i];
+            imageData.data[i * 4 + 2] = rasters[2][i];
+            imageData.data[i * 4 + 3] = (numBands >= 4 && hasAlpha) ? rasters[3][i] : 255;
+        } else {
+            const val = rasters[0][i];
+            imageData.data[i * 4] = val;
+            imageData.data[i * 4 + 1] = val;
+            imageData.data[i * 4 + 2] = val;
+            imageData.data[i * 4 + 3] = 255;
+        }
+    }
+    ctx.putImageData(imageData, 0, 0);
+
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    return URL.createObjectURL(blob);
+}
 
 export function convertTIFFToElevationArray(image) {
 

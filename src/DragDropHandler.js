@@ -10,9 +10,10 @@ import {EventManager} from "./CEventManager";
 import {MP4_DEMUXER_EXTENSIONS, WEBAUDIO_SUPPORTED_EXTENSIONS} from "./AudioFormats";
 import {ViewMan} from "./CViewManager";
 import {quickFetch} from "./quickFetch";
+import {convertTiffBufferToBlobURL} from "./TIFFUtils";
 
 // Image file extensions
-const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'];
+const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tif', 'tiff'];
 
 // The DragDropHandler is more like the local client file handler, with rehosting, and parsing
 class CDragDropHandler {
@@ -359,11 +360,20 @@ class CDragDropHandler {
             handled: true  // Mark as handled so it doesn't get processed again
         };
 
+        const ext = file.name.split('.').pop().toLowerCase();
+        let imageURL;
+
+        if (ext === 'tif' || ext === 'tiff') {
+            imageURL = await convertTiffBufferToBlobURL(arrayBuffer);
+        } else {
+            const blob = new Blob([arrayBuffer], { type: file.type });
+            imageURL = URL.createObjectURL(blob);
+        }
+
         return new Promise((resolve, reject) => {
             const img = new Image();
             img.onload = () => {
                 videoNode.makeImageVideo(file.name, img, false, file.name);
-                // Store reference to the FileManager entry
                 videoNode.imageFileID = file.name;
                 console.log(`Loaded image "${file.name}" as video source (${img.width}x${img.height})`);
                 resolve();
@@ -372,9 +382,7 @@ class CDragDropHandler {
                 console.error("Failed to load image: " + file.name);
                 reject(new Error("Failed to load image"));
             };
-            // Create data URL from the array buffer
-            const blob = new Blob([arrayBuffer], { type: file.type });
-            img.src = URL.createObjectURL(blob);
+            img.src = imageURL;
         });
     }
 
@@ -388,9 +396,15 @@ class CDragDropHandler {
         // Read file as ArrayBuffer for FileManager registration
         const arrayBuffer = await file.arrayBuffer();
 
-        // Create a blob URL for the image
-        const blob = new Blob([arrayBuffer], { type: file.type });
-        const imageURL = URL.createObjectURL(blob);
+        let imageURL;
+        const ext = file.name.split('.').pop().toLowerCase();
+
+        if (ext === 'tif' || ext === 'tiff') {
+            imageURL = await convertTiffBufferToBlobURL(arrayBuffer);
+        } else {
+            const blob = new Blob([arrayBuffer], { type: file.type });
+            imageURL = URL.createObjectURL(blob);
+        }
 
         // Register with FileManager so it persists across saves
         FileManager.list[file.name] = {

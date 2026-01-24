@@ -241,7 +241,7 @@ export class CNode3DLight extends CNode3D {
     // Method to update visibility based on control variables and strobe state
     updateVisibility() {
         // Billboard visibility is controlled by lightVisible
-        if (this._object) {
+         if (this._object) {
             this._object.visible = this.lightVisible;
         }
         

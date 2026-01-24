@@ -66,6 +66,17 @@ import {extractFeaturesFromFile, isFeaturesCSV} from "./ParseFeaturesCSV";
 import {createImageFromArrayBuffer} from "./FileUtils";
 import {ModelFiles} from "./nodes/CNode3DObject";
 import {LoadingManager} from "./CLoadingManager";
+import {convertTiffBufferToBlobURL} from "./TIFFUtils";
+
+async function convertTiffBufferToPngImage(buffer) {
+    const blobURL = await convertTiffBufferToBlobURL(buffer);
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = blobURL;
+    });
+}
 
 const trackFileClasses = [
     CTrackFileKML,
@@ -1713,7 +1724,7 @@ export class CFileManager extends CManager {
             }
 
             // is it an image?
-            if (fileExt === "jpg" || fileExt === "jpeg" || fileExt === "png" || fileExt === "gif") {
+            if (fileExt === "jpg" || fileExt === "jpeg" || fileExt === "png" || fileExt === "gif" || fileManagerEntry.dataType === "image") {
                 // it's an image, so we want to make a video that's a single frame
                 if (!NodeMan.exists("video")) {
                     console.warn("No video node found to load video file");
@@ -2041,13 +2052,13 @@ export class CFileManager extends CManager {
                                             } catch (e) {
                                                 console.warn(`GeoTIFF has unsupported projected CRS (EPSG:${projectedType}): ${e.message}`);
                                                 dataType = "image";
-                                                return createImageFromArrayBuffer(buffer, 'image/tiff');
+                                                return convertTiffBufferToPngImage(buffer);
                                             }
                                         } else {
                                             console.warn(`GeoTIFF has unknown CRS (Geographic: ${geographicType}). ` +
                                                 `Bounds [${west}, ${south}, ${east}, ${north}] are not valid lat/lon.`);
                                             dataType = "image";
-                                            return createImageFromArrayBuffer(buffer, 'image/tiff');
+                                            return convertTiffBufferToPngImage(buffer);
                                         }
                                     }
                                     
@@ -2064,7 +2075,7 @@ export class CFileManager extends CManager {
                             console.log("GeoTIFF parsing failed, treating as regular image:", e.message);
                         }
                         dataType = "image";
-                        return createImageFromArrayBuffer(buffer, 'image/tiff');
+                        return convertTiffBufferToPngImage(buffer);
                     })();
                     break
                 case "webp":
