@@ -13,7 +13,7 @@ import {quickFetch} from "./quickFetch";
 import {convertTiffBufferToBlobURL} from "./TIFFUtils";
 
 // Image file extensions
-const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tif', 'tiff'];
+const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'];
 
 // The DragDropHandler is more like the local client file handler, with rehosting, and parsing
 class CDragDropHandler {

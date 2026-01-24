@@ -41,6 +41,16 @@ export async function convertTiffBufferToBlobURL(buffer) {
     return URL.createObjectURL(blob);
 }
 
+export async function convertTiffBufferToPngImage(buffer) {
+    const blobURL = await convertTiffBufferToBlobURL(buffer);
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = blobURL;
+    });
+}
+
 export function convertTIFFToElevationArray(image) {
 
     if (!image.isTiled) {

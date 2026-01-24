@@ -58,7 +58,7 @@ import {isConsole, isLocal, isServerless, SITREC_APP, SITREC_DOMAIN, SITREC_SERV
 import {TSParser} from "./TSParser";
 import {showError} from "./showError";
 import {asyncOperationRegistry} from "./AsyncOperationRegistry";
-import {ECEFToLLAVD_Sphere, EUSToECEF} from "./LLA-ECEF-ENU";
+import {ECEFToLLAVD_Sphere, EUSToECEF, EUSToLLA} from "./LLA-ECEF-ENU";
 import {projectedBoundsToWGS84} from "./proj4Loader";
 import {V3} from "./threeUtils";
 import {isAudioOnlyFormat} from "./AudioFormats";
@@ -66,17 +66,7 @@ import {extractFeaturesFromFile, isFeaturesCSV} from "./ParseFeaturesCSV";
 import {createImageFromArrayBuffer} from "./FileUtils";
 import {ModelFiles} from "./nodes/CNode3DObject";
 import {LoadingManager} from "./CLoadingManager";
-import {convertTiffBufferToBlobURL} from "./TIFFUtils";
-
-async function convertTiffBufferToPngImage(buffer) {
-    const blobURL = await convertTiffBufferToBlobURL(buffer);
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = reject;
-        img.src = blobURL;
-    });
-}
+import {convertTiffBufferToPngImage} from "./TIFFUtils";
 
 const trackFileClasses = [
     CTrackFileKML,
@@ -1341,7 +1331,7 @@ export class CFileManager extends CManager {
     parseResult(filename, result, newStaticURL) {
         console.log("parseResult: Parsing " + filename)
         return this.parseAsset(filename, filename, result)
-            .then(parsedResult => {
+            .then(async parsedResult => {
 
 
                 let isMultiple = false;
@@ -1385,7 +1375,7 @@ export class CFileManager extends CManager {
                     const filename = x.filename;
 
                     NodeMan.suspendRecalculate()
-                    this.handleParsedFile(filename, parsedFile);
+                    await this.handleParsedFile(filename, parsedFile);
                     NodeMan.unsuspendRecalculate();
 
                 }
@@ -1409,7 +1399,7 @@ export class CFileManager extends CManager {
      * @param {string} filename - The name of the file
      * @param {*} parsedFile - The parsed file data (type varies by file format)
      */
-    handleParsedFile(filename, parsedFile) {
+    async handleParsedFile(filename, parsedFile) {
         console.log("handleParsedFile: Handling parsed file " + filename)
 
 
@@ -1725,7 +1715,24 @@ export class CFileManager extends CManager {
 
             // is it an image?
             if (fileExt === "jpg" || fileExt === "jpeg" || fileExt === "png" || fileExt === "gif" || fileManagerEntry.dataType === "image") {
-                // it's an image, so we want to make a video that's a single frame
+                const isTiff = fileExt === "tif" || fileExt === "tiff";
+                
+                if (isTiff) {
+                    try {
+                        const choice = await DragDropHandler.showImageChoiceDialog(filename);
+                        if (choice === 'video') {
+                            if (NodeMan.exists("video")) {
+                                NodeMan.get("video").makeImageVideo(filename, parsedFile, true);
+                            }
+                        } else if (choice === 'overlay') {
+                            await this.createGroundOverlayFromImage(filename, parsedFile);
+                        }
+                    } catch (e) {
+                        console.log("Image import cancelled");
+                    }
+                    return;
+                }
+                
                 if (!NodeMan.exists("video")) {
                     console.warn("No video node found to load video file");
                     return;
@@ -1812,6 +1819,40 @@ export class CFileManager extends CManager {
         });
         CustomManager.saveGlobalSettings();
         console.log(`Created ground overlay from GeoTIFF: ${filename} (fileID: ${fileID})`);
+    }
+
+    async createGroundOverlayFromImage(filename, img) {
+        const baseName = filename.replace(/\.[^.]+$/, '');
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        
+        const pngBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        const blobURL = URL.createObjectURL(pngBlob);
+        
+        const lookCamera = NodeMan.get("lookCamera");
+        const pos = lookCamera.p(par.frame);
+        const centerLLA = EUSToLLA(pos);
+        
+        const offset = 0.005;
+        
+        const overlay = Synth3DManager.addOverlay({
+            name: NodeMan.getUniqueID(baseName, 18),
+            north: centerLLA.x + offset,
+            south: centerLLA.x - offset,
+            east: centerLLA.y + offset,
+            west: centerLLA.y - offset,
+            rotation: 0,
+            imageURL: blobURL,
+        });
+        
+        if (overlay) {
+            overlay.setEditMode(true);
+            console.log(`Created ground overlay from image: ${filename}`);
+        }
     }
 
     /**
