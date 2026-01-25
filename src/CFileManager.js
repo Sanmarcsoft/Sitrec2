@@ -288,7 +288,7 @@ export class CFileManager extends CManager {
 
 
             this.userSaves = files.map((file) => {
-                return file[0];
+                return String(file[0]);
             })
 
 
@@ -334,8 +334,10 @@ export class CFileManager extends CManager {
             }).moveAfter("Delete")
                 .tooltip("Load a specific version of the currently selected sitch");
 
+            this.refreshVersions();
+
         }).catch(error => {
-            console.warn("Could not fetch user files from server (non-critical):", error.message);
+            console.error("Could not fetch user files from server (non-critical):", error.message);
         })
 
     }
