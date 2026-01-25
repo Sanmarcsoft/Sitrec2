@@ -55,6 +55,8 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         this.altitude = v.altitude !== undefined ? v.altitude : 0;
         this.lockShape = v.lockShape !== undefined ? v.lockShape : false;
         this.showBorder = v.showBorder !== undefined ? v.showBorder : false;
+        this.freeTransform = v.freeTransform !== undefined ? v.freeTransform : false;
+        this.corners = v.corners || null;
         
         this.originalTexture = null;
         this.flatMesh = null;
@@ -270,6 +272,10 @@ export class CNodeGroundOverlay extends CNode3DGroup {
     }
     
     getCornerPositions() {
+        if (this.freeTransform && this.corners) {
+            return this.corners.map(corner => LLAToEUS(corner.lat, corner.lon, 0));
+        }
+        
         const centerLat = (this.north + this.south) / 2;
         const centerLon = (this.east + this.west) / 2;
         const centerEUS = LLAToEUS(centerLat, centerLon, 0);
@@ -285,7 +291,6 @@ export class CNodeGroundOverlay extends CNode3DGroup {
             let pos = LLAToEUS(corner.lat, corner.lon, 0);
 
             if (this.rotation !== 0) {
-                // Rotate in EUS space around local up vector
                 const offset = pos.clone().sub(centerEUS);
                 const up = getLocalUpVector(centerEUS);
                 const rotationRad = radians(this.rotation);
@@ -295,6 +300,39 @@ export class CNodeGroundOverlay extends CNode3DGroup {
 
             return pos;
         });
+    }
+    
+    getCornerLLAs() {
+        if (this.freeTransform && this.corners) {
+            return this.corners.map(c => ({lat: c.lat, lon: c.lon}));
+        }
+        
+        const centerLat = (this.north + this.south) / 2;
+        const centerLon = (this.east + this.west) / 2;
+
+        const corners = [
+            {lat: this.north, lon: this.west},
+            {lat: this.north, lon: this.east},
+            {lat: this.south, lon: this.east},
+            {lat: this.south, lon: this.west}
+        ];
+
+        if (this.rotation !== 0) {
+            const centerEUS = LLAToEUS(centerLat, centerLon, 0);
+            const up = getLocalUpVector(centerEUS);
+            const rotationRad = radians(this.rotation);
+            
+            return corners.map(corner => {
+                const pos = LLAToEUS(corner.lat, corner.lon, 0);
+                const offset = pos.clone().sub(centerEUS);
+                const rotatedOffset = offset.clone().applyAxisAngle(up, rotationRad);
+                const rotatedPos = centerEUS.clone().add(rotatedOffset);
+                const lla = EUSToLLA(rotatedPos);
+                return {lat: lla.x, lon: lla.y};
+            });
+        }
+        
+        return corners;
     }
     
     disposeTileMeshes() {
@@ -333,6 +371,10 @@ export class CNodeGroundOverlay extends CNode3DGroup {
     }
     
     latLonToUV(lat, lon) {
+        if (this.freeTransform && this.corners) {
+            return this.inverseHomography(lat, lon, this.corners);
+        }
+        
         const centerLat = (this.north + this.south) / 2;
         const centerLon = (this.east + this.west) / 2;
 
@@ -340,7 +382,6 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         let relLon = lon - centerLon;
 
         if (this.rotation !== 0) {
-            // Rotate in EUS space around local up vector, then convert back to lat/lon
             const centerEUS = LLAToEUS(centerLat, centerLon, 0);
             const pos = LLAToEUS(lat, lon, 0);
             const offset = pos.clone().sub(centerEUS);
@@ -364,6 +405,101 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         return {u, v};
     }
     
+    // Compute homography matrix that maps unit square UV to quad corners
+    // Returns the inverse homography (maps quad to UV)
+    computeInverseHomography(corners) {
+        // Source points (UV space): unit square
+        // (0,0), (1,0), (1,1), (0,1)
+
+        // Destination points (lat/lon space): corners
+        // corners[0]=NW, corners[1]=NE, corners[2]=SE, corners[3]=SW
+        const x0 = corners[0].lon, y0 = corners[0].lat;
+        const x1 = corners[1].lon, y1 = corners[1].lat;
+        const x2 = corners[2].lon, y2 = corners[2].lat;
+        const x3 = corners[3].lon, y3 = corners[3].lat;
+
+        // Compute the forward homography H that maps UV to lat/lon
+        // Using the standard 4-point homography computation
+        const dx1 = x1 - x2, dy1 = y1 - y2;
+        const dx2 = x3 - x2, dy2 = y3 - y2;
+        const sx = x0 - x1 + x2 - x3;
+        const sy = y0 - y1 + y2 - y3;
+
+        const denom = dx1 * dy2 - dx2 * dy1;
+        if (Math.abs(denom) < 1e-10) {
+            // Degenerate case - fall back to affine
+            return null;
+        }
+
+        const g = (sx * dy2 - sy * dx2) / denom;
+        const h = (dx1 * sy - dy1 * sx) / denom;
+
+        const a = x1 - x0 + g * x1;
+        const b = x3 - x0 + h * x3;
+        const c = x0;
+        const d = y1 - y0 + g * y1;
+        const e = y3 - y0 + h * y3;
+        const f = y0;
+        // g and h already computed, i = 1
+
+        // Forward homography H maps (u,v) to (x,y):
+        // x = (a*u + b*v + c) / (g*u + h*v + 1)
+        // y = (d*u + e*v + f) / (g*u + h*v + 1)
+
+        // Compute inverse homography H^-1
+        // H = [a b c; d e f; g h 1]
+        // H^-1 = adjugate(H) / det(H)
+
+        const det = a * (e - f * h) - b * (d - f * g) + c * (d * h - e * g);
+        if (Math.abs(det) < 1e-15) {
+            return null;
+        }
+
+        // Adjugate matrix elements (for inverse)
+        const ai = (e - f * h) / det;
+        const bi = (c * h - b) / det;
+        const ci = (b * f - c * e) / det;
+        const di = (f * g - d) / det;
+        const ei = (a - c * g) / det;
+        const fi = (c * d - a * f) / det;
+        const gi = (d * h - e * g) / det;
+        const hi = (b * g - a * h) / det;
+        const ii = (a * e - b * d) / det;
+
+        return {ai, bi, ci, di, ei, fi, gi, hi, ii};
+    }
+
+    inverseHomography(lat, lon, corners) {
+        // Use cached homography if available, otherwise compute it
+        if (!this._cachedHomography || this._cachedHomographyCorners !== corners) {
+            this._cachedHomography = this.computeInverseHomography(corners);
+            this._cachedHomographyCorners = corners;
+        }
+
+        const H = this._cachedHomography;
+        if (!H) {
+            // Fallback to simple linear interpolation for degenerate cases
+            return {u: 0.5, v: 0.5};
+        }
+
+        // Apply inverse homography: (x,y) -> (u,v)
+        // u' = ai*x + bi*y + ci
+        // v' = di*x + ei*y + fi
+        // w' = gi*x + hi*y + ii
+        // u = u'/w', v = v'/w'
+
+        const x = lon, y = lat;
+        const up = H.ai * x + H.bi * y + H.ci;
+        const vp = H.di * x + H.ei * y + H.fi;
+        const wp = H.gi * x + H.hi * y + H.ii;
+
+        if (Math.abs(wp) < 1e-10) {
+            return {u: -999, v: -999};
+        }
+
+        return {u: up / wp, v: vp / wp};
+    }
+    
     updateGroupPosition() {
         const centerLat = (this.north + this.south) / 2;
         const centerLon = (this.east + this.west) / 2;
@@ -375,59 +511,59 @@ export class CNodeGroundOverlay extends CNode3DGroup {
     buildMesh() {
         this.disposeTileMeshes();
         this.disposeFlatMesh();
-        
+
         if (this.altitude > 0) {
             this.buildFlatMesh();
             setRenderOne(true);
             return;
         }
-        
+
         if (!NodeMan.exists("TerrainModel")) {
             return;
         }
-        
+
         const terrainNode = NodeMan.get("TerrainModel");
         if (!terrainNode.maps || !terrainNode.UI) {
             return;
         }
-        
+
         const terrainMap = terrainNode.maps[terrainNode.UI.mapType]?.map;
         if (!terrainMap) {
             return;
         }
-        
+
         const mapProjection = terrainMap.options?.mapProjection;
         if (!mapProjection) {
             return;
         }
-        
+
         this.updateGroupPosition();
-        
+
         terrainMap.forEachTile((tile) => {
             if (!tile.mesh || !tile.mesh.geometry || !tile.loaded) {
                 return;
             }
-            
+
             const layerMask = tile.mesh.layers.mask;
             if (layerMask === 0) {
                 return;
             }
-            
+
             const tileNorth = mapProjection.getNorthLatitude(tile.y, tile.z);
             const tileSouth = mapProjection.getNorthLatitude(tile.y + 1, tile.z);
             const tileWest = mapProjection.getLeftLongitude(tile.x, tile.z);
             const tileEast = mapProjection.getLeftLongitude(tile.x + 1, tile.z);
-            
+
             if (!this.tilesOverlap(tileNorth, tileSouth, tileEast, tileWest)) {
                 return;
             }
-            
+
             this.createOverlayTileFromTerrainTile(tile, mapProjection, layerMask);
         });
-        
+
         setRenderOne(true);
     }
-    
+
     disposeFlatMesh() {
         if (this.flatMesh) {
             this.group.remove(this.flatMesh);
@@ -449,21 +585,34 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         const uvs = [];
         const indices = [];
         
+        const cornerLLAs = this.getCornerLLAs();
+        
         for (let j = 0; j <= segments; j++) {
             for (let i = 0; i <= segments; i++) {
                 const u = i / segments;
                 const v = j / segments;
                 
-                let lat = this.south + (this.north - this.south) * (1 - v);
-                let lon = this.west + (this.east - this.west) * u;
-                
-                if (this.rotation !== 0) {
-                    const relLat = lat - centerLat;
-                    const relLon = lon - centerLon;
-                    const cos = Math.cos(radians(this.rotation));
-                    const sin = Math.sin(radians(this.rotation));
-                    lat = centerLat + relLat * cos - relLon * sin;
-                    lon = centerLon + relLat * sin + relLon * cos;
+                let lat, lon;
+                if (this.freeTransform && this.corners) {
+                    const lat0 = cornerLLAs[0].lat * (1 - u) + cornerLLAs[1].lat * u;
+                    const lat1 = cornerLLAs[3].lat * (1 - u) + cornerLLAs[2].lat * u;
+                    lat = lat0 * (1 - v) + lat1 * v;
+                    
+                    const lon0 = cornerLLAs[0].lon * (1 - u) + cornerLLAs[1].lon * u;
+                    const lon1 = cornerLLAs[3].lon * (1 - u) + cornerLLAs[2].lon * u;
+                    lon = lon0 * (1 - v) + lon1 * v;
+                } else {
+                    lat = this.south + (this.north - this.south) * (1 - v);
+                    lon = this.west + (this.east - this.west) * u;
+                    
+                    if (this.rotation !== 0) {
+                        const relLat = lat - centerLat;
+                        const relLon = lon - centerLon;
+                        const cos = Math.cos(radians(this.rotation));
+                        const sin = Math.sin(radians(this.rotation));
+                        lat = centerLat + relLat * cos - relLon * sin;
+                        lon = centerLon + relLat * sin + relLon * cos;
+                    }
                 }
                 
                 const pos = LLAToEUS(lat, lon, altitudeMeters);
@@ -644,6 +793,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
     }
     
     updateMesh() {
+        this._cachedHomography = null; // Invalidate homography cache
         this.buildMesh();
         if (this.editMode && !this.lockShape) {
             this.createControlPoints();
@@ -683,31 +833,31 @@ export class CNodeGroundOverlay extends CNode3DGroup {
             this.cornerHandles.push(handle);
         });
 
-        // Position rotation handle 90% towards the north edge
         const centerLat = (this.north + this.south) / 2;
         const centerLon = (this.east + this.west) / 2;
         const centerEUS = LLAToEUS(centerLat, centerLon, 0);
 
-        const northMidEUS = LLAToEUS(this.north, centerLon, 0);
-        let rotHandleEUS = northMidEUS.clone();
-        if (this.rotation !== 0) {
-            const offset = northMidEUS.clone().sub(centerEUS);
-            const up = getLocalUpVector(centerEUS);
-            const rotatedOffset = offset.clone().applyAxisAngle(up, radians(this.rotation));
-            rotHandleEUS = centerEUS.clone().add(rotatedOffset);
+        if (!this.freeTransform) {
+            const northMidEUS = LLAToEUS(this.north, centerLon, 0);
+            let rotHandleEUS = northMidEUS.clone();
+            if (this.rotation !== 0) {
+                const offset = northMidEUS.clone().sub(centerEUS);
+                const up = getLocalUpVector(centerEUS);
+                const rotatedOffset = offset.clone().applyAxisAngle(up, radians(this.rotation));
+                rotHandleEUS = centerEUS.clone().add(rotatedOffset);
+            }
+
+            const toNorthMid = rotHandleEUS.clone().sub(centerEUS);
+            const rotHandlePos = centerEUS.clone().add(toNorthMid.multiplyScalar(0.9));
+            const adjustedRotHandle = pointAbove(getPointBelow(rotHandlePos), 5);
+
+            this.rotationHandle = new Mesh(handleGeometry.clone(), this.createHandleMaterial(0x00ffff));
+            this.rotationHandle.position.copy(adjustedRotHandle).sub(groupPos);
+            this.rotationHandle.layers.mask = LAYER.MASK_HELPERS;
+            this.rotationHandle.userData.handleType = 'rotation';
+            this.group.add(this.rotationHandle);
         }
 
-        const toNorthMid = rotHandleEUS.clone().sub(centerEUS);
-        const rotHandlePos = centerEUS.clone().add(toNorthMid.multiplyScalar(0.9));
-        const adjustedRotHandle = pointAbove(getPointBelow(rotHandlePos), 5);
-
-        this.rotationHandle = new Mesh(handleGeometry.clone(), this.createHandleMaterial(0x00ffff));
-        this.rotationHandle.position.copy(adjustedRotHandle).sub(groupPos);
-        this.rotationHandle.layers.mask = LAYER.MASK_HELPERS;
-        this.rotationHandle.userData.handleType = 'rotation';
-        this.group.add(this.rotationHandle);
-
-        // Green move handle at center
         const adjustedCenter = pointAbove(getPointBelow(centerEUS), 5);
 
         this.moveHandle = new Mesh(handleGeometry.clone(), this.createHandleMaterial(0x00ff00));
@@ -1018,7 +1168,13 @@ export class CNodeGroundOverlay extends CNode3DGroup {
     }
     
     updateCorner(cornerIndex, lat, lon) {
-        // Get current corner positions in world space (rotated)
+        if (this.freeTransform && this.corners) {
+            this.corners[cornerIndex] = {lat, lon};
+            this._cachedHomography = null; // Invalidate homography cache
+            this.updateBoundsFromCorners();
+            return;
+        }
+        
         const corners = this.getCornerPositions();
 
         // Corner indices: 0=NW, 1=NE, 2=SE, 3=SW
@@ -1100,6 +1256,16 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         const lats = llas.map(lla => lla.x);
         const lons = llas.map(lla => lla.y);
 
+        this.north = Math.max(...lats);
+        this.south = Math.min(...lats);
+        this.east = Math.max(...lons);
+        this.west = Math.min(...lons);
+    }
+    
+    updateBoundsFromCorners() {
+        if (!this.corners) return;
+        const lats = this.corners.map(c => c.lat);
+        const lons = this.corners.map(c => c.lon);
         this.north = Math.max(...lats);
         this.south = Math.min(...lats);
         this.east = Math.max(...lons);
@@ -1190,6 +1356,16 @@ export class CNodeGroundOverlay extends CNode3DGroup {
                 }
                 setRenderOne(true);
             }
+        }).onFinishChange(() => { CustomManager.saveGlobalSettings(true); });
+        
+        this.guiFolder.add(this, 'freeTransform').name('Free Transform').onChange(() => {
+            if (this.freeTransform) {
+                this.corners = this.getCornerLLAs();
+                this.rotation = 0;
+            } else {
+                this.corners = null;
+            }
+            this.updateMesh();
         }).onFinishChange(() => { CustomManager.saveGlobalSettings(true); });
         
         this.guiFolder.add(this, 'showBorder').name('Show Border').onChange(() => {
@@ -1358,6 +1534,8 @@ export class CNodeGroundOverlay extends CNode3DGroup {
             east: this.east,
             west: this.west,
             rotation: this.rotation,
+            freeTransform: this.freeTransform,
+            corners: this.corners ? this.corners.map(c => ({lat: c.lat, lon: c.lon})) : null,
         };
     }
     
@@ -1367,6 +1545,8 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         this.east = state.east;
         this.west = state.west;
         this.rotation = state.rotation;
+        this.freeTransform = state.freeTransform || false;
+        this.corners = state.corners ? state.corners.map(c => ({lat: c.lat, lon: c.lon})) : null;
         this.updateMesh();
         this.updateGUIControllers();
         setRenderOne(true);
@@ -1399,6 +1579,8 @@ export class CNodeGroundOverlay extends CNode3DGroup {
             altitude: this.altitude,
             lockShape: this.lockShape,
             showBorder: this.showBorder,
+            freeTransform: this.freeTransform,
+            corners: this.corners,
         };
     }
 
@@ -1421,6 +1603,8 @@ export class CNodeGroundOverlay extends CNode3DGroup {
             cloudFuzziness: data.cloudFuzziness,
             cloudFeather: data.cloudFeather,
             lockShape: data.lockShape,
+            freeTransform: data.freeTransform,
+            corners: data.corners,
         });
     }
     
