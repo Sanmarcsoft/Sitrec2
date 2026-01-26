@@ -370,7 +370,7 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
             return;
         }
 
-        const minDistNM = 0.01;
+        const minDistNM = 0.00;
         const maxDistNM = 200;
 
         const calcTraverseDistance = (distNM) => {
@@ -398,7 +398,7 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
         let a = minDistNM, b = maxDistNM;
         let c = b - (b - a) / phi;
         let d = a + (b - a) / phi;
-        const tol = 0.00001;
+        const tol = 0.0000001;
 
         while (Math.abs(b - a) > tol) {
             if (calcTraverseDistance(c) < calcTraverseDistance(d)) {

@@ -767,6 +767,9 @@ class NumberController extends Controller {
 
     // value represened by the slider at 0%
     min( min ) {
+        if (this._originalMin === undefined) {
+            this._originalMin = min;
+        }
         this._min = min;
         this._onUpdateMinMax();
         return this;
@@ -774,6 +777,9 @@ class NumberController extends Controller {
 
     // value represented by the slider at 100%
     max( max ) {
+        if (this._originalMax === undefined) {
+            this._originalMax = max;
+        }
         this._max = max;
         this._onUpdateMinMax();
         return this;
@@ -896,6 +902,13 @@ class NumberController extends Controller {
             let value = parseFloat( this.$input.value );
 
             if ( isNaN( value ) ) return;
+
+            // MICK: For log sliders, the typed value is the displayed (exponential) value
+            // Convert it to log10 for the underlying stored value
+            if ( this._isLog ) {
+                value = Math.max( value, 1e-10 ); // Prevent log of zero/negative
+                value = Math.log10( value );
+            }
 
             // now never snap on text input, it's too confusing
             // if the user enterd a number, they want that number
@@ -1167,6 +1180,7 @@ class NumberController extends Controller {
         // ---------------------------------------------------------------------
 
         const mouseDown = e => {
+            if (e.button === 2) return;
             this._setDraggingStyle( true );
             // MICK: added minClick and maxClick to support elastic sliders
             this._minClick = this._min;
@@ -1433,7 +1447,9 @@ class NumberController extends Controller {
     }
 
     _snapClampSetValue( value ) {
-        this.setValue( this._clamp( this._snap( value ) ) );
+        const snapped = this._snap( value );
+        const clamped = this._clamp( snapped );
+        this.setValue(clamped)
     }
 
     get _hasScrollBar() {

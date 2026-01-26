@@ -635,9 +635,9 @@ export function CreateTraverseNodes(idExtra="", los = "JetLOS") {
             desc: "Tgt Start Dist",
             color: "#FFC0C0",
             unitType: "big",
-            elastic: true,
-            elasticMin: 1,
-            elasticMax: 10000,
+            // elastic: true,
+            // elasticMin: 1,
+            // elasticMax: 10000,
             tooltip: "Start distance of the traverse object along the first LOS",
         }, guiMenus.traverse)
 

@@ -29,7 +29,7 @@ sitch = {
 
     startDistance: 1,
     startDistanceMin: 0.01,
-    startDistanceMax: 1,  // this will be elastic, so not an issue
+    startDistanceMax: 300,  // this will be elastic, so not an issue
 
     startTime: "2022-09-19T20:50:26.970Z",
     // default terrain covers some of the local area

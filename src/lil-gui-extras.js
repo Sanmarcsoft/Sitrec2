@@ -1,5 +1,5 @@
 // Helper functions for lil-gui
-import GUI, {Controller} from "./js/lil-gui.esm";
+import GUI, {Controller, NumberController} from "./js/lil-gui.esm";
 //import {updateSize} from "./JetStuff";
 import {Globals, setMouseOverGUI, Units} from "./Globals";
 import {Color} from "three";
@@ -949,8 +949,8 @@ export class CGuiMenuBar {
         allContainers.forEach((container) => {
             const gui = container._gui;
             if (gui && gui._standaloneContainer && this.isMenuOffScreen(container)) {
-                // Standalone menu is off-screen, close it
-                gui.close();
+                // Standalone menu is off-screen, destroy it (same as dragging off-screen)
+                gui.destroy();
             }
         });
     }
@@ -1177,6 +1177,12 @@ export class CGuiMenuBar {
     }
 
     restoreToBar(newGUI) {
+        // Close any slider settings menu associated with this menu
+        if (this.activePersistentMenu && this.activePersistentMenu._parentGUI === newGUI) {
+            this.activePersistentMenu.destroy();
+            this.activePersistentMenu = null;
+        }
+
         // and the div
         const newDiv = this.divs.find((div) => div === newGUI.domElement.parentElement);
         // restore position
@@ -1645,12 +1651,27 @@ export class CGuiMenuBar {
                 mouseX = event.clientX;
                 mouseY = event.clientY;
 
+                // Check if menu is >80% off-screen during drag - close it
+                if (this.isMenuOffScreen(containerDiv)) {
+                    document.removeEventListener("mousemove", boundHandleMouseMove);
+                    document.removeEventListener("mouseup", boundHandleMouseUp);
+                    gui.destroy();
+                    return;
+                }
+
                 event.preventDefault();
             };
 
             const boundHandleMouseUp = (event) => {
                 document.removeEventListener("mousemove", boundHandleMouseMove);
                 document.removeEventListener("mouseup", boundHandleMouseUp);
+
+                // Check if menu ended up >80% off-screen - close it
+                if (this.isMenuOffScreen(containerDiv)) {
+                    gui.destroy();
+                    event.preventDefault();
+                    return;
+                }
 
                 gui.mode = "DETACHED";
                 this.applyModeStyles(gui);
@@ -1809,6 +1830,214 @@ export class CGuiMenuBar {
 }
 
 const textWidths = {};
+
+function openSliderSettingsMenu(controller, event) {
+    if (!Globals.menuBar) return;
+
+    // For log sliders, convert from log space back to real space for display/editing
+    const isLogSlider = controller._isLog;
+    // Current min/max (what the slider is currently set to)
+    const currentMin = isLogSlider ? Math.pow(10, controller._min) : controller._min;
+    const currentMax = isLogSlider ? Math.pow(10, controller._max) : controller._max;
+    const currentStep = controller._step;
+    // Original min/max (never changes, used for slider range)
+    const originalMin = isLogSlider ? Math.pow(10, controller._originalMin) : controller._originalMin;
+    const originalMax = isLogSlider ? Math.pow(10, controller._originalMax) : controller._originalMax;
+    const originalStep = controller._step;
+
+    // Highlight the controller being edited
+    const originalBackground = controller.domElement.style.backgroundColor;
+    controller.domElement.style.backgroundColor = 'yellow';
+
+    const restoreBackground = () => {
+        controller.domElement.style.backgroundColor = originalBackground;
+    };
+
+    // Calculate position: prefer right side of parent menu, fallback to left
+    const controllerRect = controller.domElement.getBoundingClientRect();
+    const parentRect = controller.parent.root.domElement.getBoundingClientRect();
+    const menuWidth = 240; // Default lil-gui width
+    const menuHeight = 180; // Approximate height for slider settings menu
+    const padding = 5;
+
+    let x, y;
+    
+    // Try right side first
+    if (parentRect.right + padding + menuWidth <= window.innerWidth) {
+        x = parentRect.right + padding;
+    } else {
+        // Fall back to left side
+        x = parentRect.left - menuWidth - padding;
+    }
+    
+    // Vertically align with the slider
+    y = controllerRect.top;
+    
+    // Adjust if it goes off the bottom
+    if (y + menuHeight > window.innerHeight) {
+        y = window.innerHeight - menuHeight - padding;
+    }
+    
+    // Ensure it doesn't go above the top
+    if (y < 0) {
+        y = padding;
+    }
+
+    const menu = Globals.menuBar.createStandaloneMenu(
+        controller._name,
+        x,
+        y,
+        false
+    );
+
+    if (!menu) {
+        restoreBackground();
+        return;
+    }
+
+    // Store reference to parent GUI so we can close this when the parent is closed/redocked
+    menu._parentGUI = controller.parent.root;
+
+    // Wrap destroy to ensure background is restored regardless of how menu is closed
+    const originalDestroy = menu.destroy.bind(menu);
+    menu.destroy = () => {
+        restoreBackground();
+        originalDestroy();
+    };
+
+    const settings = {
+        min: currentMin,
+        max: currentMax,
+        stepExp: Math.log10(currentStep),
+        reset: () => {
+            settings.min = originalMin;
+            settings.max = originalMax;
+            settings.stepExp = Math.log10(originalStep);
+            controller.min(isLogSlider ? Math.log10(originalMin) : originalMin);
+            controller.max(isLogSlider ? Math.log10(originalMax) : originalMax);
+            controller.step(originalStep);
+            controller.updateDisplay();
+            minController.updateDisplay();
+            maxController.updateDisplay();
+            stepController.updateDisplay();
+        },
+        done: () => {
+            menu.destroy();
+        }
+    };
+
+    const LOG_ZERO_THRESHOLD = 1e-4;
+    const sliderRangeMax = Math.max(originalMax, currentMax);
+    
+    const minController = menu.add(settings, 'min', LOG_ZERO_THRESHOLD, sliderRangeMax, 0.0001)
+        .name('Min')
+        .isLog(true)
+        .displayZeroThreshold(LOG_ZERO_THRESHOLD)
+        .onChange(v => {
+        const actualValue = v <= LOG_ZERO_THRESHOLD ? 0 : v;
+        controller.min(isLogSlider ? (actualValue === 0 ? -Infinity : Math.log10(actualValue)) : actualValue);
+        controller.updateDisplay();
+    });
+
+    const maxController = menu.add(settings, 'max', LOG_ZERO_THRESHOLD, sliderRangeMax, 0.0001)
+        .name('Max')
+        .isLog(true)
+        .displayZeroThreshold(LOG_ZERO_THRESHOLD)
+        .onChange(v => {
+        const actualValue = v <= LOG_ZERO_THRESHOLD ? 0 : v;
+        controller.max(isLogSlider ? (actualValue === 0 ? -Infinity : Math.log10(actualValue)) : actualValue);
+        controller.updateDisplay();
+    });
+
+    const stepController = menu.add(settings, 'stepExp', -5, 2, 1)
+        .name('Step')
+        .isLog()
+        .onChange(v => {
+        controller.step(v);
+    });
+
+    menu.add(settings, 'reset').name('Reset');
+    menu.add(settings, 'done').name('Done').setDoubleClickAction();
+}
+
+NumberController.prototype.isLog = function(convertRange = false) {
+    this._isLog = true;
+    if (convertRange) {
+        const safeMin = Math.max(this._min, 1e-10);
+        const safeMax = Math.max(this._max, 1e-10);
+        const safeValue = Math.max(this.object[this.property], 1e-10);
+        this._min = Math.log10(safeMin);
+        this._max = Math.log10(safeMax);
+        this.object[this.property] = Math.log10(safeValue);
+    }
+    this.updateDisplay();
+    return this;
+};
+
+NumberController.prototype.getLogValue = function() {
+    const linearValue = this.object[this.property];
+    return this._isLog ? Math.pow(10, linearValue) : linearValue;
+};
+
+const originalGetValue = NumberController.prototype.getValue;
+NumberController.prototype.getValue = function() {
+    if (this._isLog) {
+        return this.getLogValue();
+    }
+    return originalGetValue.call(this);
+};
+
+NumberController.prototype.displayZeroThreshold = function(threshold) {
+    this._displayZeroThreshold = threshold;
+    return this;
+};
+
+const originalUpdateDisplay = NumberController.prototype.updateDisplay;
+NumberController.prototype.updateDisplay = function() {
+    if (this._isLog) {
+        const linearValue = this.object[this.property];
+        
+        if (this.$fill) {
+            let percent = (linearValue - this._min) / (this._max - this._min);
+            percent = Math.max(0, Math.min(percent, 1));
+            this.$fill.style.width = percent * 100 + '%';
+        }
+        
+        if (!this._inputFocused) {
+            const logValue = Math.pow(10, linearValue);
+            if (this._displayZeroThreshold !== undefined && logValue <= this._displayZeroThreshold) {
+                this.$input.value = '0';
+            } else {
+                this.$input.value = this._decimals === undefined ? logValue : logValue.toFixed(this._decimals);
+            }
+        }
+        
+        return this;
+    }
+    return originalUpdateDisplay.call(this);
+};
+
+const originalInitSlider = NumberController.prototype._initSlider;
+NumberController.prototype._initSlider = function() {
+    originalInitSlider.call(this);
+
+    const handleRightClick = (e) => {
+        if (e.button === 2) {
+            e.preventDefault();
+            e.stopPropagation();
+            // Don't open slider settings for sliders inside a standalone menu (like the slider settings menu itself)
+            if (this.parent.root._standaloneContainer) return;
+            openSliderSettingsMenu(this, e);
+        }
+    };
+
+    if (this.$slider) {
+        this.$slider.addEventListener('mousedown', handleRightClick);
+    }
+    
+    // Also allow right-click on the name/label
+    this.$name.addEventListener('mousedown', handleRightClick);
+};
 
 // text width helper function
 // assumes the default lil-gui font
