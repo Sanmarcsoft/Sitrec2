@@ -716,6 +716,7 @@ export class CGuiMenuBar {
         this.menuBar.style.height = "100%";
         this.menuBar.style.width = "100%"; // Added this to ensure full width
         this.menuBar.style.overflowY = "auto"; // Allow scrolling if content overflows
+        this.menuBar.style.overflowX = "hidden"; // Prevent horizontal scrollbar when dragging menus
 
         this._hidden = false;
 
