@@ -2088,6 +2088,8 @@ export function setupHelpSearch(helpMenu) {
     let currentHighlight = null;
     let highlightTimeout = null;
     let hoverOpenedMenu = null;
+    let selectedIndex = -1;
+    let currentMatches = [];
 
     function clearHighlight() {
         if (currentHighlight) {
@@ -2179,17 +2181,75 @@ export function setupHelpSearch(helpMenu) {
         }
     }
 
+    function clearResultSelection() {
+        const results = resultsContainer.children;
+        for (let i = 0; i < results.length; i++) {
+            results[i].style.backgroundColor = '';
+        }
+        clearHighlight();
+        if (hoverOpenedMenu && hoverOpenedMenu.mode === "DOCKED") {
+            hoverOpenedMenu.close();
+        }
+        hoverOpenedMenu = null;
+    }
+
+    function selectResult(index) {
+        if (currentMatches.length === 0) return;
+        
+        clearResultSelection();
+        
+        if (index < 0) index = currentMatches.length - 1;
+        if (index >= currentMatches.length) index = 0;
+        selectedIndex = index;
+        
+        const match = currentMatches[index];
+        const resultDiv = resultsContainer.children[index];
+        if (resultDiv) {
+            resultDiv.style.backgroundColor = '#444';
+            resultDiv.scrollIntoView({ block: 'nearest' });
+        }
+        
+        if (match.rootMenu !== helpMenu) {
+            openMenuChain(match.gui, true);
+            hoverOpenedMenu = match.rootMenu;
+            highlightController(match.controller);
+        }
+    }
+
+    function activateResult(index) {
+        if (index < 0 || index >= currentMatches.length) return;
+        
+        const match = currentMatches[index];
+        helpMenu.close();
+        
+        if (hoverOpenedMenu && hoverOpenedMenu.mode === "DOCKED") {
+            hoverOpenedMenu.close();
+        }
+        
+        openMenuChain(match.gui);
+        highlightController(match.controller, 5000);
+        
+        searchInput.value = '';
+        resultsContainer.innerHTML = '';
+        currentMatches = [];
+        selectedIndex = -1;
+        hoverOpenedMenu = null;
+    }
+
     function performSearch(query) {
         resultsContainer.innerHTML = '';
+        selectedIndex = -1;
+        currentMatches = [];
+        
         if (!query || query.length < 1) return;
 
         const items = collectMenuItems();
         const lowerQuery = query.toLowerCase();
-        const matches = items.filter(item => {
+        currentMatches = items.filter(item => {
             return item.name.toLowerCase().includes(lowerQuery);
-        });
+        }).slice(0, 20);
 
-        for (const match of matches.slice(0, 20)) {
+        for (const match of currentMatches) {
             const resultDiv = document.createElement('div');
             resultDiv.style.cssText = 'padding: 4px 8px; cursor: pointer; border-bottom: 1px solid #333; font-size: 11px;';
             resultDiv.innerHTML = `<span style="color: #888;">${match.path.join(' > ')}</span> > <span style="color: #fff;">${match.name}</span>`;
@@ -2198,20 +2258,10 @@ export function setupHelpSearch(helpMenu) {
                 resultDiv.title = tooltip;
             }
 
+            const matchIndex = currentMatches.indexOf(match);
+            
             resultDiv.addEventListener('mouseenter', () => {
-                resultDiv.style.backgroundColor = '#444';
-
-                if (hoverOpenedMenu && hoverOpenedMenu !== match.rootMenu) {
-                    if (hoverOpenedMenu.mode === "DOCKED") {
-                        hoverOpenedMenu.close();
-                    }
-                }
-
-                if (match.rootMenu !== helpMenu) {
-                    openMenuChain(match.gui, true);
-                    hoverOpenedMenu = match.rootMenu;
-                    highlightController(match.controller);
-                }
+                selectResult(matchIndex);
             });
 
             resultDiv.addEventListener('mouseleave', () => {
@@ -2220,18 +2270,7 @@ export function setupHelpSearch(helpMenu) {
             });
 
             resultDiv.addEventListener('click', () => {
-                helpMenu.close();
-
-                if (hoverOpenedMenu && hoverOpenedMenu.mode === "DOCKED") {
-                    hoverOpenedMenu.close();
-                }
-
-                openMenuChain(match.gui);
-                highlightController(match.controller, 5000);
-
-                searchInput.value = '';
-                resultsContainer.innerHTML = '';
-                hoverOpenedMenu = null;
+                activateResult(matchIndex);
             });
 
             resultsContainer.appendChild(resultDiv);
@@ -2244,6 +2283,20 @@ export function setupHelpSearch(helpMenu) {
 
     searchInput.addEventListener('keydown', (e) => {
         e.stopPropagation();
+        
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            selectResult(selectedIndex + 1);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            selectResult(selectedIndex - 1);
+        } else if (e.key === 'Enter' && selectedIndex >= 0) {
+            e.preventDefault();
+            activateResult(selectedIndex);
+        } else if (e.key === 'Escape') {
+            clearResultSelection();
+            selectedIndex = -1;
+        }
     });
 
     resultsContainer.addEventListener('mouseleave', () => {
@@ -2264,6 +2317,8 @@ export function setupHelpSearch(helpMenu) {
                 hoverOpenedMenu.close();
             }
             hoverOpenedMenu = null;
+            selectedIndex = -1;
+            currentMatches = [];
         }
     });
 }
