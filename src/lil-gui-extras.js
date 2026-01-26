@@ -1207,8 +1207,11 @@ export class CGuiMenuBar {
         newDiv.style.left = newGUI.originalLeft + "px";
         newDiv.style.top = newGUI.originalTop + "px";
         newDiv.style.width = '';
+        newDiv.style.height = '1px';
         newDiv.style.zIndex = this.baseZIndex;
 
+        newGUI.domElement.style.position = '';
+        newGUI.domElement.style.width = '';
         newGUI.$children.style.zIndex = '';
         newGUI.$children.style.position = '';
         newGUI.lockOpenClose = false;
@@ -1329,40 +1332,66 @@ export class CGuiMenuBar {
 
         const wasInLeftSidebar = isInLeftSidebar(newGUI);
         const wasInRightSidebar = isInRightSidebar(newGUI);
+        let hasUndockedFromSidebar = false;
+        
+        const titleRect = newGUI.$title.getBoundingClientRect();
+        const clickOffsetX = event.clientX - titleRect.left;
+        const clickOffsetY = event.clientY - titleRect.top;
 
-        if (wasInLeftSidebar || wasInRightSidebar) {
-            this.menuBar.appendChild(newDiv);
-            newDiv.style.position = 'absolute';
-            newDiv.style.left = event.clientX + 'px';
-            newDiv.style.top = event.clientY + 'px';
-            newDiv.style.width = '';
-            
-            if (wasInLeftSidebar) {
-                removeMenuFromLeftSidebar(newGUI);
-            } else {
-                removeMenuFromRightSidebar(newGUI);
+        if (!(wasInLeftSidebar || wasInRightSidebar)) {
+            newGUI.mode = "DRAGGING"
+            this.applyModeStyles(newGUI)
+
+            if (newGUI._closed) {
+                newGUI.lockOpenClose = false;
+                newGUI.open();
             }
-            hasDragged = true;
+            newGUI.lockOpenClose = true;
         }
-
-        newGUI.mode = "DRAGGING"
-        this.applyModeStyles(newGUI)
-
-        if (newGUI._closed) {
-            newGUI.lockOpenClose = false;
-            newGUI.open();
-        }
-        newGUI.lockOpenClose = true;
 
         const boundHandlePointerMove = (event) => {
-            newDiv.style.left = (parseInt(newDiv.style.left) + event.clientX - mouseX) + "px";
-            newDiv.style.top = (parseInt(newDiv.style.top) + event.clientY - mouseY) + "px";
-            
             const dx = Math.abs(event.clientX - startX);
             const dy = Math.abs(event.clientY - startY);
             if (dx > 10 || dy > 10) {
                 hasDragged = true;
             }
+            
+            if ((wasInLeftSidebar || wasInRightSidebar) && !hasUndockedFromSidebar && hasDragged) {
+                this.menuBar.appendChild(newDiv);
+                newDiv.style.position = 'absolute';
+                newDiv.style.left = (event.clientX - clickOffsetX) + 'px';
+                newDiv.style.top = (event.clientY - clickOffsetY) + 'px';
+                newDiv.style.width = '';
+                newDiv.style.height = '1px';
+                
+                newGUI.domElement.style.position = '';
+                newGUI.domElement.style.width = '';
+                
+                if (wasInLeftSidebar) {
+                    removeMenuFromLeftSidebar(newGUI);
+                } else {
+                    removeMenuFromRightSidebar(newGUI);
+                }
+                hasUndockedFromSidebar = true;
+                
+                newGUI.mode = "DRAGGING"
+                this.applyModeStyles(newGUI)
+                newGUI.lockOpenClose = true;
+                
+                mouseX = event.clientX;
+                mouseY = event.clientY;
+                event.preventDefault();
+                return;
+            }
+            
+            if (!hasUndockedFromSidebar && (wasInLeftSidebar || wasInRightSidebar)) {
+                mouseX = event.clientX;
+                mouseY = event.clientY;
+                return;
+            }
+            
+            newDiv.style.left = (parseInt(newDiv.style.left) + event.clientX - mouseX) + "px";
+            newDiv.style.top = (parseInt(newDiv.style.top) + event.clientY - mouseY) + "px";
             
             mouseX = event.clientX;
             mouseY = event.clientY;
@@ -1382,6 +1411,11 @@ export class CGuiMenuBar {
         const boundHandlePointerUp = (event) => {
             document.removeEventListener("pointermove", boundHandlePointerMove);
             document.removeEventListener("pointerup", boundHandlePointerUp);
+
+            if ((wasInLeftSidebar || wasInRightSidebar) && !hasUndockedFromSidebar) {
+                event.preventDefault();
+                return;
+            }
 
             const viewportWidth = window.innerWidth;
             const menuLeft = parseInt(newDiv.style.left);

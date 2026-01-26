@@ -281,13 +281,17 @@ export function addMenuToLeftSidebar(menuGui) {
         leftSidebarMenus.push(menuGui);
     }
     
-    leftSidebar.insertBefore(menuGui.domElement.parentElement, leftSidebar.firstChild);
+    leftSidebar.appendChild(menuGui.domElement.parentElement);
     
     const container = menuGui.domElement.parentElement;
     container.style.position = 'relative';
     container.style.left = '0px';
     container.style.top = '0px';
     container.style.width = '100%';
+    container.style.height = 'auto';
+    
+    menuGui.domElement.style.position = 'relative';
+    menuGui.domElement.style.width = '100%';
 }
 
 export function addMenuToRightSidebar(menuGui) {
@@ -298,13 +302,17 @@ export function addMenuToRightSidebar(menuGui) {
         rightSidebarMenus.push(menuGui);
     }
     
-    rightSidebar.insertBefore(menuGui.domElement.parentElement, rightSidebar.firstChild);
+    rightSidebar.appendChild(menuGui.domElement.parentElement);
     
     const container = menuGui.domElement.parentElement;
     container.style.position = 'relative';
     container.style.left = '0px';
     container.style.top = '0px';
     container.style.width = '100%';
+    container.style.height = 'auto';
+    
+    menuGui.domElement.style.position = 'relative';
+    menuGui.domElement.style.width = '100%';
 }
 
 export function removeMenuFromLeftSidebar(menuGui) {
