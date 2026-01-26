@@ -43,7 +43,7 @@ class CFeatureManager extends CManager {
         if (this.exists(id)) {
             const featureNode = this.get(id);
 
-            // Dispose the node (removes arrow, sprite, etc.)
+            // Dispose the node (removes arrow, overlay text, etc.)
             if (featureNode.dispose) {
                 featureNode.dispose();
             }
@@ -226,7 +226,6 @@ class CFeatureManager extends CManager {
             .onChange((value) => {
                 // Update the feature's text
                 featureNode.text = value;
-                featureNode.sprite.text = value;
                 // Update the menu title
                 standaloneMenu.title(value ? `Feature: ${value}` : `Feature: (blank)`);
             });
@@ -258,9 +257,9 @@ class CFeatureManager extends CManager {
             .name('Text Color')
             .listen()
             .onChange((value) => {
-                // Convert hex number to CSS color string for the sprite
+                // Convert hex number to CSS color string for the overlay text
                 const hexString = '#' + value.toString(16).padStart(6, '0');
-                featureNode.sprite.color = hexString;
+                featureNode.color = hexString;
             });
         
         // Add Delete button
