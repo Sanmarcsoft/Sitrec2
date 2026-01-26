@@ -38,11 +38,20 @@ export const SitVideo = {
 
         let maybeVideo =  GlobalURLParams.get("video")
         if (maybeVideo) {
-            maybeVideo = maybeVideo.toLowerCase()
-            for (const vid in this.selectableVideos) {
-                if (vid.toLowerCase() === maybeVideo) {
-                    this.file = vid
-                    break;
+            // Check if it's a URL (http/https)
+            if (maybeVideo.startsWith("http://") || maybeVideo.startsWith("https://")) {
+                // Use the URL directly - add it as a selectable video with a derived name
+                const urlName = decodeURIComponent(maybeVideo.split('/').pop().split('?')[0]) || "URL Video";
+                this.selectableVideos[urlName] = maybeVideo;
+                this.file = urlName;
+            } else {
+                // Match against preset video names (case-insensitive)
+                const maybeVideoLower = maybeVideo.toLowerCase()
+                for (const vid in this.selectableVideos) {
+                    if (vid.toLowerCase() === maybeVideoLower) {
+                        this.file = vid
+                        break;
+                    }
                 }
             }
         } else {
