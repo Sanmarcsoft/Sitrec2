@@ -866,9 +866,6 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
             const ctx = this.ctx;
 
-            //  ctx.fillstyle = "#FF00FFFF"
-            //  ctx.fillRect(0, 0, this.canvas.width/3, this.canvas.height);
-
             // video width might change, for example, with the tiny images used by the old Gimbal video
             if (this.videoWidth !== image.width) {
                 console.log("🍿🍿🍿Video width changed from " + this.videoWidth + " to " + image.width)
@@ -886,6 +883,17 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
             var filter = ''
             const effectsEnabled = this.in.enableVideoEffects ? this.in.enableVideoEffects.v0 : true;
+
+            let sourceImage = image;
+            if (effectsEnabled && this.in.convolutionFilter && this.in.convolutionFilter.value !== 'none') {
+                const filterType = this.in.convolutionFilter.value;
+                const params = {
+                    amount: this.in.sharpenAmount?.v0 ?? 1,
+                    threshold: this.in.edgeDetectThreshold?.v0 ?? 0,
+                    strength: (filterType === 'emboss' ? this.in.embossDepth?.v0 : 1) ?? 1
+                };
+                sourceImage = applyConvolutionToImage(image, filterType, params, this);
+            }
             if (effectsEnabled) {
                 if (this.in.contrast && this.in.contrast.v0 !== 1) {
                     filter += "contrast(" + this.in.contrast.v0 + ") "
@@ -930,13 +938,13 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
             if (this.in.zoom !== undefined) {
 
                 this.getSourceAndDestCoords();
-                ctx.drawImage(image, this.sx, this.sy, this.sWidth, this.sHeight,
+                ctx.drawImage(sourceImage, this.sx, this.sy, this.sWidth, this.sHeight,
                     this.dx, this.dy, this.dWidth, this.dHeight);
 
             } else {
                 // Here the zoom is being controlled by zoomView
                 // which zooming in and out around the mouse
-                ctx.drawImage(image,
+                ctx.drawImage(sourceImage,
                     0, 0, this.videoWidth, this.videoHeight,
                     this.widthPx * (0.5 + this.posLeft), this.heightPx * 0.5 + this.widthPx * this.posTop,
                     this.widthPx * (this.posRight - this.posLeft), this.widthPx * (this.posBot - this.posTop))
@@ -948,15 +956,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
                 ctx.restore();
             }
 
-            if (effectsEnabled && this.in.convolutionFilter && this.in.convolutionFilter.value !== 'none') {
-                const filterType = this.in.convolutionFilter.value;
-                const params = {
-                    amount: this.in.sharpenAmount?.v0 ?? 1,
-                    threshold: this.in.edgeDetectThreshold?.v0 ?? 0,
-                    strength: (filterType === 'emboss' ? this.in.embossDepth?.v0 : 1) ?? 1
-                };
-                applyConvolution(ctx, this.widthPx, this.heightPx, filterType, params);
-            }
+
 
             ctx.filter = 'none';
 
@@ -1375,4 +1375,25 @@ export function applyConvolution(ctx, width, height, kernelName, params = {}) {
     }
 
     ctx.putImageData(imageData, 0, 0);
+}
+
+function applyConvolutionToImage(image, kernelName, params, videoView) {
+    if (kernelName === 'none' || !CONVOLUTION_KERNELS[kernelName]) return image;
+
+    const width = image.width;
+    const height = image.height;
+
+    if (!videoView._convolutionCanvas || 
+        videoView._convolutionCanvas.width !== width || 
+        videoView._convolutionCanvas.height !== height) {
+        videoView._convolutionCanvas = document.createElement('canvas');
+        videoView._convolutionCanvas.width = width;
+        videoView._convolutionCanvas.height = height;
+        videoView._convolutionCtx = videoView._convolutionCanvas.getContext('2d');
+    }
+
+    const ctx = videoView._convolutionCtx;
+    ctx.drawImage(image, 0, 0);
+    applyConvolution(ctx, width, height, kernelName, params);
+    return videoView._convolutionCanvas;
 }
