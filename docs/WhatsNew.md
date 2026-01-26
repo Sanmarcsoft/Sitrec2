@@ -32,6 +32,80 @@ Example entry format:
 
 ---
 
+## Version 2.25.10 (2026-01-26)
+
+### New Features
+- **Help Menu Search**: Search box in the Help menu allows searching all menu items across all menus. Type to filter, hover or use arrow keys to preview items in their menus with highlighting, click or press Enter to select. Tooltips are shown for items that have them.
+- **Video in Frustum**: Display video texture directly on the camera frustum
+- **Slider Settings Menu**: Right-click on any slider to adjust min, max, and step values for more precision
+- **Free Transform for Overlays**: More flexible positioning of ground overlays
+
+### Improvements
+- Better TIFF support for files without geolocation data
+- Deterministic flash offset based on light ID for consistent strobe timing
+
+### Bug Fixes
+- Fixed JSON parsing of sitch file names returning numbers instead of strings
+
+---
+
+## Version 2.25.9 (2026-01-24)
+
+### New Features
+- **Customizable Aircraft Strobe Offset**: Random or user-defined strobe offset so aircraft lights can flash at different times
+- **Camera Offset Control**: Added customizable camera offset ±10°
+- **Elevated Overlays**: Overlays can now be elevated for use as clouds
+- **Cloud Extraction**: Extract cloud overlays from ground overlays
+- **Context Menu for Overlays**: Right-click on overlay to edit or exit edit mode
+
+### Improvements
+- **QuickFetch with Chunked Downloads**: Improved loading of larger S3 files with DB caching
+- Improved loading manager
+- Highlight borders around overlays to help finding them on the map
+- Full GeoTIFF location format support via proj4-fully-loaded
+- Rendering camera detached from pod head for better custom code compatibility
+- Added terrain to SitGimbal with customization options
+- Legacy sitch compatibility patches
+- Short names for overlays with cloud feathering
+- Auto-lock overlay when dragging in KMZ or GeoTIFF
+- Exit one edit mode when starting another
+- Navigate to overlay when drag and dropped
+
+### Bug Fixes
+- Fixed menu mirroring issues
+- Fixed GeoTIFF and overlay handling
+- Don't create control points when locked
+
+---
+
+## Version 2.25.8 (2026-01-22)
+
+### Bug Fixes
+- Fixed visibility of object3D labels, measurement labels, and feature labels with new overlay label system
+
+---
+
+## Version 2.25.7 (2026-01-22)
+
+### New Features
+- **3D Object Labels**: Labels for planes and other 3D objects
+- **Label Toggle**: Toggle labels visibility in look and main views
+
+### Improvements
+- Undo/Redo support for more operations
+
+---
+
+## Version 2.25.6 (2026-01-22)
+
+### Improvements
+- Satellite arrows now use same visibility settings as labels
+
+### Bug Fixes
+- Fixed satellite visibility rendering in look view
+
+---
+
 ## Version 2.25.5 (2026-01-22)
 
 ### New Features
