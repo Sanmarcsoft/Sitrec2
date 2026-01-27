@@ -596,44 +596,58 @@ export class QuadTreeMap {
         let visible = false;
         let actuallyVisible = false;
 
+        const radius = worldSphere.radius;
+        const distance = camera.position.distanceTo(worldSphere.center);
+        const closestDistance = Math.max(0, distance - radius);
+
+        // CRITICAL: Check if camera is close to the tile BEFORE frustum check.
+        // A tile directly underneath/behind the camera won't intersect the view frustum,
+        // but it still needs high-res textures because it's nearby and could come into view.
+        // Use a generous threshold - within 2x the tile's radius.
+        const isNearCamera = closestDistance < radius * 2;
+
         // Check frustum intersection
         const frustumIntersects = camera.viewFrustum.intersectsSphere(worldSphere);
-        
-        if (frustumIntersects) {
-            const radius = worldSphere.radius;
-            const distance = camera.position.distanceTo(worldSphere.center);
-            
-            // Check if sphere center is behind the camera FIRST
-            // Project sphere center onto camera's forward direction
+
+        if (frustumIntersects || isNearCamera) {
+            // Check if sphere center is behind the camera
             const cameraForward = camera.getWorldDirection(_cameraForward);
             const toSphere = _toSphere.copy(worldSphere.center).sub(camera.position);
             const projectionOnForward = toSphere.dot(cameraForward);
-            
-            // If center is behind camera (negative projection) but frustum intersects,
-            // the tile wraps around the camera - skip horizon checks and force subdivision
-            if (projectionOnForward < 0) {
-                screenSize = 1000000; // Force subdivision for tiles wrapping around camera
-                visible = true;
-                // Don't mark as actuallyVisible - this prevents premature lazy loading
-                // The visible parts (children) will be actuallyVisible when their centers are in front
-                actuallyVisible = false;
-            } else {
-                // Normal case: center is in front of camera
-                // Now perform horizon and globe occlusion checks
-                const cameraAltitude = altitudeAboveSphere(_cameraPositionClone.copy(camera.position));
-                const closestDistance = Math.max(0, distance - radius);
-                const horizon = distanceToHorizon(cameraAltitude);
 
-                // Check if visible over horizon
-                if (horizon > closestDistance || 
-                    hiddenByGlobe(cameraAltitude, closestDistance) <= tile.highestAltitude) {
-                    
+            // If center is behind camera OR tile is near camera (regardless of frustum),
+            // force subdivision and enable lazy loading
+            if (projectionOnForward < 0 || (isNearCamera && !frustumIntersects)) {
+                screenSize = 1000000; // Force subdivision for nearby/behind tiles
+                visible = true;
+                actuallyVisible = true;
+            } else {
+                // Normal case: center is in front of camera and in frustum
+                // If camera is inside or very close to the bounding sphere,
+                // skip horizon checks - the tile is obviously visible
+                if (closestDistance < radius * 0.1) {
                     const fov = camera.getEffectiveFOV() * Math.PI / 180;
                     const height = 2 * Math.tan(fov / 2) * distance;
                     const screenFraction = (2 * radius) / height;
                     screenSize = screenFraction * 1024;
                     visible = true;
                     actuallyVisible = true;
+                } else {
+                    // Perform horizon and globe occlusion checks for distant tiles
+                    const cameraAltitude = altitudeAboveSphere(_cameraPositionClone.copy(camera.position));
+                    const horizon = distanceToHorizon(cameraAltitude);
+
+                    // Check if visible over horizon
+                    if (horizon > closestDistance ||
+                        hiddenByGlobe(cameraAltitude, closestDistance) <= tile.highestAltitude) {
+
+                        const fov = camera.getEffectiveFOV() * Math.PI / 180;
+                        const height = 2 * Math.tan(fov / 2) * distance;
+                        const screenFraction = (2 * radius) / height;
+                        screenSize = screenFraction * 1024;
+                        visible = true;
+                        actuallyVisible = true;
+                    }
                 }
             }
         }
@@ -642,28 +656,42 @@ export class QuadTreeMap {
         if (tile.z < 3) {
             screenSize = 10000000000;
             visible = true;
-            // actuallyVisible remains unchanged - used for lazy loading
+            // For low zoom tiles that cover large areas, also enable lazy loading
+            // These tiles are always "visible" in the sense that they provide texture data
+            actuallyVisible = true;
         }
 
-        return { 
-            screenSize, 
-            visible, 
-            actuallyVisible, 
-            frustumIntersects 
+        // IMPORTANT: If a tile is visible (will be rendered), it should be eligible for lazy loading.
+        // The distinction between visible and actuallyVisible was causing tiles to stay at low resolution.
+        if (visible) {
+            actuallyVisible = true;
+        }
+
+        return {
+            screenSize,
+            visible,
+            actuallyVisible,
+            frustumIntersects
         };
     }
 
     /**
      * Trigger lazy loading for tiles using parent data
-     * This is called only for tiles that are actuallyVisible (not forced visible for subdivision)
+     * This is called for tiles that are actuallyVisible (visible and not fully occluded).
+     * Includes tiles with center behind the camera, as long as the frustum intersects them.
      */
     triggerLazyLoadIfNeeded(tile, tileLayers) {
         // Only load if tile is using parent data, needs high-res, not currently loading, and active in this view
-        const needsLoad = tile.usingParentData && 
+        const needsLoad = tile.usingParentData &&
                          tile.needsHighResLoad &&
-                         !tile.isLoading && 
+                         !tile.isLoading &&
                          !tile.isCancelling &&
                          (tile.tileLayers & tileLayers);
+
+        // Debug: log why lazy loading isn't triggering
+        if (tile.usingParentData && tile.needsHighResLoad && !needsLoad) {
+            debugLog(`Lazy load blocked for ${tile.z}/${tile.x}/${tile.y}: isLoading=${tile.isLoading}, isCancelling=${tile.isCancelling}, tileLayers=${tile.tileLayers}, viewLayers=${tileLayers}`);
+        }
 
         // Trigger high-res load if all conditions are met
         if (needsLoad) {
