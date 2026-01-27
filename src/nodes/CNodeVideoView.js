@@ -364,6 +364,11 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
                     // already queues it via queueMicrotask. Calling it twice would
                     // corrupt the video array by adding duplicate entries.
                 };
+                img.onerror = (err) => {
+                    console.error(`[VideoLoad] Failed to load image[${nextIdx}] "${entry.fileName}":`, err);
+                    Globals.pendingActions--;
+                    this.skipCurrentVideoRestore();
+                };
                 img.src = blobURL;
             } else {
                 console.warn(`[VideoLoad] Cannot restore image[${nextIdx}] "${entry.fileName}" - file original data not available`);
