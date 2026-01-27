@@ -537,7 +537,7 @@ $userNames = getUserNames($allUserIds);
                     <div class="disk-label">
                         <a href="<?= htmlspecialchars($linkUrl) ?>" target="_blank" rel="noopener" class="sitch-link" style="word-break: break-all;"><?= htmlspecialchars($key) ?></a>
                     </div>
-                    <div class="disk-path"><?= formatBytes($file['Size']) ?> - <?= $file['LastModified']->format('Y-m-d H:i:s') ?></div>
+                    <div class="disk-path"><?= formatBytes($file['Size']) ?> - <?= $file['LastModified']->format('Y-m-d H:i:s') ?> <?php if (is_numeric($keyParts[0])): ?><?= renderUserLink($keyParts[0], $userNames) ?><?php endif; ?></div>
                 </div>
                 <?php endforeach; ?>
                 <?php endif; ?>

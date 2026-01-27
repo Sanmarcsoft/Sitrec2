@@ -33,7 +33,7 @@ function getXFUserInfo($userId) {
                     ->order('log_date', 'DESC')
                     ->fetchOne();
                 if ($ip) {
-                    $info['ip'] = $ip->ip;
+                    $info['ip'] = inet_ntop($ip->ip);
                 }
             }
         } catch (Exception $e) {
