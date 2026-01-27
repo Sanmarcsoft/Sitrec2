@@ -301,7 +301,7 @@ export class CNodeSAPage extends CNodeDDI {
             }
             var aspectVector = h.node.p(fAspect).sub(h.node.p(fAspect - 1))
             var aspectAngle = this.angleSA;
-            if (h.erraticAspect !== 0) {
+            if (h.erraticAspect !== 0 && !par.paused && !Globals.regression) {
                 aspectAngle += radians((Math.random() - 0.5) * h.erraticAspect)
             }
             var ax = aspectVector.x
