@@ -98,6 +98,37 @@ class CViewManager extends CManager {
         return mainWidth < 0.9 && lookWidth < 0.9 && (mainWidth + lookWidth) > 0.9;
     }
 
+    updateZOrder() {
+        const nonOverlayViews = [];
+        const overlayViews = [];
+        
+        this.iterate((id, view) => {
+            if (view.overlayView) {
+                overlayViews.push(view);
+            } else if (view.div) {
+                nonOverlayViews.push(view);
+            }
+        });
+        
+        nonOverlayViews.sort((a, b) => {
+            const areaA = (a.widthPx || 0) * (a.heightPx || 0);
+            const areaB = (b.widthPx || 0) * (b.heightPx || 0);
+            return areaB - areaA;
+        });
+        
+        let zIndex = 1;
+        for (const view of nonOverlayViews) {
+            view.div.style.zIndex = zIndex;
+            view.zIndex = zIndex;
+            zIndex++;
+        }
+        
+        for (const view of overlayViews) {
+            const parentZ = view.overlayView?.zIndex || 1;
+            view.zIndex = parentZ;
+        }
+    }
+
 }
 
 export const ViewMan = new CViewManager()

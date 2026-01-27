@@ -2285,6 +2285,8 @@ function renderMain(elapsed) {
     // render each viewport
     if (globalProfiler) globalProfiler.push('#2ca02c', 'Viewports');
     
+    ViewMan.updateZOrder();
+    
     // Check if any view is in XR mode - if so, skip normal rendering
     // The XR animation loop will handle rendering for the active view
     let xrActive = false;

@@ -94,37 +94,27 @@ export function mouseInView(view, x, y, debug = false) {
 }
 
 export function mouseInViewOnly(view, x, y, debug = false) {
-    // if NOT in the view, then immediately return false, no need to check.
     if (!mouseInView(view, x, y, debug)) {
         if (debug) console.log(`Mouse (${x},${y}) NOT in view(${view.id})`)
         return false;
     }
 
-    var past = false;
-    var inView = true;
+    const viewZ = view.zIndex || 0;
+    let inView = true;
+    
     ViewMan.iterateVisibleIncludingOverlays((key, otherView) => {
-
-        // we only check for views that are AFTER this view in the view manager
-        // so wait until we find it, and then set he "past" flag
-        if (otherView === view) {
-            past = true;
-        } else {
-            if (past && mouseInView(otherView, x, y)) {
-
-
-                if (debug) {
-                    console.log(`Mouse (${x},${y}) In OTHER view(${otherView.id})`)
-                }
-
-                // only clear it if otherView has an onMouseDown
-                if (otherView.onMouseDown !== undefined) {
-                    inView = false;
-                }
-
+        if (otherView === view) return;
+        
+        const otherZ = otherView.zIndex || 0;
+        if (otherZ > viewZ && mouseInView(otherView, x, y)) {
+            if (debug) {
+                console.log(`Mouse (${x},${y}) In FRONT view(${otherView.id}) z=${otherZ} > ${viewZ}`)
+            }
+            if (otherView.onMouseDown !== undefined) {
+                inView = false;
             }
         }
     })
 
-    // none of the subsequent views had the mouse in, so we are good
     return inView;
 }
