@@ -14,7 +14,7 @@ export const TEST_REGISTRY = [
     { id: 'ui-lighting', name: 'UI-Light', group: 'UI', file: 'ui-playwright.test.js', grep: 'Lighting ambient', snapshot: 'lighting-ambient-intensity-1.5-snapshot' },
     { id: 'ui-csv', name: 'UI-CSV', group: 'UI', file: 'ui-playwright.test.js', grep: 'LA Features CSV', snapshot: 'import-la-features-csv-snapshot' },
     { id: 'ui-stanag', name: 'UI-STANAG', group: 'UI', file: 'ui-playwright.test.js', grep: 'STANAG 4676', snapshot: 'import-stanag-xml-snapshot' },
-    { id: 'ui-ambient', name: 'UI-Ambient', group: 'UI', file: 'ui-playwright.test.js', grep: 'Ambient Only' },
+    { id: 'ui-ambient', name: 'UI-Ambient', group: 'UI', file: 'ui-playwright.test.js', grep: 'same result with Ambient Only' },
     
     { id: 'video-load', name: 'VideoLoad', group: 'Video', file: 'video-loading.test.js', grep: 'multiple video types' },
     { id: 'webm', name: 'WebM', group: 'Video', file: 'webm-video-export.test.js', grep: 'valid WebM video' },
@@ -28,7 +28,7 @@ export const TEST_REGISTRY = [
     { id: 'ai-tab', name: 'AI-Tab', group: 'AI', file: 'chatbot-playwright.test.js', grep: 'open chat with Tab' },
     { id: 'ai-math', name: 'AI-Math', group: 'AI', file: 'chatbot-playwright.test.js', grep: 'simple math' },
     { id: 'ai-heli', name: 'AI-Heli', group: 'AI', file: 'chatbot-playwright.test.js', grep: 'helicopter model' },
-    { id: 'ai-ambient', name: 'AI-Ambient', group: 'AI', file: 'chatbot-playwright.test.js', grep: 'ambient only' },
+    { id: 'ai-ambient', name: 'AI-Ambient', group: 'AI', file: 'chatbot-playwright.test.js', grep: 'change lighting to ambient' },
     { id: 'ai-jet', name: 'AI-Jet', group: 'AI', file: 'chatbot-playwright.test.js', grep: 'make it a jet' },
     { id: 'ai-drone', name: 'AI-Drone', group: 'AI', file: 'chatbot-playwright.test.js', grep: 'use a drone' },
     { id: 'ai-time', name: 'AI-Time', group: 'AI', file: 'chatbot-playwright.test.js', grep: 'colloquial time' },

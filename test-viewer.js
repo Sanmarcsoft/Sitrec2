@@ -501,8 +501,11 @@ app.get('/', (req, res) => {
                     }
                 } else if (data.type === 'status') {
                     if (data.total > 0) {
-                        const progress = data.current + '/' + data.total;
-                        statusText.textContent = '🧪 Running ' + progress + ' tests...';
+                        if (data.current === 0) {
+                            statusText.textContent = '🧪 Starting ' + data.total + ' test' + (data.total > 1 ? 's' : '') + '...';
+                        } else {
+                            statusText.textContent = '🧪 Running test ' + data.current + '/' + data.total + '...';
+                        }
                     }
                 } else if (data.type === 'testStarted') {
                     updateTestStatus(data.id, 'running');
@@ -854,20 +857,19 @@ wss.on('connection', (ws) => {
             if (countMatch) {
                 totalTests = parseInt(countMatch[1]);
                 ws.send(JSON.stringify({ type: 'status', current: 0, total: totalTests }));
-                for (let i = 0; i < 4; i++) {
-                    ws.send(JSON.stringify({ type: 'output', text, worker: i }));
-                }
-                return;
+                // Don't return early - continue to check for startMatch in the same chunk
             }
-            
-            const startMatch = text.match(/\[(\d+)\/(\d+)\]\s+\[chromium\].*?›\s+(.+?)\s*$/m);
+
+            const startMatch = text.match(/\[(\d+)\/(\d+)\]\s+\[chromium\][^\n]+/m);
             if (startMatch) {
                 const testNum = parseInt(startMatch[1]);
                 const total = parseInt(startMatch[2]);
-                const testDesc = startMatch[3].trim();
+                const fullLine = startMatch[0];
+                const parts = fullLine.split(/\s*›\s*/);
+                let testDesc = parts[parts.length - 1].trim();
                 if (total > totalTests) totalTests = total;
-                ws.send(JSON.stringify({ type: 'status', current: testNum - 1, total: totalTests }));
-                
+                ws.send(JSON.stringify({ type: 'status', current: testNum, total: totalTests }));
+
                 // Find which test is starting and mark it as running
                 const t = findMatchingTest(testDesc);
                 if (t && !runningTests.has(t.id) && !failedTests.has(t.id) && !testResults[t.id]) {
@@ -875,7 +877,15 @@ wss.on('connection', (ws) => {
                     runningTests.add(t.id);
                     ws.send(JSON.stringify({ type: 'testStarted', id: t.id }));
                 }
-                
+
+                for (let i = 0; i < 4; i++) {
+                    ws.send(JSON.stringify({ type: 'output', text, worker: i }));
+                }
+                return;
+            }
+
+            // If countMatch matched but startMatch didn't, still send output
+            if (countMatch) {
                 for (let i = 0; i < 4; i++) {
                     ws.send(JSON.stringify({ type: 'output', text, worker: i }));
                 }
