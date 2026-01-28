@@ -159,7 +159,7 @@ class CameraMapControls {
 			globalMeasureState.measureStart = NodeMan.get("globalMeasureA");
 			globalMeasureState.measureEnd = NodeMan.get("globalMeasureB");
 			globalMeasureState.measureArrow = NodeMan.get("globalMeasureArrow");
-		} else if (globalMeasureState.measureStart === null) {
+		} else {
 			globalMeasureState.measureStart = new CNodePositionXYZ({ id: "globalMeasureA", x: 0, y: 0, z: 0 });
 			globalMeasureState.measureEnd = new CNodePositionXYZ({ id: "globalMeasureB", x: 0, y: 0, z: 0 });
 			globalMeasureState.measureArrow = new CNodeMeasureAB(
@@ -1151,7 +1151,7 @@ class CameraMapControls {
 
 	refreshMeasureArrowVisuals() {
 		const g = globalMeasureState;
-		if (g.measureStart === null) return;
+		if (!NodeMan.exists("globalMeasureA")) return;
 
 		const A = g.startPoint;
 		const B = g.endPoint;
@@ -1177,6 +1177,8 @@ class CameraMapControls {
 	}
 
 	updateMeasureArrow() {
+		if (!NodeMan.exists("globalMeasureA")) return;
+		
 		const topView = getTopViewWithCursor();
 		if (topView !== this.view) {
 			return;

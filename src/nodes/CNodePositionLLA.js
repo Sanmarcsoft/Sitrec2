@@ -478,6 +478,20 @@ export class CNodePositionXYZ extends CNode {
         this.XYZ = [x,y,z]
     }
 
+    modSerialize() {
+        return {
+            ...super.modSerialize(),
+            ...(this.XYZ !== undefined ? { XYZ: this.XYZ.slice() } : {})
+        }
+    }
+
+    modDeserialize(v) {
+        super.modDeserialize(v)
+        if (v.XYZ !== undefined) {
+            this.XYZ = v.XYZ.slice()
+        }
+    }
+
     getValueFrame(f) {
         if (this.XYZ !== undefined) {
             return V3(this.XYZ[0], this.XYZ[1], this.XYZ[2])

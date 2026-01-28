@@ -736,6 +736,7 @@ export class CCustomManager {
             Views: [1, "mainView", "lookView", "video", "chatView", "*View*"],
             Cameras: [1, "mainCamera", "lookCamera", "fixedCameraPosition", "ptzAngles", "*Camera*"],
             "Date/Time": [1, "dateTimeStart", "*DateTime*"],
+            Measurement: [1, "globalMeasureA", "globalMeasureB"],
             Others: [0, "lighting", "*Lighting*", "*Effect*", "*Target*", "targetObject", "traverseObject"]
         };
 
