@@ -14,7 +14,23 @@ const __dirname = dirname(__filename);
 const app = express();
 const port = 3456;
 const exitAfterTests = process.argv.includes('--exit') || process.env.TEST_VIEWER_EXIT === 'true';
+const openBrowser = process.argv.includes('--open') || !exitAfterTests;
 const RESULTS_FILE = __dirname + '/test-results.json';
+
+// Parse --exclude=group1,group2,testid argument
+let excludePatterns = [];
+const excludeArg = process.argv.find(arg => arg.startsWith('--exclude='));
+if (excludeArg) {
+    excludePatterns = excludeArg.split('=')[1].split(',').map(s => s.trim().toLowerCase());
+}
+
+function getFilteredTests() {
+    return TEST_REGISTRY.filter(t => {
+        const groupLower = t.group.toLowerCase();
+        const idLower = t.id.toLowerCase();
+        return !excludePatterns.some(pattern => groupLower === pattern || idLower === pattern);
+    });
+}
 
 function loadTestResults() {
     try {
@@ -591,7 +607,26 @@ app.get('/', (req, res) => {
             }
         }
 
+        // Connect on page load to check for auto-start (exit mode)
+        function initConnection() {
+            const initWs = new WebSocket('ws://localhost:${port}');
+            initWs.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'autoStart') {
+                    initWs.close();
+                    // Auto-select and start the specified tests
+                    selectNone();
+                    data.tests.forEach(id => {
+                        const cb = document.querySelector('.test-checkbox[data-id="' + id + '"]');
+                        if (cb) cb.checked = true;
+                    });
+                    setTimeout(() => startTests(), 100);
+                }
+            };
+        }
+
         loadTestStatuses();
+        initConnection();
     </script>
 </body>
 </html>
@@ -652,17 +687,17 @@ app.post('/api/reset/:id', (req, res) => {
 function startServer() {
     const server = app.listen(port, () => {
         console.log(`\n🧪 Test Viewer running at http://localhost:${port}\n`);
-        
-        if (!exitAfterTests) {
+
+        if (openBrowser) {
             console.log(`Opening browser...\n`);
             const open = (url) => {
-                const cmd = process.platform === 'darwin' ? 'open' : 
+                const cmd = process.platform === 'darwin' ? 'open' :
                             process.platform === 'win32' ? 'start' : 'xdg-open';
                 exec(`${cmd} ${url}`);
             };
             setTimeout(() => open(`http://localhost:${port}`), 500);
         }
-        
+
         setupWebSocket(server);
     });
 
@@ -684,11 +719,19 @@ function setupWebSocket(server) {
 
 wss.on('connection', (ws) => {
     console.log('Client connected\n');
-    
+
     let testProcess = null;
     let isAborting = false;
     let selectedTests = [];
     const testResults = loadTestResults();
+
+    // In exit mode, tell the client to auto-start filtered tests
+    if (exitAfterTests) {
+        const filteredTests = getFilteredTests();
+        const testIds = filteredTests.map(t => t.id);
+        console.log(`Auto-starting ${testIds.length} tests (exit mode)\n`);
+        ws.send(JSON.stringify({ type: 'autoStart', tests: testIds }));
+    }
     
     ws.on('message', (message) => {
         try {
@@ -988,21 +1031,11 @@ wss.on('connection', (ws) => {
 }
 
 console.log('Starting Sitrec Test Viewer...');
-startServer();
-
-if (exitAfterTests) {
-    console.log('Running in exit mode - will run all tests and exit\n');
-    setTimeout(() => {
-        const testProcess = spawn('npx', ['playwright', 'test', '--reporter=line'], {
-            cwd: __dirname,
-            shell: true,
-            stdio: 'inherit',
-            env: { ...process.env, FORCE_COLOR: '1' }
-        });
-
-        testProcess.on('close', (code) => {
-            console.log(`\nTests completed with code ${code}\n`);
-            process.exit(code);
-        });
-    }, 1000);
+if (excludePatterns.length > 0) {
+    console.log(`Excluding: ${excludePatterns.join(', ')}`);
 }
+if (exitAfterTests) {
+    const filteredTests = getFilteredTests();
+    console.log(`Exit mode: will auto-run ${filteredTests.length} tests when browser connects\n`);
+}
+startServer();
