@@ -96,6 +96,10 @@ export class CNodeView3D extends CNodeViewCanvas {
 
         super(v);
 
+        if (this.id === "mainView" && Sit.guiMenus && Globals.menuBar) {
+            Globals.menuBar.modDeserialize(Sit.guiMenus);
+        }
+
         this.tileLayers = 0;
         if (this.id === "mainView") {
             this.tileLayers |= LAYER.MASK_MAIN;
