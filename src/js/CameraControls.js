@@ -14,10 +14,10 @@ import {
 	getLocalUpVector,
 	pointOnSphereBelow,
 } from "../SphericalMath";
-import {NodeFactory, NodeMan, setRenderOne, Sit} from "../Globals";
+import {NodeFactory, NodeMan, setRenderOne, Sit, UndoManager} from "../Globals";
 import {CNodeControllerPTZUI} from "../nodes/CNodeControllerPTZUI";
 import {intersectSphere2, V3} from "../threeUtils";
-import {getCursorPositionFromTopView, onDocumentMouseMove} from "../mouseMoveView";
+import {getCursorPositionFromTopView, getTopViewWithCursor, onDocumentMouseMove} from "../mouseMoveView";
 import {isKeyHeld} from "../KeyBoardHandler";
 import {isLocal} from "../configUtils.js"
 import {mouseInViewOnly, mouseToView} from "../ViewUtils";
@@ -26,6 +26,18 @@ import {CNodePositionXYZ} from "../nodes/CNodePositionLLA";
 import {GlobalScene} from "../LocalFrame";
 import * as LAYER from "../LayerMasks";
 import {isViewDragging} from "../DragResizeUtils";
+
+const globalMeasureState = {
+	startPoint: null,
+	endPoint: null,
+	vKeyWasHeld: false,
+	bKeyWasHeld: false,
+	undoStartPoint: null,
+	undoEndPoint: null,
+	measureStart: null,
+	measureEnd: null,
+	measureArrow: null,
+};
 
 const STATE = {
 	NONE: -1,
@@ -139,21 +151,28 @@ class CameraMapControls {
 		this.lastStartHitSphere = true;
 		this.lastEndHitSphere = true;
 
-		const id = this.view.id;
-		this.measureStartPoint = V3()
-		this.measureEndPoint = V3()
-		this.measureStart = new CNodePositionXYZ({ id: id + "measureA", x: 0, y: 0, z: 0 });
-		this.measureEnd = new CNodePositionXYZ({ id: id + "measureB", x: 0, y: 0, z: 0 });
-		this.measureArrow = new CNodeMeasureAB(
-			{
-				id: id + "measureArrow",
-				A: id + "measureA",
-				B: id + "measureB",
-				color: "#ffFFFF",
-				text: "AB",
-				unitType: "flexible"
-			}
-		);
+		if (globalMeasureState.startPoint === null) {
+			globalMeasureState.startPoint = V3();
+			globalMeasureState.endPoint = V3();
+		}
+		if (NodeMan.exists("globalMeasureA")) {
+			globalMeasureState.measureStart = NodeMan.get("globalMeasureA");
+			globalMeasureState.measureEnd = NodeMan.get("globalMeasureB");
+			globalMeasureState.measureArrow = NodeMan.get("globalMeasureArrow");
+		} else if (globalMeasureState.measureStart === null) {
+			globalMeasureState.measureStart = new CNodePositionXYZ({ id: "globalMeasureA", x: 0, y: 0, z: 0 });
+			globalMeasureState.measureEnd = new CNodePositionXYZ({ id: "globalMeasureB", x: 0, y: 0, z: 0 });
+			globalMeasureState.measureArrow = new CNodeMeasureAB(
+				{
+					id: "globalMeasureArrow",
+					A: "globalMeasureA",
+					B: "globalMeasureB",
+					color: "#ffFFFF",
+					text: "AB",
+					unitType: "flexible"
+				}
+			);
+		}
 
 
 		this.justRotate = false; // set to make all three buttons rotate around the target
@@ -1130,57 +1149,88 @@ class CameraMapControls {
 	}
 
 
-	updateMeasureArrow() {
+	refreshMeasureArrowVisuals() {
+		const g = globalMeasureState;
+		if (g.measureStart === null) return;
 
+		const A = g.startPoint;
+		const B = g.endPoint;
+		const Center = V3(0, -wgs84.RADIUS, 0)
+
+		const A_radius = A.clone().sub(Center).length()
+		const B_radius = B.clone().sub(Center).length()
+		const radius = Math.max(A_radius, B_radius)
+
+		const M = A.clone().add(B).multiplyScalar(0.5)
+		const C = pointOnSphereBelow(M, radius - wgs84.RADIUS);
+		const C_height = C.clone().sub(Center).length()
+		const M_height = M.clone().sub(Center).length()
+		const scale = C_height / M_height
+		const A2 = Center.clone().add(A.clone().sub(Center).multiplyScalar(scale))
+		const B2 = Center.clone().add(B.clone().sub(Center).multiplyScalar(scale))
+
+		g.measureStart.setXYZ(A2.x, A2.y, A2.z)
+		g.measureEnd.setXYZ(B2.x, B2.y, B2.z)
+
+		DebugArrowAB("globalMeasureDownA", A2, A, 0x00FF00, true, GlobalScene)
+		DebugArrowAB("globalMeasureDownB", B2, B, 0xFF0000, true, GlobalScene)
+	}
+
+	updateMeasureArrow() {
+		const topView = getTopViewWithCursor();
+		if (topView !== this.view) {
+			return;
+		}
+
+		const g = globalMeasureState;
 		const cursorPos = getCursorPositionFromTopView();
-		if (!cursorPos) return;
+		const vHeld = isKeyHeld('v');
+		const bHeld = isKeyHeld('b');
 
 		let update = false;
 
-		if (isKeyHeld('v')) {
-			this.measureStartPoint.set(cursorPos.x, cursorPos.y, cursorPos.z);
+		if (vHeld && cursorPos) {
+			if (!g.vKeyWasHeld) {
+				g.undoStartPoint = g.startPoint.clone();
+			}
+			g.startPoint.set(cursorPos.x, cursorPos.y, cursorPos.z);
 			update = true;
 		}
+		if (!vHeld && g.vKeyWasHeld && g.undoStartPoint && UndoManager) {
+			const oldPos = g.undoStartPoint.clone();
+			const newPos = g.startPoint.clone();
+			const self = this;
+			UndoManager.add({
+				description: "Move measure start point",
+				undo: () => { g.startPoint.copy(oldPos); self.refreshMeasureArrowVisuals(); },
+				redo: () => { g.startPoint.copy(newPos); self.refreshMeasureArrowVisuals(); }
+			});
+			g.undoStartPoint = null;
+		}
+		g.vKeyWasHeld = vHeld;
 
-		if (isKeyHeld('b')) {
-			this.measureEndPoint.set(cursorPos.x, cursorPos.y, cursorPos.z);
+		if (bHeld && cursorPos) {
+			if (!g.bKeyWasHeld) {
+				g.undoEndPoint = g.endPoint.clone();
+			}
+			g.endPoint.set(cursorPos.x, cursorPos.y, cursorPos.z);
 			update = true;
 		}
+		if (!bHeld && g.bKeyWasHeld && g.undoEndPoint && UndoManager) {
+			const oldPos = g.undoEndPoint.clone();
+			const newPos = g.endPoint.clone();
+			const self = this;
+			UndoManager.add({
+				description: "Move measure end point",
+				undo: () => { g.endPoint.copy(oldPos); self.refreshMeasureArrowVisuals(); },
+				redo: () => { g.endPoint.copy(newPos); self.refreshMeasureArrowVisuals(); }
+			});
+			g.undoEndPoint = null;
+		}
+		g.bKeyWasHeld = bHeld;
 
-
-		// move the end of the measure arrow
-		if (update && this.measureStart !== null) {
-			const A = this.measureStartPoint;
-			const B = this.measureEndPoint;
-			const Center = V3(0, -wgs84.RADIUS, 0)
-
-
-			// we need to raise up the line, so that it is above the globe
-
-
-			// for the radisu of the sphere used, use the largest of the two points
-			const A_radius = A.clone().sub(Center).length()
-			const B_radius = B.clone().sub(Center).length()
-			const radius = Math.max(A_radius, B_radius)
-
-
-			// find the center of the arc AB, centered on O
-			const M = A.clone().add(B).multiplyScalar(0.5)
-			// find the point on the sphere below AB
-			const C = pointOnSphereBelow(M, radius - wgs84.RADIUS); // passing in altitude above the wgst84 sphere
-			const C_height = C.clone().sub(Center).length()
-			const M_height = M.clone().sub(Center).length()
-			//		const A_height = A.clone().sub(Center).length()
-			//		const B_height = B.clone().sub(Center).length()
-			const scale = C_height / M_height
-			const A2 = Center.clone().add(A.clone().sub(Center).multiplyScalar(scale))
-			const B2 = Center.clone().add(B.clone().sub(Center).multiplyScalar(scale))
-
-			this.measureStart.setXYZ(A2.x, A2.y, A2.z)
-			this.measureEnd.setXYZ(B2.x, B2.y, B2.z)
-
-			this.measureDownA = DebugArrowAB("MeasureDownA", A2, A, 0x00FF00, true, GlobalScene)
-			this.measureDownB = DebugArrowAB("MeasureDownB", B2, B, 0xFF0000, true, GlobalScene)
+		if (update) {
+			this.refreshMeasureArrowVisuals();
 		}
 	}
 
