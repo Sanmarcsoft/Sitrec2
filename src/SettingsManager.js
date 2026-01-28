@@ -190,7 +190,10 @@ export async function loadSettingsFromServer() {
         
         if (data.settings) {
             const sanitized = sanitizeSettings(data.settings);
-            console.log("Loaded settings from server:", sanitized);
+//            console.log("Loaded settings from server:", sanitized);
+            // only log non-sensitive settings, for logging purposes
+            console.log("MaxDetails:", sanitized.maxDetails, "FPS Limit:", sanitized.fpsLimit, "Tile Segments:", sanitized.tileSegments, "Video Max Size:", sanitized.videoMaxSize);
+
             return sanitized;
         }
         

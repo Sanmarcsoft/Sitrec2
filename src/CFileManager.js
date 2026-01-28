@@ -1244,7 +1244,7 @@ export class CFileManager extends CManager {
                 loadingPromise = bufferPromise
                     .then(arrayBuffer => {
                         // parseAsset always returns a promise
-                        console.log(`<<< loadAsset() Loading Finished: ${filename} (id: ${id})`);
+//                        console.log(`<<< loadAsset() Loading Finished: ${filename} (id: ${id})`);
 
                         // always store the original
                         original = arrayBuffer;
@@ -1881,7 +1881,7 @@ export class CFileManager extends CManager {
      * @returns {Promise<{filename: string, parsed: *, dataType: string}|Array>} Parsed asset or array for archives
      */
     parseAsset(filename, id, buffer, metadata = null) {
-        console.log("CFileManager::parseAsset - " + filename + " for id: " + id + " buffer size: " + buffer.byteLength);
+//        console.log("CFileManager::parseAsset - " + filename + " for id: " + id + " buffer size: " + buffer.byteLength);
 
         // Check if it's a TS file first, these require special handling
         // as they can contain multiple streams inside them

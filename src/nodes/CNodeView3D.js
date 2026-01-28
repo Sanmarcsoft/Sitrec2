@@ -838,15 +838,15 @@ export class CNodeView3D extends CNodeViewCanvas {
         // Initialize GPU Memory Monitor on the first renderer created (only in local/dev mode)
         if (isLocal) {
             if (!Globals.GPUMemoryMonitor) {
-                console.log("[CNodeView3D] Creating new GPU Memory Monitor");
+//                console.log("[CNodeView3D] Creating new GPU Memory Monitor");
                 try {
                     const monitor = new GPUMemoryMonitor(this.renderer, GlobalScene);
                     setGPUMemoryMonitor(monitor);
-                    console.log("✓ GPU Memory Monitor initialized successfully");
+                    // console.log("✓ GPU Memory Monitor initialized successfully");
                     
                     // Make it globally accessible for testing
                     window._gpuMonitor = monitor;
-                    console.log("✓ Monitor available as: window._gpuMonitor or window.Globals.GPUMemoryMonitor");
+                    // console.log("✓ Monitor available as: window._gpuMonitor or window.Globals.GPUMemoryMonitor");
                 } catch (e) {
                     console.error("[CNodeView3D] Error initializing GPU Memory Monitor:", e);
                 }

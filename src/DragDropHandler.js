@@ -154,7 +154,7 @@ class CDragDropHandler {
         }
         
         if (this.dropZone !== undefined) {
-            console.warn("DropZone already exists");
+//            console.warn("DropZone already exists");
             return;
         }
         this.dropZone = document.createElement('div');

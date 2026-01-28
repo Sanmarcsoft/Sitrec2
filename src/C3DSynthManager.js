@@ -23,7 +23,7 @@ export class C3DSynthManager extends CManager {
         this.cloudsList = {};
         this.overlaysList = {};
         
-        console.log("C3DSynthManager initialized");
+//        console.log("C3DSynthManager initialized");
     }
     
     /**

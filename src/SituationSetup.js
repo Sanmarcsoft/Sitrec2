@@ -82,7 +82,7 @@ export function expandSitData(sitData, into = {}) {
         const data = sitData[key];
         if (key.startsWith("include_") && data) {
             const includeKey = key.slice(8);
-            console.log("+++ SituationSetup: including: " + includeKey)
+//            console.log("+++ SituationSetup: including: " + includeKey)
             expandSitData(SitchMan.get(includeKey), into);
         } else {
 //            console.log("### SituationSetup: adding: " + key )

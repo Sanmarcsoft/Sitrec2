@@ -138,7 +138,6 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             this.firstRenderTLE = true;
         });
 
-        console.log(process.env.MAPBOX_TOKEN)
         if (Globals.env?.SITREC_USE_CUSTOM_TLE) {
 
             const menuName = Globals.env.SITREC_CUSTOM_TLE_MENU_NAME || "Custom Satellites";

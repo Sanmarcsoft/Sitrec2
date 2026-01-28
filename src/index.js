@@ -145,7 +145,7 @@ document.addEventListener('touchmove', (event) => {
     }
 }, { passive: false });
 
-console.log ("SITREC START - index.js after imports")
+console.log ("SITREC START " + process.env.BUILD_VERSION_STRING);
 
 // This is the main entry point for the sitrec web application
 // However note that the imports above might have code that is executed
@@ -526,7 +526,7 @@ infoDiv.innerHTML = ""
 // Setup GPU Memory Monitor GUI
 if (Globals.GPUMemoryMonitor) {
     Globals.GPUMemoryMonitor.setupGUI(guiMenus);
-    console.log("GPU Memory Monitor GUI setup complete");
+//    console.log("GPU Memory Monitor GUI setup complete");
 }
 
 // Setup Visual Profiler (only if running locally)
@@ -558,7 +558,7 @@ if (isLocal) {
         .name('Tile Stats')
         .tooltip('Show tile statistics for subdivision and loading');
     
-    console.log("Visual Profiler controls added to Debug menu (local mode only)");
+//    console.log("Visual Profiler controls added to Debug menu (local mode only)");
 } else {
     console.log("Visual Profiler disabled (not running locally)");
 }
@@ -946,7 +946,7 @@ async function checkUserAgent() {
 }
 
 async function checkForTest() {
-    console.log("Testing = " + testing + " toTest = " + toTest)
+//    console.log("Testing = " + testing + " toTest = " + toTest)
     if (toTest !== undefined && toTest !== "") {
 //        var url = SITREC_APP + "?test=" + toTest
 //        window.location.assign(url)
@@ -972,9 +972,12 @@ async function checkForTest() {
         // to complete before we say we are finished
         await waitForAllPendingOperations();
 
-        testing = false;
         Globals.quickTerrain = false;
-        console.log("All tests complete");
+
+        if (testing) {
+            testing = false;
+            console.log("All tests complete");
+        }
     }
 }
 
@@ -1070,7 +1073,7 @@ async function newSitch(situation, customSetup = false ) {
 }
 
 async function initializeOnce() {
-    console.log('initializeOnce() function called');
+//    console.log('initializeOnce() function called');
 
     // check to see if the url has a ignoreunload parameter
     // if it does, then we don't ask the user if they want to leave the page
@@ -1132,10 +1135,10 @@ async function initializeOnce() {
 
     // Initialize settings early, before any nodes are created
     // This ensures Globals.settings is available for terrain, UI, and other components
-    console.log('Initializing global settings from storage');
+//    console.log('Initializing global settings from storage');
     await CustomManager.initializeSettings();
 
-    console.log('About to initialize NodeMan and DragDropHandler');
+//    console.log('About to initialize NodeMan and DragDropHandler');
     setNodeMan(new CNodeManager())
     setTrackManager(_TrackManager)
     setNodeFactory(new CNodeFactory(NodeMan))
@@ -1166,9 +1169,9 @@ async function initializeOnce() {
         readyElement.style.display = 'none';
         document.body.appendChild(readyElement);
         
-        console.log('Exposed to window:', { NodeMan: !!window.NodeMan, DragDropHandler: !!window.DragDropHandler });
-        console.log('Set SITREC_OBJECTS_READY flag:', window.SITREC_OBJECTS_READY);
-        console.log('Created DOM ready signal element');
+//        console.log('Exposed to window:', { NodeMan: !!window.NodeMan, DragDropHandler: !!window.DragDropHandler });
+//        console.log('Set SITREC_OBJECTS_READY flag:', window.SITREC_OBJECTS_READY);
+//        console.log('Created DOM ready signal element');
         
         // Also expose Sit when it's available
         if (typeof Sit !== 'undefined') {
@@ -1645,7 +1648,7 @@ async function setupFunctions() {
                     Sit.TerrainModel.lon = result.lon;
                 }
                 gotLocation = true;
-                console.log("Approximate location set to: " + Sit.lat + ", " + Sit.lon);
+//                console.log("Approximate location set to: " + Sit.lat + ", " + Sit.lon);
             } else {
                 console.warn("Failed to get approximate location, using default");
             }
@@ -1711,7 +1714,7 @@ async function setupFunctions() {
 //
 // Now that the assets are loaded, we can setup the situation
 // First we do the data-driven stuff by expanding and then parsing the Sit object
-    console.log("SituationSetup()")
+//    console.log("SituationSetup()")
     await SituationSetup(false);
 
 // jetStuff is set in Gimbal, GoFast, Agua, and FLIR1

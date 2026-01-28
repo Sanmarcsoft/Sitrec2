@@ -43,7 +43,7 @@ export async function getApproximateLocationFromIP() {
         const lon = parseFloat(data.longitude.toFixed(2));
         cachedLocation = { lat, lon };
         setCookie("sitrecLocation", JSON.stringify(cachedLocation), 7);
-        console.log("IP-based approximate location:", lat, lon);
+//        console.log("IP-based approximate location:", lat, lon);
         return cachedLocation;
     } catch (e) {
         console.warn("IP geolocation failed", e);

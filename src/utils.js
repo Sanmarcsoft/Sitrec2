@@ -1121,7 +1121,7 @@ export function updateNewCustomFields(sitchObject) {
 
 
                 } else {
-                    console.log("  updating existing forced node def for key: "+key);
+//                    console.log("  updating existing forced node def for key: "+key);
                     // if the DO exist, we overwrite the whole thing
                     // EXCEPT for any "visible" property
                     // this allows us to update the node def without losing visibility settings

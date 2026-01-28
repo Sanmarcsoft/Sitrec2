@@ -33,7 +33,7 @@ export async function getConfigFromServer() {
         const server_config = await response.json();
         console.log(server_config);
 
-        console.log("Loaded configuration from server URL: " + configURL);
+//        console.log("Loaded configuration from server URL: " + configURL);
 
         // assert(server_config, "No server configuration loaded");
         // assert(server_config.uploadURL === SITREC_UPLOAD, "Server upload URL does not match client upload URL " + server_config.uploadURL + " != " + SITREC_UPLOAD);
@@ -53,7 +53,7 @@ export function checkLocal() {
     isLocal =
         !isConsole &&
         regex.test(window.location.hostname);
-    console.log("isLocal: " + isLocal);
+//    console.log("isLocal: " + isLocal);
 }
 
 export let SITREC_DOMAIN;

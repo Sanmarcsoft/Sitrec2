@@ -18,7 +18,7 @@ export class CNodeTerrainUI extends CNode {
         v.id = "terrainUI"
         super(v);
 
-        console.log("CNodeTerrainUI: constructor with \n" + JSON.stringify(v));
+//        console.log("CNodeTerrainUI: constructor with \n" + JSON.stringify(v));
 
         assert (v.terrain === undefined, "CNodeTerrainUI: terrain node already exists, please remove it from the sit file")
 
