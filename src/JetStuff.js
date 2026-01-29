@@ -254,7 +254,9 @@ export function UpdateHUD(text="") {
 
     if (par.showKeyboardShortcuts) {
         keyInfo = text +
+            "Q - Move/Edit Views<br>" +
             "F - Full Screen<br>" +
+            "U - Toggle UI (menus)<br>" +
             "Num-1 - Z Axis Snap<br>" +
             "Num-7 - Y Axis Snap<br>" +
             "Num-3 - X Axis Snap<br>" +
@@ -267,9 +269,8 @@ export function UpdateHUD(text="") {
             "Right - Forwards<br>" +
             "Up - Faster Backwards<br>" +
             "Down - Faster Forwards<br>" +
-            "U - Toggle UI (menus)<br>" +
-            "G - Toggle Globe<br>" +
-            "A/B - Measure distance<br>" +
+            "V/B - Measure distance<br>" +
+            "Right Click - Context Menu<br>" +
 
             ""
 
