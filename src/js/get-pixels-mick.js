@@ -1,11 +1,10 @@
 "use strict"
 const ndarray = require("ndarray")
-import {Globals} from "../Globals";
 
 function logNetwork(url, status) {
-    if (Globals.regression) {
-        console.log(`[NET:${url}:${status}]`);
-    }
+    // if (Globals.regression) {
+    //     console.log(`[NET:${url}:${status}]`);
+    // }
 }
 
 // Web Worker code for processing images

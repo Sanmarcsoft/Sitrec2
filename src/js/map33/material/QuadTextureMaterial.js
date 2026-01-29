@@ -1,14 +1,13 @@
 import {CanvasTexture, TextureLoader} from "three";
 import {createTerrainDayNightMaterial} from "./TerrainDayNightMaterial";
 import {TileUsageTracker} from "../../../TileUsageTracker";
-import {Globals} from "../../../Globals";
 
 const loader = new TextureLoader()
 
 function logNetwork(url, status) {
-    if (Globals.regression) {
-        console.log(`[NET:${url}:${status}]`);
-    }
+    // if (Globals.regression) {
+    //     console.log(`[NET:${url}:${status}]`);
+    // }
 }
 
 
