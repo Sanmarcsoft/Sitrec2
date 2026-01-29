@@ -16,6 +16,7 @@ import * as LAYER from "./LayerMasks";
 import {getLocalUpVector} from "./SphericalMath";
 import {ViewMan} from "./CViewManager";
 import {mouseInViewOnly, mouseToViewNormalized} from "./ViewUtils";
+import {adjustHeightAboveGround} from "./threeExt";
 
 function createArrowGeometry() {
     const shaftRadius = 0.05;
@@ -230,11 +231,12 @@ export class PointEditorWidget extends EventDispatcher {
             return;
         }
         
-        const intersects = this.raycaster.intersectObjects([
-            this.handles.disc,
-            this.handles.arrowUp,
-            this.handles.arrowDown
-        ], true);
+        const objectsToTest = [this.handles.disc];
+        if (!this.altitudeLocked) {
+            objectsToTest.push(this.handles.arrowUp, this.handles.arrowDown);
+        }
+        
+        const intersects = this.raycaster.intersectObjects(objectsToTest, true);
         
         if (intersects.length === 0) {
             return;
@@ -336,7 +338,11 @@ export class PointEditorWidget extends EventDispatcher {
         }
         
         const offset = currentIntersect.clone().sub(this.dragStartIntersect);
-        const newPosition = this.dragStartWorld.clone().add(offset);
+        let newPosition = this.dragStartWorld.clone().add(offset);
+        
+        if (this.altitudeLocked && this.altitudeLockValue >= 0) {
+            newPosition = adjustHeightAboveGround(newPosition, this.altitudeLockValue);
+        }
         
         this.object.position.copy(newPosition);
         this.group.position.copy(this.object.position);
@@ -388,6 +394,17 @@ export class PointEditorWidget extends EventDispatcher {
     
     getRaycaster() {
         return this.raycaster;
+    }
+    
+    setAltitudeLocked(locked, altitudeValue = 0) {
+        this.altitudeLocked = locked;
+        this.altitudeLockValue = altitudeValue;
+        if (this.handles.arrowUp) {
+            this.handles.arrowUp.visible = !locked;
+        }
+        if (this.handles.arrowDown) {
+            this.handles.arrowDown.visible = !locked;
+        }
     }
     
     dispose() {

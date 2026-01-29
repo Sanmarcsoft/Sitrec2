@@ -1154,6 +1154,33 @@ class CTrackManager extends CManager {
             console.log(`Extrapolate track ${value ? 'enabled' : 'disabled'} for track: ${shortName}`);
         });
         
+        // Add curve type dropdown
+        const curveTypeOptions = ['linear', 'catmull', 'centripetal', 'chordal'];
+        guiFolder.add(trackOb, 'curveType', curveTypeOptions).name('Curve Type').onChange((value) => {
+            splineEditorNode.setCurveType(value);
+            console.log(`Curve type changed to ${value} for track: ${shortName}`);
+        });
+        
+        // Add altitude lock slider (-1 = off, >= 0 = lock to that AGL altitude in meters)
+        trackOb.altitudeLock = -1;
+        new CNodeGUIValue({
+            id: trackID + "_altitudeLock",
+            value: -1,
+            start: -1,
+            end: 1000,
+            step: 1,
+            desc: "Alt Lock (-1 = off)",
+            unitType: "small",
+            onChange: (v) => {
+                trackOb.altitudeLock = v;
+                splineEditorNode.setAltitudeLock(v);
+            },
+            elastic: true,
+            elasticMin: 1000,
+            elasticMax: 100000,
+            pruneIfUnused: true
+        }, guiFolder);
+        
         // Set initial edit mode state
         if (editMode) {
             splineEditor.setEnable(true);
@@ -1280,8 +1307,9 @@ class CTrackManager extends CManager {
         // Remove color constant
         NodeMan.unlinkDisposeRemove("colorSynthetic_" + trackID);
         
-        // Remove smoothing-related nodes
+        // Remove smoothing-related nodes and altitude lock
         NodeMan.unlinkDisposeRemove(trackID + "_smoothValue"); // Smoothing window GUI value
+        NodeMan.unlinkDisposeRemove(trackID + "_altitudeLock"); // Altitude lock GUI value
         NodeMan.unlinkDisposeRemove(trackID + "_unsmoothed"); // Unsmoothed spline editor
         NodeMan.unlinkDisposeRemove(trackID); // Smoothed track wrapper
         
@@ -1347,6 +1375,7 @@ class CTrackManager extends CManager {
                     editMode: trackOb.editMode,
                     constantSpeed: trackOb.constantSpeed,
                     extrapolateTrack: trackOb.extrapolateTrack,
+                    altitudeLock: trackOb.altitudeLock,
                     // Store color as hex number
                     color: trackOb.trackColor ? 
                         (Math.round(trackOb.trackColor.r * 255) << 16) |
@@ -1458,6 +1487,8 @@ class CTrackManager extends CManager {
                 if (trackOb) {
                     trackOb.constantSpeed = trackData.constantSpeed ?? false;
                     trackOb.extrapolateTrack = trackData.extrapolateTrack ?? true;
+                    trackOb.altitudeLock = trackData.altitudeLock ?? -1;
+                    trackOb.curveType = trackData.curveType ?? 'chordal';
                     
                     // Update the spline editor node with these properties
                     // Note: The actual spline editor is the _unsmoothed node
@@ -1466,6 +1497,20 @@ class CTrackManager extends CManager {
                     if (splineEditorNode) {
                         splineEditorNode.constantSpeed = trackOb.constantSpeed;
                         splineEditorNode.extrapolateTrack = trackOb.extrapolateTrack;
+                        // Set altitude lock directly without triggering recalculate
+                        // The final recalculateAllRootFirst() will handle it
+                        splineEditorNode.altitudeLock = trackOb.altitudeLock;
+                        splineEditorNode.updateAltitudeLock();
+                        // Update curve type
+                        if (trackOb.curveType && typeof splineEditorNode.setCurveType === 'function') {
+                            splineEditorNode.setCurveType(trackOb.curveType);
+                        }
+                        
+                        // Update the GUI slider value if it exists
+                        const altLockNode = NodeMan.get(trackOb.trackID + "_altitudeLock", false);
+                        if (altLockNode) {
+                            altLockNode.value = trackOb.altitudeLock;
+                        }
                         
                         // Ensure edit mode is disabled after deserialization
                         // Transform controls should not be visible when loading a saved situation
@@ -1473,6 +1518,17 @@ class CTrackManager extends CManager {
                         if (splineEditorNode.splineEditor) {
                             splineEditorNode.splineEditor.setEnable(false);
                         }
+                    }
+                    
+                    // Force recalculate the spline editor with altitude lock, then display track
+                    if (splineEditorNode) {
+                        splineEditorNode.recalculate();
+                    }
+                    if (trackOb.smoothedTrackNode) {
+                        trackOb.smoothedTrackNode.recalculate();
+                    }
+                    if (trackOb.displayTrack) {
+                        trackOb.displayTrack.recalculate();
                     }
                 }
                 

@@ -25,8 +25,10 @@ export class   SplineEditor extends PointEditor{
         geometry.setAttribute('position', new BufferAttribute(new Float32Array(this.ARC_SEGMENTS * 3), 3));
 
         this.spline = new CatmullRomCurve3(this.positions);
+        // Store curve type for linear mode support
+        this.curveType = curveType;
         // 'chordal' gives a smooth velocity across the segment.
-        this.spline.curveType = curveType; // centripetal, chordal, catmullrom
+        this.spline.curveType = curveType === 'catmull' ? 'catmullrom' : curveType;
         this.spline.mesh = new Line(geometry.clone(), new LineBasicMaterial({
             color: 0x00ff00,
             opacity: 0.35
@@ -60,6 +62,9 @@ export class   SplineEditor extends PointEditor{
 
     // get value at t (parametric input, 0..1) into the vector point
     getPoint(t,point) {
+        if (this.curveType === 'linear' || this.numPoints < 2) {
+            return super.getPoint(t, point);
+        }
         return this.spline.getPoint(t,point)
     }
 
@@ -68,15 +73,22 @@ export class   SplineEditor extends PointEditor{
         super.updatePointEditorGraphics()
 
         const point = new Vector3();
-        const spline = this.spline;
-        const splineMesh = spline.mesh;
+        const splineMesh = this.spline.mesh;
         const position = splineMesh.geometry.attributes.position;
         for (let i = 0; i < this.ARC_SEGMENTS; i++) {
             const t = i / (this.ARC_SEGMENTS - 1);
-            spline.getPoint(t, point);
+            this.getPoint(t, point);
             position.setXYZ(i, point.x, point.y, point.z);
         }
         position.needsUpdate = true;
+    }
+
+    setCurveType(type) {
+        this.curveType = type;
+        if (type !== 'linear') {
+            this.spline.curveType = type === 'catmull' ? 'catmullrom' : type;
+        }
+        this.updatePointEditorGraphics();
     }
 
     /**

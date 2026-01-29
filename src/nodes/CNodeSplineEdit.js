@@ -1,11 +1,12 @@
 import {SplineEditor} from "../SplineEditor";
 import {guiMenus, NodeMan, Sit, TrackManager} from "../Globals";
 import {Vector3} from "three";
-import {PointEditor} from "../PointEditor";
 import {getCameraNode} from "./CNodeCamera";
 import {assert} from "../assert.js";
 import {CNodeTrack} from "./CNodeTrack";
 import {EUSToLLA, LLAVToEUS} from "../LLA-ECEF-ENU";
+import {adjustHeightAboveGround} from "../threeExt";
+import {EventManager} from "../CEventManager";
 
 // a node wrapper for varioius spline editors
 export class CNodeSplineEditor extends CNodeTrack {
@@ -20,6 +21,9 @@ export class CNodeSplineEditor extends CNodeTrack {
         // Default to extrapolating beyond first/last control points
         this.extrapolateTrack = true;
         
+        // Store the curve type
+        this.curveType = v.type ? v.type.toLowerCase() : 'chordal';
+        
         assert(v.view !== undefined, "CNodeSplineEditor needs a view");
         const view = NodeMan.get(v.view) // convert id to node, if needed
         const renderer = view.renderer;
@@ -27,27 +31,12 @@ export class CNodeSplineEditor extends CNodeTrack {
 
         const camera = getCameraNode(v.camera).camera;
 
-        switch (v.type.toLowerCase()) {
-            case "catmull":
-            case "centripetal":
-            case "chordal":
-                if (v.initialPointsLLA === undefined) {
-                    this.splineEditor = new SplineEditor(v.scene, camera, renderer, controls, () => this.recalculateCascade(),
-                        v.initialPoints, false, v.type.toLowerCase())
-                } else {
-                    this.splineEditor = new SplineEditor(v.scene, camera, renderer, controls, () => this.recalculateCascade(),
-                        v.initialPointsLLA, true, v.type.toLowerCase())
-                }
-                break;
-            case "linear":
-            default:
-                if (v.initialPointsLLA === undefined) {
-                    this.splineEditor = new PointEditor(v.scene, camera, renderer, controls, () => this.recalculateCascade(),
-                        v.initialPoints, false)
-                } else {
-                    this.splineEditor = new PointEditor(v.scene, camera, renderer, controls, () => this.recalculateCascade(),
-                        v.initialPointsLLA, true)
-                }
+        if (v.initialPointsLLA === undefined) {
+            this.splineEditor = new SplineEditor(v.scene, camera, renderer, controls, () => this.recalculateCascade(),
+                v.initialPoints, false, v.type.toLowerCase())
+        } else {
+            this.splineEditor = new SplineEditor(v.scene, camera, renderer, controls, () => this.recalculateCascade(),
+                v.initialPointsLLA, true, v.type.toLowerCase())
         }
         
         // Store reference to parent node so PointEditor can access extrapolateTrack setting
@@ -71,6 +60,11 @@ export class CNodeSplineEditor extends CNodeTrack {
             this.gui.add(this,"exportSpline")
         }
 
+        EventManager.addEventListener("elevationChanged", () => {
+            if (this.altitudeLock !== undefined && this.altitudeLock >= 0) {
+                this.recalculateCascade();
+            }
+        });
 
         this.recalculate()
         this.splineEditor.updatePointEditorGraphics()
@@ -109,6 +103,8 @@ export class CNodeSplineEditor extends CNodeTrack {
             positions: positions,
             constantSpeed: this.constantSpeed,
             extrapolateTrack: this.extrapolateTrack,
+            altitudeLock: this.altitudeLock,
+            curveType: this.curveType,
         }
     }
 
@@ -132,9 +128,41 @@ export class CNodeSplineEditor extends CNodeTrack {
         if (v.extrapolateTrack !== undefined) {
             this.extrapolateTrack = v.extrapolateTrack
         }
+        if (v.altitudeLock !== undefined) {
+            this.altitudeLock = v.altitudeLock
+            this.updateAltitudeLock()
+        }
+        if (v.curveType !== undefined) {
+            this.setCurveType(v.curveType)
+        }
+    }
+    
+    setAltitudeLock(value) {
+        this.altitudeLock = value;
+        this.updateAltitudeLock();
+        this.recalculateCascade();
+    }
+    
+    updateAltitudeLock() {
+        if (this.splineEditor && this.splineEditor.transformControl) {
+            this.splineEditor.transformControl.setAltitudeLocked(this.altitudeLock >= 0, this.altitudeLock);
+        }
+    }
+    
+    applyAltitudeLock(position) {
+        if (this.altitudeLock !== undefined && this.altitudeLock >= 0) {
+            return adjustHeightAboveGround(position, this.altitudeLock);
+        }
+        return position;
     }
 
-
+    setCurveType(type) {
+        this.curveType = type;
+        if (this.splineEditor && typeof this.splineEditor.setCurveType === 'function') {
+            this.splineEditor.setCurveType(type);
+            this.recalculateCascade();
+        }
+    }
 
     exportSpline() {
         this.splineEditor.exportSpline()
@@ -284,7 +312,7 @@ export class CNodeSplineEditor extends CNodeTrack {
                 // Get position at this t value
                 var framePos = new Vector3();
                 this.splineEditor.getPoint(t, framePos);
-                this.array.push({position: framePos});
+                this.array.push({position: this.applyAltitudeLock(framePos)});
             }
         } else {
             // TIME-BASED MODE: Use frame numbers to determine position (original behavior)
@@ -292,7 +320,7 @@ export class CNodeSplineEditor extends CNodeTrack {
             // and will work out the t value for you
           for (var i=0;i<this.frames;i++) {
               var pos = this.splineEditor.getPointFrame(i)
-              this.array.push({position:pos})
+              this.array.push({position: this.applyAltitudeLock(pos)})
           }
         }
     }

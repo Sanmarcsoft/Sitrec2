@@ -483,6 +483,12 @@ export class PointEditor {
     // spline editors will override with a more complex one to get points
     // along a curve, but here we can just interpolate between the points
     getPoint(t,point) {
+        if (this.numPoints < 2) {
+            if (this.numPoints === 1) {
+                point.copy(this.positions[0]);
+            }
+            return;
+        }
         // first find point A and B such that t is between the
         let a = Math.floor(t * (this.numPoints-1))
         if (t >= 1.0) a = this.numPoints - 2; // exception for t =1
