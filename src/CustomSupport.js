@@ -3701,6 +3701,7 @@ export class CCustomManager {
                 }
 
                 this.staticURL = staticURL;
+                FileManager.loadURL = staticURL;
 
                 // and make a URL that points to the new sitch
                 let paramName = "custom"
