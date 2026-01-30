@@ -1513,26 +1513,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         
         this.guiFolder.add({goto: () => this.gotoOverlay()}, 'goto').name('Go to Overlay');
         
-        this.guiFolder.add({remove: () => {
-            if (confirm(`Delete overlay "${this.name}"?`)) {
-                if (UndoManager) {
-                    const overlayState = this.serialize();
-                    const overlayID = this.overlayID;
-                    
-                    UndoManager.add({
-                        undo: () => {
-                            Synth3DManager.addOverlay(overlayState);
-                        },
-                        redo: () => {
-                            Synth3DManager.removeOverlay(overlayID);
-                        },
-                        description: `Delete overlay "${this.name}"`
-                    });
-                }
-                
-                Synth3DManager.removeOverlay(this.overlayID);
-            }
-        }}, 'remove').name('Delete Overlay');
+        this.guiFolder.add({remove: () => this.deleteOverlay()}, 'remove').name('Delete Overlay');
         
         this.guiFolder.domElement.addEventListener('mouseenter', () => {
             this.showHighlightBorder();
@@ -1621,7 +1602,31 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         this.updateGUIControllers();
         setRenderOne(true);
     }
-    
+
+    /**
+     * Delete this overlay with confirmation and undo support
+     */
+    deleteOverlay() {
+        if (confirm(`Delete overlay "${this.name}"?`)) {
+            if (UndoManager) {
+                const overlayState = this.serialize();
+                const overlayID = this.overlayID;
+
+                UndoManager.add({
+                    undo: () => {
+                        Synth3DManager.addOverlay(overlayState);
+                    },
+                    redo: () => {
+                        Synth3DManager.removeOverlay(overlayID);
+                    },
+                    description: `Delete overlay "${this.name}"`
+                });
+            }
+
+            Synth3DManager.removeOverlay(this.overlayID);
+        }
+    }
+
     serialize() {
         let imageURL = this.imageURL;
         if (this.imageFileID && FileManager.exists(this.imageFileID)) {

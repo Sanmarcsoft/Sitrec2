@@ -2458,26 +2458,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             .onChange(() => this.rebuildMaterial());
         
         const actions = {
-            delete: () => {
-                if (confirm(`Delete building "${this.name}"?`)) {
-                    if (UndoManager) {
-                        const buildingState = this.serialize();
-                        const buildingID = this.buildingID;
-                        
-                        UndoManager.add({
-                            undo: () => {
-                                Synth3DManager.addBuilding(buildingState);
-                            },
-                            redo: () => {
-                                Synth3DManager.removeBuilding(buildingID);
-                            },
-                            description: `Delete building "${this.name}"`
-                        });
-                    }
-                    
-                    Synth3DManager.removeBuilding(this.buildingID);
-                }
-            }
+            delete: () => this.deleteBuilding()
         };
         this.guiFolder.add(actions, 'delete').name('Delete Building');
         
@@ -2573,7 +2554,31 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         
         return duplicate;
     }
-    
+
+    /**
+     * Delete this building with confirmation and undo support
+     */
+    deleteBuilding() {
+        if (confirm(`Delete building "${this.name}"?`)) {
+            if (UndoManager) {
+                const buildingState = this.serialize();
+                const buildingID = this.buildingID;
+
+                UndoManager.add({
+                    undo: () => {
+                        Synth3DManager.addBuilding(buildingState);
+                    },
+                    redo: () => {
+                        Synth3DManager.removeBuilding(buildingID);
+                    },
+                    description: `Delete building "${this.name}"`
+                });
+            }
+
+            Synth3DManager.removeBuilding(this.buildingID);
+        }
+    }
+
     /**
      * Serialize to save data
      */

@@ -392,6 +392,20 @@ export function initKeyboard() {
                 setRenderOne(2);
                 break;
 
+            // Delete key triggers delete for currently editing object
+            case 'Delete':
+            case 'Backspace':
+                if (Globals.editingBuilding) {
+                    e.preventDefault();
+                    Globals.editingBuilding.deleteBuilding();
+                } else if (Globals.editingClouds) {
+                    e.preventDefault();
+                    Globals.editingClouds.deleteClouds();
+                } else if (Globals.editingOverlay) {
+                    e.preventDefault();
+                    Globals.editingOverlay.deleteOverlay();
+                }
+                break;
 
         }
 

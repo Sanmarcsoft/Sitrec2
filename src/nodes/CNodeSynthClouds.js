@@ -994,26 +994,7 @@ export class CNodeSynthClouds extends CNode3DGroup {
         this.windKnotsController.show(this.windMode === "Custom");
         
         const actions = {
-            delete: () => {
-                if (confirm(`Delete cloud layer "${this.name}"?`)) {
-                    if (UndoManager) {
-                        const cloudsState = this.serialize();
-                        const cloudsID = this.cloudsID;
-                        
-                        UndoManager.add({
-                            undo: () => {
-                                Synth3DManager.addClouds(cloudsState);
-                            },
-                            redo: () => {
-                                Synth3DManager.removeClouds(cloudsID);
-                            },
-                            description: `Delete cloud layer "${this.name}"`
-                        });
-                    }
-                    
-                    Synth3DManager.removeClouds(this.cloudsID);
-                }
-            }
+            delete: () => this.deleteClouds()
         };
         this.guiFolder.add(actions, 'delete').name('Delete Clouds');
     }
@@ -1047,7 +1028,31 @@ export class CNodeSynthClouds extends CNode3DGroup {
         this.updateGUIControllers();
         setRenderOne(true);
     }
-    
+
+    /**
+     * Delete this cloud layer with confirmation and undo support
+     */
+    deleteClouds() {
+        if (confirm(`Delete cloud layer "${this.name}"?`)) {
+            if (UndoManager) {
+                const cloudsState = this.serialize();
+                const cloudsID = this.cloudsID;
+
+                UndoManager.add({
+                    undo: () => {
+                        Synth3DManager.addClouds(cloudsState);
+                    },
+                    redo: () => {
+                        Synth3DManager.removeClouds(cloudsID);
+                    },
+                    description: `Delete cloud layer "${this.name}"`
+                });
+            }
+
+            Synth3DManager.removeClouds(this.cloudsID);
+        }
+    }
+
     serialize() {
         return {
             id: this.cloudsID,
