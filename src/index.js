@@ -1411,6 +1411,11 @@ async function initializeOnce() {
     addObjectTrackingMenu();
     setUnits(new CUnits("Nautical"));
     setFileManager(new CFileManager())
+    
+    const customURL = urlParams.get("custom") || urlParams.get("mod");
+    if (customURL) {
+        FileManager.loadURL = customURL;
+    }
 
     window.FileManager = FileManager;
 

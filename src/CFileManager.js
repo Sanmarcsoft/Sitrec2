@@ -497,6 +497,27 @@ export class CFileManager extends CManager {
             addOptionToGUIMenu(this.guiVersions, displayName, displayName);
         }
         
+        this.setVersionFromLoadURL();
+    }
+    
+    setVersionFromLoadURL() {
+        if (!this.guiVersions || !this.loadURL || !this.versionsData.length) {
+            this.versionName = "-";
+            this.guiVersions?.updateDisplay();
+            return;
+        }
+        
+        const decodedLoadURL = decodeURIComponent(this.loadURL);
+        for (let i = 0; i < this.versionsData.length; i++) {
+            const decodedVersionURL = decodeURIComponent(this.versionsData[i].url);
+            if (decodedVersionURL === decodedLoadURL) {
+                const versionIndex = this.versionsData.length - 1 - i;
+                this.versionName = this.versionsList[versionIndex + 1];
+                this.guiVersions.updateDisplay();
+                return;
+            }
+        }
+        
         this.versionName = "-";
         this.guiVersions.updateDisplay();
     }
