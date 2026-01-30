@@ -1,4 +1,4 @@
-import {Globals, gui, guiShowHide, NodeMan, setRenderOne, Sit, UndoManager} from "./Globals";
+import {FileManager, Globals, gui, guiShowHide, NodeMan, setRenderOne, Sit, UndoManager} from "./Globals";
 import {par} from "./par";
 import {closeFullscreen, openFullscreen} from "./utils";
 import {Vector3} from "three";
@@ -275,6 +275,14 @@ export function initKeyboard() {
 
         const keyCode = e.code
         const key = e.key.toLowerCase()
+
+        if ((e.ctrlKey || e.metaKey) && keyCode === 'KeyS') {
+            e.preventDefault();
+            if (FileManager && FileManager.saveSitchFromMenu) {
+                FileManager.saveSitchFromMenu();
+            }
+            return;
+        }
 
         KeyMan.handleKeyDown(e);
 

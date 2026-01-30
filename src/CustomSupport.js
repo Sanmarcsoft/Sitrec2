@@ -3665,7 +3665,7 @@ export class CCustomManager {
         }
 
         console.log("ABOUT TO REHOST DYNAMIC LINKS FOR SERIALIZE")
-        return FileManager.rehostDynamicLinks(true).then(() => {
+        return FileManager.rehostDynamicLinks(true).then(async () => {
 
             console.log("GETTING CUSTOM SITCH STRING AFTER REHOSTING DYNAMIC LINKS")
             // get the string again, now that dynamic links have been rehosted
@@ -3676,9 +3676,18 @@ export class CCustomManager {
                 name = "Custom.js"
             }
 
-            // and rehost it, showing a link
-            // TODO:  Note, if the file is unchanged from the last time it was rehosted,
-            // TODO: then the URL will be the same
+            if (FileManager.loadURL) {
+                try {
+                    const currentResponse = await fetch(FileManager.loadURL);
+                    const currentContent = await currentResponse.text();
+                    if (currentContent === str) {
+                        console.log("No changes to save - content identical to current version");
+                        return;
+                    }
+                } catch (e) {
+                    console.log("Could not fetch current version for comparison, proceeding with save");
+                }
+            }
 
             return FileManager.rehoster.rehostFile(name, str, version + ".js").then((staticURL) => {
                 console.log("✓ Sitch rehosted as " + staticURL);
