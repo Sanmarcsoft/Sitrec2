@@ -214,14 +214,16 @@ export class CVideoData {
         }
 
         const f = Math.floor(frame);
-        const isExactFrame = sourceFrame === undefined || Math.floor(sourceFrame) === f;
+        const sf = sourceFrame !== undefined ? Math.floor(sourceFrame) : f;
+        const isExactFrame = sf === f;
 
         // Only use cache if this is the exact frame (not a substitute)
         if (isExactFrame && this.stabilizedImageCache[f]) {
             return this.stabilizedImageCache[f];
         }
 
-        const trackPos = interpolatePosition(this.stabilizationData, f);
+        // Use source frame's stabilization offset when using substitute image
+        const trackPos = interpolatePosition(this.stabilizationData, sf);
         if (!trackPos) {
             return originalImage;
         }
