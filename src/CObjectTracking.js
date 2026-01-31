@@ -1,8 +1,10 @@
-import {Globals, guiMenus, NodeMan, setRenderOne, Sit, unregisterFrameBlocker} from "./Globals";
+import {GlobalDateTimeNode, Globals, guiMenus, NodeMan, setRenderOne, Sit, unregisterFrameBlocker} from "./Globals";
 import {par} from "./par";
 import {getCV, loadOpenCV} from "./openCVLoader";
 import {interpolatePosition} from "./CVideoData";
 import {EventManager} from "./CEventManager";
+import {createVideoExporter, DefaultVideoFormat, getBestFormatForResolution, getVideoExtension} from "./VideoExporter";
+import {drawVideoWatermark, ExportProgressWidget} from "./utils";
 
 let cv = null;
 
@@ -910,6 +912,191 @@ function toggleStabilization() {
     setRenderOne(true);
 }
 
+// Calculate the stabilization offset bounds across all frames
+function getStabilizationBounds() {
+    if (!objectTracker || !objectTracker.trackedPositions || objectTracker.trackedPositions.size === 0) {
+        return null;
+    }
+
+    const videoView = objectTracker.videoView;
+    const videoData = videoView?.videoData;
+    if (!videoData) return null;
+
+    const firstFrame = Math.min(...objectTracker.trackedPositions.keys());
+    const referencePoint = objectTracker.trackedPositions.get(firstFrame);
+    if (!referencePoint) return null;
+
+    let minX = 0, maxX = 0, minY = 0, maxY = 0;
+
+    for (const [frame, pos] of objectTracker.trackedPositions) {
+        const shiftX = referencePoint.x - pos.x;
+        const shiftY = referencePoint.y - pos.y;
+        minX = Math.min(minX, shiftX);
+        maxX = Math.max(maxX, shiftX);
+        minY = Math.min(minY, shiftY);
+        maxY = Math.max(maxY, shiftY);
+    }
+
+    return { minX, maxX, minY, maxY };
+}
+
+async function renderStabilizedVideo(expanded = false) {
+    if (!objectTracker || !objectTracker.enabled) {
+        alert("Please enable tracking first and track an object before rendering.");
+        return;
+    }
+
+    if (objectTracker.trackedPositions.size === 0) {
+        alert("No tracking data available. Please track an object first.");
+        return;
+    }
+
+    const videoView = objectTracker.videoView;
+    const videoData = videoView?.videoData;
+
+    if (!videoData) {
+        alert("No video data available.");
+        return;
+    }
+
+    const startFrame = Sit.aFrame;
+    const endFrame = Sit.bFrame;
+    const totalFrames = endFrame - startFrame + 1;
+    const fps = Sit.fps;
+
+    // Get video dimensions
+    let width = videoData.videoWidth;
+    let height = videoData.videoHeight;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    // For expanded mode, calculate extra canvas size needed
+    if (expanded) {
+        const bounds = getStabilizationBounds();
+        if (bounds) {
+            // Expand canvas to fit all shifts
+            const extraLeft = Math.ceil(Math.abs(Math.min(0, bounds.minX)));
+            const extraRight = Math.ceil(Math.max(0, bounds.maxX));
+            const extraTop = Math.ceil(Math.abs(Math.min(0, bounds.minY)));
+            const extraBottom = Math.ceil(Math.max(0, bounds.maxY));
+
+            width += extraLeft + extraRight;
+            height += extraTop + extraBottom;
+            offsetX = extraLeft;
+            offsetY = extraTop;
+        }
+    }
+
+    const bestFormat = await getBestFormatForResolution(DefaultVideoFormat, width, height);
+    if (!bestFormat.formatId) {
+        alert(`Video export failed: ${bestFormat.reason}`);
+        return;
+    }
+
+    const formatId = bestFormat.formatId;
+    const extension = getVideoExtension(formatId);
+    const modeLabel = expanded ? "expanded" : "original size";
+
+    console.log(`Starting stabilized video export (${modeLabel}, ${formatId}): ${totalFrames} frames at ${fps} fps, ${width}x${height}`);
+
+    const savedFrame = par.frame;
+    const savedPaused = par.paused;
+    const savedStabilizationEnabled = videoData.stabilizationEnabled;
+    par.paused = true;
+
+    const progress = new ExportProgressWidget(`Exporting stabilized video (${modeLabel})...`, totalFrames);
+
+    const videoStartDate = GlobalDateTimeNode ? GlobalDateTimeNode.frameToDate(startFrame) : null;
+
+    // Get reference point for stabilization
+    const firstFrame = Math.min(...objectTracker.trackedPositions.keys());
+    const referencePoint = objectTracker.trackedPositions.get(firstFrame);
+
+    const compositeCanvas = document.createElement('canvas');
+    compositeCanvas.width = width;
+    compositeCanvas.height = height;
+    const compositeCtx = compositeCanvas.getContext('2d');
+
+    try {
+        const exporter = await createVideoExporter(formatId, {
+            width,
+            height,
+            fps,
+            bitrate: 5_000_000,
+            keyFrameInterval: 30,
+            videoStartDate,
+            hardwareAcceleration: bestFormat.hardwareAcceleration,
+        });
+
+        await exporter.initialize();
+
+        for (let i = 0; i < totalFrames; i++) {
+            if (progress.shouldStop()) break;
+
+            const frame = startFrame + i;
+            par.frame = frame;
+
+            // Wait for video frame
+            videoData.getImage(frame);
+            await videoData.waitForFrame(frame);
+
+            const originalImage = videoData.imageCache[frame];
+            if (!originalImage || !originalImage.width) continue;
+
+            // Calculate stabilization shift for this frame
+            const trackPos = interpolatePosition(objectTracker.trackedPositions, frame);
+            let shiftX = 0, shiftY = 0;
+            if (trackPos && referencePoint) {
+                shiftX = referencePoint.x - trackPos.x;
+                shiftY = referencePoint.y - trackPos.y;
+            }
+
+            // Clear and draw stabilized frame
+            compositeCtx.fillStyle = 'black';
+            compositeCtx.fillRect(0, 0, width, height);
+            compositeCtx.drawImage(originalImage, offsetX + shiftX, offsetY + shiftY);
+
+            drawVideoWatermark(compositeCtx, width);
+
+            await exporter.addFrame(compositeCanvas, i);
+
+            if (i % 10 === 0) {
+                progress.update(i + 1);
+                await new Promise(r => setTimeout(r, 0));
+            }
+        }
+
+        if (progress.shouldSave()) {
+            const blob = await exporter.finalize(
+                (current, total) => progress.setFinalizeProgress(current, total),
+                (status) => progress.setStatus(status)
+            );
+
+            const filename = `stabilized_${expanded ? 'expanded_' : ''}${Sit.name || 'export'}_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.${extension}`;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            console.log(`Stabilized video export complete: ${filename}`);
+        } else {
+            console.log('Stabilized video export aborted by user');
+        }
+
+    } catch (e) {
+        console.error('Export failed:', e);
+        alert('Video export failed: ' + e.message);
+    } finally {
+        progress.remove();
+        par.frame = savedFrame;
+        par.paused = savedPaused;
+        videoData.stabilizationEnabled = savedStabilizationEnabled;
+        setRenderOne(true);
+    }
+}
+
 let radiusController = null;
 let stabilizeToggleMenuItem = null;
 
@@ -925,6 +1112,8 @@ export function addObjectTrackingMenu() {
         clearTrack: clearTrack,
         stabilizeVideo: stabilizeVideo,
         toggleStabilization: toggleStabilization,
+        renderStabilized: () => renderStabilizedVideo(false),
+        renderStabilizedExpanded: () => renderStabilizedVideo(true),
     };
 
     enableMenuItem = trackingFolder.add(menuActions, 'enableTracking')
@@ -955,6 +1144,16 @@ export function addObjectTrackingMenu() {
     stabilizeToggleMenuItem = trackingFolder.add(menuActions, 'toggleStabilization')
         .name("Enable Stabilization")
         .tooltip("Toggle video stabilization on/off")
+        .perm();
+
+    trackingFolder.add(menuActions, 'renderStabilized')
+        .name("Render Stabilized Video")
+        .tooltip("Export stabilized video at original size (tracked point stays fixed, edges may show black)")
+        .perm();
+
+    trackingFolder.add(menuActions, 'renderStabilizedExpanded')
+        .name("Render Stabilized Expanded")
+        .tooltip("Export stabilized video with expanded canvas so no pixels are lost")
         .perm();
 
     const radiusParams = {
