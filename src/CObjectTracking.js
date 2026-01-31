@@ -45,9 +45,12 @@ class ObjectTracker {
         // Tracking method: 'template' (OpenCV template matching) or 'opticalflow' (jsfeat Lucas-Kanade)
         this.trackingMethod = 'template';
 
-        // Optical flow state
-        this.prevGrayImage = null;
-        this.currGrayImage = null;
+        // Optical flow state (for absolute tracking from initial frame)
+        this.initialGrayImage = null;
+        this.initialPyramid = null;
+        this.initialKeypoints = null;
+        this.initialKeypointCoords = null;
+        this.initialCenter = null;
 
         // Store initial template for absolute tracking (prevents drift)
         this.initialTemplate = null;
@@ -305,6 +308,12 @@ class ObjectTracker {
         }
         this.initialTemplate = null;
         this.initialTemplateFrame = null;
+        
+        this.initialGrayImage = null;
+        this.initialPyramid = null;
+        this.initialKeypoints = null;
+        this.initialKeypointCoords = null;
+        this.initialCenter = null;
     }
     
     isWithinTrackPoint(vX, vY) {
@@ -536,18 +545,8 @@ class ObjectTracker {
             return;
         }
 
-        const prevImage = videoData.getImage(frame - 1);
-        if (!prevImage || !prevImage.width) return;
-
         const width = currImage.width || currImage.videoWidth;
         const height = currImage.height || currImage.videoHeight;
-
-        const prevCanvas = document.createElement('canvas');
-        prevCanvas.width = width;
-        prevCanvas.height = height;
-        const prevCtx = prevCanvas.getContext('2d');
-        prevCtx.drawImage(prevImage, 0, 0, width, height);
-        const prevImageData = prevCtx.getImageData(0, 0, width, height);
 
         const currCanvas = document.createElement('canvas');
         currCanvas.width = width;
@@ -556,68 +555,78 @@ class ObjectTracker {
         currCtx.drawImage(currImage, 0, 0, width, height);
         const currImageData = currCtx.getImageData(0, 0, width, height);
 
-        const prevGray = new jsfeat.matrix_t(width, height, jsfeat.U8_t | jsfeat.C1_t);
         const currGray = new jsfeat.matrix_t(width, height, jsfeat.U8_t | jsfeat.C1_t);
-
-        jsfeat.imgproc.grayscale(prevImageData.data, width, height, prevGray);
         jsfeat.imgproc.grayscale(currImageData.data, width, height, currGray);
 
-        // Build image pyramids (required by optical_flow_lk)
+        if (!this.initialPyramid || !this.initialKeypoints) {
+            const roiX = Math.max(0, Math.floor(prevPos.x - this.trackRadius));
+            const roiY = Math.max(0, Math.floor(prevPos.y - this.trackRadius));
+            const roiW = Math.min(this.trackRadius * 2, width - roiX);
+            const roiH = Math.min(this.trackRadius * 2, height - roiY);
+
+            if (roiW < 11 || roiH < 7) {
+                this.trackX = prevPos.x;
+                this.trackY = prevPos.y;
+                this.trackedPositions.set(frame, {x: this.trackX, y: this.trackY});
+                this.updateSliderStatus();
+                return;
+            }
+
+            this.initialGrayImage = currGray;
+            const pyrLevels = 3;
+            this.initialPyramid = new jsfeat.pyramid_t(pyrLevels);
+            this.initialPyramid.allocate(width, height, jsfeat.U8_t | jsfeat.C1_t);
+            this.initialPyramid.build(currGray, false);
+
+            const cornerMat = new jsfeat.matrix_t(roiW, roiH, jsfeat.U8_t | jsfeat.C1_t);
+            for (let y = 0; y < roiH; y++) {
+                for (let x = 0; x < roiW; x++) {
+                    cornerMat.data[y * roiW + x] = currGray.data[(roiY + y) * width + (roiX + x)];
+                }
+            }
+
+            const maxCorners = Math.ceil((roiW * roiH) / 4);
+            const cornersArray = [];
+            for (let i = 0; i < maxCorners; i++) {
+                cornersArray.push(new jsfeat.keypoint_t(0, 0, 0, 0));
+            }
+
+            jsfeat.yape06.laplacian_threshold = 30;
+            jsfeat.yape06.min_eigen_value_threshold = 25;
+            const detectedCount = jsfeat.yape06.detect(cornerMat, cornersArray, 5);
+            const count = Math.min(detectedCount, 100);
+
+            if (count === 0) {
+                this.trackX = prevPos.x;
+                this.trackY = prevPos.y;
+                this.trackedPositions.set(frame, {x: this.trackX, y: this.trackY});
+                this.updateSliderStatus();
+                this.initialPyramid = null;
+                return;
+            }
+
+            this.initialKeypoints = new Float32Array(count * 2);
+            for (let i = 0; i < count; i++) {
+                this.initialKeypoints[i * 2] = roiX + cornersArray[i].x;
+                this.initialKeypoints[i * 2 + 1] = roiY + cornersArray[i].y;
+            }
+            this.initialCenter = {x: prevPos.x, y: prevPos.y};
+
+            this.trackX = prevPos.x;
+            this.trackY = prevPos.y;
+            this.trackedPositions.set(frame, {x: this.trackX, y: this.trackY});
+            this.updateSliderStatus();
+            return;
+        }
+
         const pyrLevels = 3;
-        const prevPyr = new jsfeat.pyramid_t(pyrLevels);
         const currPyr = new jsfeat.pyramid_t(pyrLevels);
-        prevPyr.allocate(width, height, jsfeat.U8_t | jsfeat.C1_t);
         currPyr.allocate(width, height, jsfeat.U8_t | jsfeat.C1_t);
-        prevPyr.build(prevGray, false);
         currPyr.build(currGray, false);
 
-        const roiX = Math.max(0, Math.floor(prevPos.x - this.trackRadius));
-        const roiY = Math.max(0, Math.floor(prevPos.y - this.trackRadius));
-        const roiW = Math.min(this.trackRadius * 2, width - roiX);
-        const roiH = Math.min(this.trackRadius * 2, height - roiY);
-
-        const cornerMat = new jsfeat.matrix_t(roiW, roiH, jsfeat.U8_t | jsfeat.C1_t);
-        for (let y = 0; y < roiH; y++) {
-            for (let x = 0; x < roiW; x++) {
-                cornerMat.data[y * roiW + x] = prevGray.data[(roiY + y) * width + (roiX + x)];
-            }
-        }
-
-        if (roiW < 11 || roiH < 7) {
-            this.trackX = prevPos.x;
-            this.trackY = prevPos.y;
-            this.trackedPositions.set(frame, {x: this.trackX, y: this.trackY});
-            this.updateSliderStatus();
-            return;
-        }
-
-        const maxCorners = Math.ceil((roiW * roiH) / 4);
-        const cornersArray = [];
-        for (let i = 0; i < maxCorners; i++) {
-            cornersArray.push(new jsfeat.keypoint_t(0, 0, 0, 0));
-        }
-
-        jsfeat.yape06.laplacian_threshold = 30;
-        jsfeat.yape06.min_eigen_value_threshold = 25;
-        const detectedCount = jsfeat.yape06.detect(cornerMat, cornersArray, 5);
-        const count = Math.min(detectedCount, 100);
-
-        if (count === 0) {
-            this.trackX = prevPos.x;
-            this.trackY = prevPos.y;
-            this.trackedPositions.set(frame, {x: this.trackX, y: this.trackY});
-            this.updateSliderStatus();
-            return;
-        }
-
-        const prevXY = new Float32Array(count * 2);
+        const count = this.initialKeypoints.length / 2;
         const currXY = new Float32Array(count * 2);
         const status = new Uint8Array(count);
-
-        for (let i = 0; i < count; i++) {
-            prevXY[i * 2] = roiX + cornersArray[i].x;
-            prevXY[i * 2 + 1] = roiY + cornersArray[i].y;
-        }
 
         const winSize = 21;
         const maxIterations = 30;
@@ -625,30 +634,36 @@ class ObjectTracker {
         const minEigen = 0.0001;
 
         jsfeat.optical_flow_lk.track(
-            prevPyr, currPyr,
-            prevXY, currXY,
+            this.initialPyramid, currPyr,
+            this.initialKeypoints, currXY,
             count,
             winSize, maxIterations, status, epsilon, minEigen
         );
 
-        let sumDx = 0, sumDy = 0, validCount = 0;
+        let sumX = 0, sumY = 0, validCount = 0;
         for (let i = 0; i < count; i++) {
             if (status[i] === 1) {
-                const dx = currXY[i * 2] - prevXY[i * 2];
-                const dy = currXY[i * 2 + 1] - prevXY[i * 2 + 1];
+                const initialX = this.initialKeypoints[i * 2];
+                const initialY = this.initialKeypoints[i * 2 + 1];
+                const currX = currXY[i * 2];
+                const currY = currXY[i * 2 + 1];
+                const dx = currX - initialX;
+                const dy = currY - initialY;
                 if (Math.abs(dx) < this.searchRadius && Math.abs(dy) < this.searchRadius) {
-                    sumDx += dx;
-                    sumDy += dy;
+                    sumX += currX;
+                    sumY += currY;
                     validCount++;
                 }
             }
         }
 
-        console.log(`Frame ${frame}: ${count} corners, ${validCount} valid, dx=${(sumDx/validCount).toFixed(2)}, dy=${(sumDy/validCount).toFixed(2)}`);
-
         if (validCount > 0) {
-            this.trackX = prevPos.x + sumDx / validCount;
-            this.trackY = prevPos.y + sumDy / validCount;
+            const avgX = sumX / validCount;
+            const avgY = sumY / validCount;
+            const initialAvgX = this.initialKeypoints.reduce((sum, v, i) => i % 2 === 0 ? sum + v : sum, 0) / count;
+            const initialAvgY = this.initialKeypoints.reduce((sum, v, i) => i % 2 === 1 ? sum + v : sum, 0) / count;
+            this.trackX = this.initialCenter.x + (avgX - initialAvgX);
+            this.trackY = this.initialCenter.y + (avgY - initialAvgY);
         } else {
             this.trackX = prevPos.x;
             this.trackY = prevPos.y;
