@@ -172,15 +172,17 @@ export class CVideoData {
     }
 
     // Get stabilized image for a frame
-    getStabilizedImage(frame, originalImage) {
+    // sourceFrame: the actual frame index the originalImage came from (may differ if using substitute frame)
+    getStabilizedImage(frame, originalImage, sourceFrame = undefined) {
         if (!this.stabilizationEnabled || !this.stabilizationData || !this.stabilizationReferencePoint) {
             return originalImage;
         }
 
         const f = Math.floor(frame);
+        const isExactFrame = sourceFrame === undefined || Math.floor(sourceFrame) === f;
 
-        // Check cache
-        if (this.stabilizedImageCache[f]) {
+        // Only use cache if this is the exact frame (not a substitute)
+        if (isExactFrame && this.stabilizedImageCache[f]) {
             return this.stabilizedImageCache[f];
         }
 
@@ -215,8 +217,10 @@ export class CVideoData {
         // Draw shifted image
         ctx.drawImage(originalImage, shiftX, shiftY);
 
-        // Cache the result
-        this.stabilizedImageCache[frame] = canvas;
+        // Only cache if this is the exact frame, not a substitute
+        if (isExactFrame) {
+            this.stabilizedImageCache[f] = canvas;
+        }
 
         return canvas;
     }

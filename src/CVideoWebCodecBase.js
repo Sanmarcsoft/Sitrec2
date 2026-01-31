@@ -774,13 +774,13 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
             const image = this.imageCache[bestFrame];
             if (image && image.width && image.width > 0) {
                 this.setLastGoodFrame(image, bestFrame);
-                return this.getStabilizedImage(frame, image);
+                return this.getStabilizedImage(frame, image, bestFrame);
             }
         }
 
         // If no valid frame found, return last good frame if available
         if (this.lastGoodFrame && this.lastGoodFrame.width && this.lastGoodFrame.width > 0) {
-            return this.getStabilizedImage(frame, this.lastGoodFrame);
+            return this.getStabilizedImage(frame, this.lastGoodFrame, this.lastGoodFrameIndex);
         }
 
         // Only return blank frame as last resort
