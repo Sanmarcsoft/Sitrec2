@@ -95,6 +95,12 @@ patterns.push({
     to: './libs/opencv.js'
 });
 
+// Copy jsfeat for local hosting (optical flow tracking)
+patterns.push({
+    from: './src/js/jsfeat.js',
+    to: './libs/jsfeat.js'
+});
+
 // Copy MediabunnyExporter for tools/flowgen.html
 patterns.push({
     from: './src/MediabunnyExporter.js',

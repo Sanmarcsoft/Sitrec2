@@ -1,6 +1,7 @@
 import {GlobalDateTimeNode, Globals, guiMenus, NodeMan, setRenderOne, Sit, unregisterFrameBlocker} from "./Globals";
 import {par} from "./par";
 import {getCV, loadOpenCV} from "./openCVLoader";
+import {getJsfeat, loadJsfeat} from "./jsfeatLoader";
 import {interpolatePosition} from "./CVideoData";
 import {EventManager} from "./CEventManager";
 import {createVideoExporter, DefaultVideoFormat, getBestFormatForResolution, getVideoExtension} from "./VideoExporter";
@@ -37,6 +38,20 @@ class ObjectTracker {
         // Centroid tracking for bright spots (stars, etc)
         this.centerOnBright = false;
         this.brightnessThreshold = 128;  // 0-255, pixels above this are considered "bright"
+
+        // Search radius - how far from previous position to search for template match
+        this.searchRadius = 50;  // pixels
+
+        // Tracking method: 'template' (OpenCV template matching) or 'opticalflow' (jsfeat Lucas-Kanade)
+        this.trackingMethod = 'template';
+
+        // Optical flow state
+        this.prevGrayImage = null;
+        this.currGrayImage = null;
+
+        // Store initial template for absolute tracking (prevents drift)
+        this.initialTemplate = null;
+        this.initialTemplateFrame = null;
 
         this.guiFolder = null;
         this.savedPaused = true;
@@ -284,6 +299,12 @@ class ObjectTracker {
     initializeTracker() {
         const frame = Math.floor(par.frame);
         this.trackedPositions.set(frame, {x: this.trackX, y: this.trackY});
+        
+        if (this.initialTemplate) {
+            this.initialTemplate.delete();
+        }
+        this.initialTemplate = null;
+        this.initialTemplateFrame = null;
     }
     
     isWithinTrackPoint(vX, vY) {
@@ -386,8 +407,6 @@ class ObjectTracker {
 
     trackFrame(frame) {
         if (!this.tracking || !this.enabled) return;
-        // Only require OpenCV for template matching mode
-        if (!this.centerOnBright && !cv) return;
 
         frame = Math.floor(frame);
 
@@ -408,30 +427,120 @@ class ObjectTracker {
 
         if (!currImage || !currImage.width) return;
 
-        // Use centroid tracking for bright spots (stars, etc)
         if (this.centerOnBright) {
-            const centroid = this.calculateBrightCentroid(currImage, prevPos.x, prevPos.y, this.trackRadius);
+            this.trackBrightCentroid(frame, currImage, prevPos);
+        } else if (this.trackingMethod === 'opticalflow') {
+            this.trackOpticalFlow(frame, currImage, prevPos, videoData);
+        } else {
+            this.trackTemplateMatch(frame, currImage, prevPos, videoData);
+        }
+    }
 
-            if (centroid) {
-                this.trackX = centroid.x;
-                this.trackY = centroid.y;
-            } else {
-                // Fallback: keep previous position if no bright pixels found
-                this.trackX = prevPos.x;
-                this.trackY = prevPos.y;
-            }
+    trackBrightCentroid(frame, currImage, prevPos) {
+        const centroid = this.calculateBrightCentroid(currImage, prevPos.x, prevPos.y, this.trackRadius);
 
+        if (centroid) {
+            this.trackX = centroid.x;
+            this.trackY = centroid.y;
+        } else {
+            this.trackX = prevPos.x;
+            this.trackY = prevPos.y;
+        }
+
+        this.trackedPositions.set(frame, {x: this.trackX, y: this.trackY});
+        this.updateSliderStatus();
+    }
+
+    trackTemplateMatch(frame, currImage, prevPos, videoData) {
+        if (!cv) return;
+
+        const width = currImage.width || currImage.videoWidth;
+        const height = currImage.height || currImage.videoHeight;
+
+        const currCanvas = document.createElement('canvas');
+        currCanvas.width = width;
+        currCanvas.height = height;
+        const currCtx = currCanvas.getContext('2d');
+        currCtx.drawImage(currImage, 0, 0, width, height);
+        const currImageData = currCtx.getImageData(0, 0, width, height);
+
+        const currMat = cv.matFromImageData(currImageData);
+        const currGray = new cv.Mat();
+        cv.cvtColor(currMat, currGray, cv.COLOR_RGBA2GRAY);
+
+        // Capture initial template on first tracking frame (prevents drift)
+        if (!this.initialTemplate || this.initialTemplateFrame === null) {
+            const templateSize = this.trackRadius * 2;
+            const templateX = Math.max(0, Math.floor(prevPos.x - this.trackRadius));
+            const templateY = Math.max(0, Math.floor(prevPos.y - this.trackRadius));
+            const templateW = Math.min(templateSize, width - templateX);
+            const templateH = Math.min(templateSize, height - templateY);
+
+            const templateROI = currGray.roi(new cv.Rect(templateX, templateY, templateW, templateH));
+            this.initialTemplate = templateROI.clone();
+            templateROI.delete();
+            this.initialTemplateFrame = frame;
+            
+            this.trackX = prevPos.x;
+            this.trackY = prevPos.y;
             this.trackedPositions.set(frame, {x: this.trackX, y: this.trackY});
             this.updateSliderStatus();
+            currMat.delete();
+            currGray.delete();
             return;
         }
 
-        // Standard template matching tracking - use previous frame's image with interpolated position
+        const templateW = this.initialTemplate.cols;
+        const templateH = this.initialTemplate.rows;
+
+        // Search area centered on previous position
+        const searchX = Math.max(0, Math.floor(prevPos.x - this.searchRadius));
+        const searchY = Math.max(0, Math.floor(prevPos.y - this.searchRadius));
+        const searchW = Math.min(this.searchRadius * 2, width - searchX);
+        const searchH = Math.min(this.searchRadius * 2, height - searchY);
+
+        if (searchW <= templateW || searchH <= templateH) {
+            this.trackX = prevPos.x;
+            this.trackY = prevPos.y;
+            this.trackedPositions.set(frame, {x: this.trackX, y: this.trackY});
+            currMat.delete();
+            currGray.delete();
+            return;
+        }
+
+        const searchArea = currGray.roi(new cv.Rect(searchX, searchY, searchW, searchH));
+
+        const result = new cv.Mat();
+        cv.matchTemplate(searchArea, this.initialTemplate, result, cv.TM_CCOEFF_NORMED);
+
+        const minMax = cv.minMaxLoc(result);
+        
+        const bestX = searchX + minMax.maxLoc.x + templateW / 2;
+        const bestY = searchY + minMax.maxLoc.y + templateH / 2;
+
+        this.trackX = bestX;
+        this.trackY = bestY;
+        this.trackedPositions.set(frame, {x: this.trackX, y: this.trackY});
+        this.updateSliderStatus();
+
+        currMat.delete();
+        currGray.delete();
+        searchArea.delete();
+        result.delete();
+    }
+
+    trackOpticalFlow(frame, currImage, prevPos, videoData) {
+        const jsfeat = getJsfeat();
+        if (!jsfeat) {
+            console.warn("Optical flow: jsfeat not loaded");
+            return;
+        }
+
         const prevImage = videoData.getImage(frame - 1);
         if (!prevImage || !prevImage.width) return;
 
-        const width = prevImage.width || prevImage.videoWidth;
-        const height = prevImage.height || prevImage.videoHeight;
+        const width = currImage.width || currImage.videoWidth;
+        const height = currImage.height || currImage.videoHeight;
 
         const prevCanvas = document.createElement('canvas');
         prevCanvas.width = width;
@@ -447,40 +556,106 @@ class ObjectTracker {
         currCtx.drawImage(currImage, 0, 0, width, height);
         const currImageData = currCtx.getImageData(0, 0, width, height);
 
-        const prevMat = cv.matFromImageData(prevImageData);
-        const currMat = cv.matFromImageData(currImageData);
+        const prevGray = new jsfeat.matrix_t(width, height, jsfeat.U8_t | jsfeat.C1_t);
+        const currGray = new jsfeat.matrix_t(width, height, jsfeat.U8_t | jsfeat.C1_t);
 
-        const prevGray = new cv.Mat();
-        const currGray = new cv.Mat();
-        cv.cvtColor(prevMat, prevGray, cv.COLOR_RGBA2GRAY);
-        cv.cvtColor(currMat, currGray, cv.COLOR_RGBA2GRAY);
+        jsfeat.imgproc.grayscale(prevImageData.data, width, height, prevGray);
+        jsfeat.imgproc.grayscale(currImageData.data, width, height, currGray);
 
-        const roiSize = this.trackRadius * 2;
-        const roiX = Math.max(0, Math.floor(prevPos.x - roiSize));
-        const roiY = Math.max(0, Math.floor(prevPos.y - roiSize));
-        const roiW = Math.min(roiSize * 2, width - roiX);
-        const roiH = Math.min(roiSize * 2, height - roiY);
+        // Build image pyramids (required by optical_flow_lk)
+        const pyrLevels = 3;
+        const prevPyr = new jsfeat.pyramid_t(pyrLevels);
+        const currPyr = new jsfeat.pyramid_t(pyrLevels);
+        prevPyr.allocate(width, height, jsfeat.U8_t | jsfeat.C1_t);
+        currPyr.allocate(width, height, jsfeat.U8_t | jsfeat.C1_t);
+        prevPyr.build(prevGray, false);
+        currPyr.build(currGray, false);
 
-        const prevROI = prevGray.roi(new cv.Rect(roiX, roiY, roiW, roiH));
+        const roiX = Math.max(0, Math.floor(prevPos.x - this.trackRadius));
+        const roiY = Math.max(0, Math.floor(prevPos.y - this.trackRadius));
+        const roiW = Math.min(this.trackRadius * 2, width - roiX);
+        const roiH = Math.min(this.trackRadius * 2, height - roiY);
 
-        const result = new cv.Mat();
-        cv.matchTemplate(currGray, prevROI, result, cv.TM_CCOEFF_NORMED);
+        const cornerMat = new jsfeat.matrix_t(roiW, roiH, jsfeat.U8_t | jsfeat.C1_t);
+        for (let y = 0; y < roiH; y++) {
+            for (let x = 0; x < roiW; x++) {
+                cornerMat.data[y * roiW + x] = prevGray.data[(roiY + y) * width + (roiX + x)];
+            }
+        }
 
-        const minMax = cv.minMaxLoc(result);
-        const bestX = minMax.maxLoc.x + roiW / 2;
-        const bestY = minMax.maxLoc.y + roiH / 2;
+        if (roiW < 11 || roiH < 7) {
+            this.trackX = prevPos.x;
+            this.trackY = prevPos.y;
+            this.trackedPositions.set(frame, {x: this.trackX, y: this.trackY});
+            this.updateSliderStatus();
+            return;
+        }
 
-        this.trackX = bestX;
-        this.trackY = bestY;
+        const maxCorners = Math.ceil((roiW * roiH) / 4);
+        const cornersArray = [];
+        for (let i = 0; i < maxCorners; i++) {
+            cornersArray.push(new jsfeat.keypoint_t(0, 0, 0, 0));
+        }
+
+        jsfeat.yape06.laplacian_threshold = 30;
+        jsfeat.yape06.min_eigen_value_threshold = 25;
+        const detectedCount = jsfeat.yape06.detect(cornerMat, cornersArray, 5);
+        const count = Math.min(detectedCount, 100);
+
+        if (count === 0) {
+            this.trackX = prevPos.x;
+            this.trackY = prevPos.y;
+            this.trackedPositions.set(frame, {x: this.trackX, y: this.trackY});
+            this.updateSliderStatus();
+            return;
+        }
+
+        const prevXY = new Float32Array(count * 2);
+        const currXY = new Float32Array(count * 2);
+        const status = new Uint8Array(count);
+
+        for (let i = 0; i < count; i++) {
+            prevXY[i * 2] = roiX + cornersArray[i].x;
+            prevXY[i * 2 + 1] = roiY + cornersArray[i].y;
+        }
+
+        const winSize = 21;
+        const maxIterations = 30;
+        const epsilon = 0.01;
+        const minEigen = 0.0001;
+
+        jsfeat.optical_flow_lk.track(
+            prevPyr, currPyr,
+            prevXY, currXY,
+            count,
+            winSize, maxIterations, status, epsilon, minEigen
+        );
+
+        let sumDx = 0, sumDy = 0, validCount = 0;
+        for (let i = 0; i < count; i++) {
+            if (status[i] === 1) {
+                const dx = currXY[i * 2] - prevXY[i * 2];
+                const dy = currXY[i * 2 + 1] - prevXY[i * 2 + 1];
+                if (Math.abs(dx) < this.searchRadius && Math.abs(dy) < this.searchRadius) {
+                    sumDx += dx;
+                    sumDy += dy;
+                    validCount++;
+                }
+            }
+        }
+
+        console.log(`Frame ${frame}: ${count} corners, ${validCount} valid, dx=${(sumDx/validCount).toFixed(2)}, dy=${(sumDy/validCount).toFixed(2)}`);
+
+        if (validCount > 0) {
+            this.trackX = prevPos.x + sumDx / validCount;
+            this.trackY = prevPos.y + sumDy / validCount;
+        } else {
+            this.trackX = prevPos.x;
+            this.trackY = prevPos.y;
+        }
+
         this.trackedPositions.set(frame, {x: this.trackX, y: this.trackY});
         this.updateSliderStatus();
-
-        prevMat.delete();
-        currMat.delete();
-        prevGray.delete();
-        currGray.delete();
-        prevROI.delete();
-        result.delete();
     }
     
     renderThresholdPreview(ctx, width, height) {
@@ -805,11 +980,35 @@ function toggleStartTracking() {
         return;
     }
 
-    // Centroid mode doesn't need OpenCV
+    // Centroid mode doesn't need external libraries
     if (objectTracker.centerOnBright) {
         objectTracker.startTracking();
         if (startMenuItem) startMenuItem.name("Stop Auto Tracking");
         setRenderOne(true);
+        return;
+    }
+
+    // Optical flow mode requires jsfeat
+    if (objectTracker.trackingMethod === 'opticalflow') {
+        const jsfeat = getJsfeat();
+        if (jsfeat) {
+            objectTracker.startTracking();
+            if (startMenuItem) startMenuItem.name("Stop Auto Tracking");
+            setRenderOne(true);
+            return;
+        }
+
+        if (startMenuItem) startMenuItem.name("Loading jsfeat...");
+
+        loadJsfeat().then(() => {
+            objectTracker.startTracking();
+            if (startMenuItem) startMenuItem.name("Stop Auto Tracking");
+            setRenderOne(true);
+        }).catch(e => {
+            console.error("Failed to load jsfeat:", e);
+            alert("Failed to load jsfeat.js: " + e.message);
+            if (startMenuItem) startMenuItem.name("Start Auto Tracking");
+        });
         return;
     }
 
@@ -1168,7 +1367,48 @@ export function addObjectTrackingMenu() {
     
     radiusController = trackingFolder.add(radiusParams, 'trackRadius', 10, 100, 1)
         .name("Track Radius")
-        .tooltip("Size of the tracking region")
+        .tooltip("Size of the template to match (object size)")
+        .perm();
+
+    const searchRadiusParams = {
+        get searchRadius() { return objectTracker?.searchRadius ?? 50; },
+        set searchRadius(v) { 
+            if (objectTracker) {
+                objectTracker.searchRadius = v;
+                setRenderOne(true);
+            }
+        }
+    };
+    
+    trackingFolder.add(searchRadiusParams, 'searchRadius', 20, 300, 1)
+        .name("Search Radius")
+        .tooltip("How far from previous position to search (increase for fast motion)")
+        .perm();
+
+    const trackingMethodOptions = {
+        'Template Match': 'template',
+        'Optical Flow': 'opticalflow'
+    };
+    
+    const trackingMethodParams = {
+        get trackingMethod() { 
+            const method = objectTracker?.trackingMethod ?? 'template';
+            return Object.keys(trackingMethodOptions).find(k => trackingMethodOptions[k] === method) || 'Template Match';
+        },
+        set trackingMethod(v) {
+            if (objectTracker) {
+                objectTracker.trackingMethod = trackingMethodOptions[v] || 'template';
+                if (objectTracker.tracking) {
+                    objectTracker.clearTrack();
+                }
+                setRenderOne(true);
+            }
+        }
+    };
+
+    trackingFolder.add(trackingMethodParams, 'trackingMethod', Object.keys(trackingMethodOptions))
+        .name("Tracking Method")
+        .tooltip("Template Match (OpenCV) or Optical Flow (jsfeat Lucas-Kanade)")
         .perm();
 
     const centerOnBrightParams = {
