@@ -155,6 +155,13 @@ export class MediabunnyExporter {
         this.encoder.encode(videoFrame, { keyFrame: isKeyFrame });
         videoFrame.close();
 
+        // Backpressure: limit encoder queue to prevent unbounded memory growth.
+        // Without this, frames queue faster than encoding, causing massive memory use
+        // and a very long "flushing encoder" stage at the end.
+        while (this.encoder.encodeQueueSize > 5) {
+            await new Promise(r => setTimeout(r, 1));
+        }
+
         this.timestampAccumulatorMicros += frameDurationMicros;
         this.frameCount++;
     }
