@@ -33,8 +33,9 @@ export class CMouseHandler {
     }
 
     newPosition(e, anchor) {
-        const x = e.clientX - this.view.leftPx;
-        const y = e.clientY - this.view.topPx;
+        const rect = this.view.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
         this.dx = x - this.x;
         this.dy = y - this.y;
         this.x = x;
@@ -43,7 +44,6 @@ export class CMouseHandler {
             this.anchorX = x;
             this.anchorY = y
         }
-        // console.log("Mouse: "+this.x+","+this.y+","+" Delta: "+this.dx+","+this.dy)
     }
 
     handleMouseLeave(e) {

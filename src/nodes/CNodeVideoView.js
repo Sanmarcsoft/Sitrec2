@@ -1025,8 +1025,6 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
     // as per https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/drawImage
 
     getSourceAndDestCoords() {
-        assert(this.in.zoom !== undefined, "canvasToVideoCoords requires zoom input to be defined");
-
         // Ensure dimensions are current - important when overlays call this before the video view renders
         if (this.div && (this.widthPx !== this.div.clientWidth || this.heightPx !== this.div.clientHeight)) {
             this.setFromDiv(this.div);
@@ -1037,71 +1035,49 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         let sourceH = this.videoHeight
 
         if (sourceW <= 0 || sourceH <= 0) {
-            // if the sourceW or sourceH is not set, then we can't calculate the coordinates correctly
-            // so we just use the canvas size for now
-            // when the is loaded, this will be updated
-            //            showError("CNodeVideoView.getSourceAndDestCoords called with invalid image dimensions, video not loaded? this="+this.id+", sourceW="+sourceW+", sourceH="+sourceH);
             sourceW = this.widthPx;
             sourceH = this.heightPx;
         }
 
-
         const aspectSource = sourceW / sourceH
-
-        // the view is the canvas size, widthPx and heightPx
         const aspectView = this.widthPx / this.heightPx
 
-        // magnification factor, it's a percentage, and we convert it to a decimal
-        // if 1, then the video will fill the view in the direction of smallest dimension
-        const zoom = this.in.zoom.v0 / 100;
+        if (this.in.zoom !== undefined) {
+            const zoom = this.in.zoom.v0 / 100;
 
+            const offsetW = (sourceW - sourceW / zoom) / 2;
+            const offsetH = (sourceH - sourceH / zoom) / 2;
 
-        // there offsets are relative to the source image, not the view
-        // they will be the virtual start corner of the video
-        const offsetW = (sourceW - sourceW / zoom) / 2;
-        const offsetH = (sourceH - sourceH / zoom) / 2;
+            this.sx = offsetW;
+            this.sy = offsetH;
+            this.sWidth = sourceW / zoom;
+            this.sHeight = sourceH / zoom;
 
-        // as if we are doing
-        // ctx.drawImage(image, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight)
-
-        this.sx = offsetW;
-        this.sy = offsetH;
-        this.sWidth = sourceW / zoom;
-        this.sHeight = sourceH / zoom;
-
-        //  aspectSource = width/height ratio of the source image or video
-        //  aspectView = width/height ratio of the view
-        // so bigger numbers (>1) = wider, smaller numbers (<1) = taller
-
-        if (aspectSource > aspectView) {
-            // Source video is WIDER than the view, so we scale to fit width
-            // leaving black bars on top and bottom
-            // (Typical in the Narrow Video view preset)
-
-            // fov coverage is how much of the vertical field of view is covered by the video
-            // perhaps easier to visalize as dHeight / heightPx
-            this.fovCoverage = (this.widthPx / aspectSource) / this.heightPx;
-
-            // dx,dy is and offset of the top left corner of the video in the view
-            this.dx = 0;
-            this.dy = (this.heightPx - this.widthPx / aspectSource) / 2;
-
-            // dWidth,dHeight is the size of the video in the view
-            this.dWidth = this.widthPx;
-            this.dHeight = this.widthPx / aspectSource;
+            if (aspectSource > aspectView) {
+                this.fovCoverage = (this.widthPx / aspectSource) / this.heightPx;
+                this.dx = 0;
+                this.dy = (this.heightPx - this.widthPx / aspectSource) / 2;
+                this.dWidth = this.widthPx;
+                this.dHeight = this.widthPx / aspectSource;
+            } else {
+                this.fovCoverage = 1;
+                this.dx = (this.widthPx - this.heightPx * aspectSource) / 2;
+                this.dy = 0;
+                this.dWidth = this.heightPx * aspectSource;
+                this.dHeight = this.heightPx;
+            }
         } else {
-            // Source is TALLER than the view, so we scale to fit height
-            // and adjust from left
-
-            // entire vertical FOV is covered by the video
-            this.fovCoverage = 1;
-
-            this.dx = (this.widthPx - this.heightPx * aspectSource) / 2;
-            this.dy = 0;
-            this.dWidth = this.heightPx * aspectSource;
-            this.dHeight = this.heightPx;
+            this.sx = 0;
+            this.sy = 0;
+            this.sWidth = sourceW;
+            this.sHeight = sourceH;
+            this.dx = this.widthPx * (0.5 + this.posLeft);
+            this.dy = this.heightPx * 0.5 + this.widthPx * this.posTop;
+            this.dWidth = this.widthPx * (this.posRight - this.posLeft);
+            this.dHeight = this.widthPx * (this.posBot - this.posTop);
+            this.fovCoverage = this.dHeight / this.heightPx;
         }
-        assert(!isNaN(this.dWidth) && !isNaN(this.dHeight), "getSourceAndDestCoords returned NaN for dWidth or dHeight, this=" + this.id + ", zoom=" + this.in.zoom.v0);
+        assert(!isNaN(this.dWidth) && !isNaN(this.dHeight), "getSourceAndDestCoords returned NaN for dWidth or dHeight, this=" + this.id);
 
     }
 

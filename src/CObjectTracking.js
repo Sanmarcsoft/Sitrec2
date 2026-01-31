@@ -459,6 +459,13 @@ class ObjectTracker {
 
         if (this.tracking) {
             this.trackFrame(frame);
+        } else {
+            const f = Math.floor(frame);
+            if (this.trackedPositions.has(f)) {
+                const pos = this.trackedPositions.get(f);
+                this.trackX = pos.x;
+                this.trackY = pos.y;
+            }
         }
 
         const [cx, cy] = this.videoView.videoToCanvasCoords(this.trackX, this.trackY);
@@ -516,6 +523,24 @@ class ObjectTracker {
         this.trackedPositions.set(frame, {x: this.trackX, y: this.trackY});
         this.updateSliderStatus();
         setRenderOne(true);
+    }
+
+    continueTracking() {
+        if (!this.enabled) return;
+        const currentFrame = Math.floor(par.frame);
+        for (const f of this.trackedPositions.keys()) {
+            if (f >= currentFrame) {
+                this.trackedPositions.delete(f);
+            }
+        }
+        this.trackedPositions.set(currentFrame, {x: this.trackX, y: this.trackY});
+        this.tracking = true;
+        this.updateSliderStatus();
+        this.savedPaused = par.paused;
+        this.savedFrame = par.frame;
+        Globals.justVideoAnalysis = true;
+        par.paused = true;
+        this.runFastTrackingLoop();
     }
     
     getCacheStatusArray() {
@@ -663,6 +688,24 @@ function clearTrack() {
     }
 }
 
+function continueTrack() {
+    if (!objectTracker || !objectTracker.enabled) {
+        toggleEnableTracking();
+        if (!objectTracker || !objectTracker.enabled) {
+            return;
+        }
+    }
+    if (objectTracker.tracking) {
+        objectTracker.stopTracking();
+        if (startMenuItem) startMenuItem.name("Start Auto Tracking");
+        setRenderOne(true);
+        return;
+    }
+    objectTracker.continueTracking();
+    if (startMenuItem) startMenuItem.name("Stop Auto Tracking");
+    setRenderOne(true);
+}
+
 function stabilizeVideo() {
     if (!objectTracker || !objectTracker.enabled) {
         alert("Please enable tracking first and track an object before stabilizing.");
@@ -736,6 +779,7 @@ export function addObjectTrackingMenu() {
     const menuActions = {
         enableTracking: toggleEnableTracking,
         startTracking: toggleStartTracking,
+        continueTrack: continueTrack,
         clearTrack: clearTrack,
         stabilizeVideo: stabilizeVideo,
         toggleStabilization: toggleStabilization,
@@ -749,6 +793,11 @@ export function addObjectTrackingMenu() {
     startMenuItem = trackingFolder.add(menuActions, 'startTracking')
         .name("Start Auto Tracking")
         .tooltip("Automatically track the object inside the cursor as video plays")
+        .perm();
+
+    trackingFolder.add(menuActions, 'continueTrack')
+        .name("Continue Track")
+        .tooltip("Continue tracking from current frame, keeping existing data before this frame")
         .perm();
 
     trackingFolder.add(menuActions, 'clearTrack')
