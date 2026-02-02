@@ -890,9 +890,17 @@ export class CNodeSynthClouds extends CNode3DGroup {
             })
             .onFinishChange(() => { CustomManager.saveGlobalSettings(true); });
         
-        propsFolder.add(this, 'cloudSize', 50, 1000, 10)
-            .name('Cloud Size (m)')
+        const cloudSizeProxy = {
+            _displayValue: this.cloudSize,
+            get cloudSize() { return this._displayValue; },
+            set cloudSize(v) { this._displayValue = v; }
+        };
+        this.cloudSizeProxy = cloudSizeProxy;
+        this.cloudSizeController = propsFolder.add(cloudSizeProxy, 'cloudSize', 50, 1000, 10)
+            .name('Cloud Size')
+            .setUnitType('small')
             .onChange(() => {
+                this.cloudSize = this.cloudSizeController.getSIValue();
                 this.buildCloudMesh();
                 setRenderOne(true);
             })
@@ -924,9 +932,17 @@ export class CNodeSynthClouds extends CNode3DGroup {
             })
             .onFinishChange(() => { CustomManager.saveGlobalSettings(true); });
         
-        propsFolder.add(this, 'depth', 0, 2000, 10)
-            .name('Depth (m)')
+        const depthProxy = {
+            _displayValue: this.depth,
+            get depth() { return this._displayValue; },
+            set depth(v) { this._displayValue = v; }
+        };
+        this.depthProxy = depthProxy;
+        this.depthController = propsFolder.add(depthProxy, 'depth', 0, 2000, 10)
+            .name('Depth')
+            .setUnitType('small')
             .onChange(() => {
+                this.depth = this.depthController.getSIValue();
                 this.buildCloudMesh();
                 setRenderOne(true);
             })
@@ -956,9 +972,17 @@ export class CNodeSynthClouds extends CNode3DGroup {
             })
             .onFinishChange(() => { CustomManager.saveGlobalSettings(true); });
         
-        propsFolder.add(this, 'feather', 0, 50000, 10)
-            .name('Feather (m)')
+        const featherProxy = {
+            _displayValue: this.feather,
+            get feather() { return this._displayValue; },
+            set feather(v) { this._displayValue = v; }
+        };
+        this.featherProxy = featherProxy;
+        this.featherController = propsFolder.add(featherProxy, 'feather', 0, 50000, 10)
+            .name('Feather')
+            .setUnitType('small')
             .onChange(() => {
+                this.feather = this.featherController.getSIValue();
                 this.buildCloudMesh();
                 setRenderOne(true);
             })
@@ -1005,6 +1029,15 @@ export class CNodeSynthClouds extends CNode3DGroup {
         }
         if (this.radiusController) {
             this.radiusController.setSIValue(this.radius);
+        }
+        if (this.cloudSizeController) {
+            this.cloudSizeController.setSIValue(this.cloudSize);
+        }
+        if (this.depthController) {
+            this.depthController.setSIValue(this.depth);
+        }
+        if (this.featherController) {
+            this.featherController.setSIValue(this.feather);
         }
     }
     
