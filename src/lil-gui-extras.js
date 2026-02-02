@@ -1891,6 +1891,21 @@ export class CGuiMenuBar {
         // Add destroy method override to clean up the container
         const originalDestroy = gui.destroy.bind(gui);
         gui.destroy = (all = true) => {
+            // Find and disable any "editMode" controllers before destroying
+            // This ensures edit mode is properly exited when the menu is closed
+            const findEditModeControllers = (folder) => {
+                for (const child of folder.children) {
+                    if (child.controllers) {
+                        // It's a folder, recurse
+                        findEditModeControllers(child);
+                    } else if (child.property === 'editMode' && child.getValue() === true) {
+                        // It's an editMode controller that's enabled - disable it
+                        child.setValue(false);
+                    }
+                }
+            };
+            findEditModeControllers(gui);
+            
             if (containerDiv.parentElement) {
                 containerDiv.parentElement.removeChild(containerDiv);
             }
