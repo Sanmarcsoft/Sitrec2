@@ -945,6 +945,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         // Create materials: [0] walls, [1] roof, [2] soffit (roof color at 50%)
         const wallMaterial = this.createMaterial(this.wallColor);
         const roofMaterial = this.createMaterial(this.roofColor);
+        roofMaterial.side = DoubleSide;
         
         // Create soffit material with roof color darkened by 50%
         const roofColorObj = new Color(this.roofColor);
@@ -1047,6 +1048,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             // Create new materials
             const wallMaterial = this.createMaterial(this.wallColor);
             const roofMaterial = this.createMaterial(this.roofColor);
+            roofMaterial.side = DoubleSide;
             this.solidMesh.material = [wallMaterial, roofMaterial];
             
             // Dispose old materials
