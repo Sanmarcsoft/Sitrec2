@@ -79,8 +79,9 @@ export class CNodeTrack extends CNodeEmptyArray {
 
             if (frameData.heading && frameData.position) {
                 const [az, el] = getAzElFromPositionAndForward(frameData.position, frameData.heading);
-                sensorAz = az;
+                 sensorAz = az;
                 sensorEl = el;
+                sensorRoll = 0; // default to 0 if the frame has no up vector (i.e. no orientation)
 
                 if (frameData.up && frameData.right) {
                     const localUp = getLocalUpVector(frameData.position);
@@ -88,7 +89,11 @@ export class CNodeTrack extends CNodeEmptyArray {
                     const cosRoll = frameData.up.dot(localUp);
                     const sinRoll = frameData.up.dot(rightProjection);
                     sensorRoll = degrees(Math.atan2(sinRoll, cosRoll));
+
+                    // clamp to 0 if very close
+                    sensorRoll = Math.abs(sensorRoll) < 1e-6 ? 0 : sensorRoll;
                 }
+
 
                 platformHeading = 0;
                 platformPitch = 0;

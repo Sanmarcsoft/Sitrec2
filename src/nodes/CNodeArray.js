@@ -29,7 +29,10 @@ export class CNodeArray extends CNode {
             for (let f = 0; f < this.frames; f++) {
                 // if it's not an object, then just export the value
                 const time = GlobalDateTimeNode.frameToMS(f)
-                csv += f + "," + time + "," + this.array[f] + "\n";
+                let value = this.array[f];
+                assert (value !== undefined, "CNodeArray exportArray found undefined value at frame " + f);
+
+                csv += f + "," + time + "," + value + "\n";
             }
         } else {
             // if it's an object, assume we want to export LLA, with Alt in meters
