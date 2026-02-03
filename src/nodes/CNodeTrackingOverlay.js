@@ -275,7 +275,7 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
             .tooltip("Reset manual tracking to an empty state, removing all keyframes and draggable items")
 
 
-        this.limitAB = true;
+        this.limitAB = false;
         this.manualTrackingFolder.add(this, "limitAB").name("Limit AB").listen().onChange(() => {
 
             if (this.limitAB && this.keyframes.length > 0) {
@@ -288,7 +288,7 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
             NodeMan.recalculateAllRootFirst();
 
         })
-            .tooltip("Limit the A and B frames to the range of the video tracking keyframes.")
+            .tooltip("Limit the A and B frames to the range of the video tracking keyframes. This will preven extrapolation beyond the first and last keyframes, which is not alwyays desired.")
 
         this.curveType = "Spline2";
         this.manualTrackingFolder.add(this, "curveType", ["Spline", "Spline2", "Linear", "Perspective"]).name("Curve Type").listen().onChange(() => {
