@@ -24,6 +24,7 @@ export const TEST_REGISTRY = [
     { id: 'motion-acc2', name: 'MotionAcc2', group: 'Motion', file: 'motion-accumulation.test.js', grep: 'real video analysis' },
     
     { id: 'satellite', name: 'Satellite', group: 'Other', file: 'satellite-label-visibility.test.js', grep: 'Label Look Visible' },
+    { id: 'mobile', name: 'Mobile', group: 'Other', file: 'mobile-viewport.test.js', grep: 'iPhone-sized viewport' },
 
     { id: 'ai-tab', name: 'AI-Tab', group: 'AI', file: 'chatbot-playwright.test.js', grep: 'open chat with Tab' },
     { id: 'ai-math', name: 'AI-Math', group: 'AI', file: 'chatbot-playwright.test.js', grep: 'simple math' },

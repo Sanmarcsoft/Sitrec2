@@ -4,7 +4,7 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'https://local.metabunk.org';
 
 export default defineConfig({
   testDir: './tests_regression',
-  testMatch: ['**/ui-playwright.test.js', '**/regression.test.js', '**/chatbot-playwright.test.js', '**/webm-video-export.test.js', '**/motion-analysis.test.js', '**/motion-accumulation.test.js', '**/video-loading.test.js', '**/satellite-label-visibility.test.js'],
+  testMatch: ['**/ui-playwright.test.js', '**/regression.test.js', '**/chatbot-playwright.test.js', '**/webm-video-export.test.js', '**/motion-analysis.test.js', '**/motion-accumulation.test.js', '**/video-loading.test.js', '**/satellite-label-visibility.test.js', '**/mobile-viewport.test.js'],
   timeout: 120000,
   fullyParallel: true,
   forbidOnly: false,
