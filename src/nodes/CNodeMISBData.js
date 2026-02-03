@@ -70,7 +70,7 @@ export class CNodeMISBDataTrack extends CNodeEmptyArray {
     setupTrackStartTimeGUI(guiFolder) {
         if (!this.isRelativeTime) return;
 
-        this.trackStartTimeController = guiFolder.add(this, "trackStartTime").name("Track Start Time").listen()
+        this.trackStartTimeController = guiFolder.add(this, "trackStartTime").name("Start Time").listen()
             .onFinishChange(() => this.handleTrackStartTimeChange())
             .tooltip("Override start time (e.g., '10:30', 'Jan 15', '2024-01-15T10:30:00Z'). Leave blank for global start time.");
 

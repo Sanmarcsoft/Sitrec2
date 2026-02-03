@@ -2040,6 +2040,23 @@ export class CCustomManager {
                     controller.updateDisplay();
                 });
 
+                // Set up bidirectional sync for onFinishChange handlers
+                // This is critical for fields like trackStartTime that parse input on finish
+                const originalOnFinishChange = controller._onFinishChange;
+                if (originalOnFinishChange) {
+                    // When SOURCE finishes editing, update mirrored controller's display
+                    controller.onFinishChange((value) => {
+                        originalOnFinishChange(value);
+                        mirroredController.updateDisplay();
+                    });
+
+                    // When MIRRORED finishes editing, call original handler and update source display
+                    mirroredController.onFinishChange((value) => {
+                        originalOnFinishChange(value);
+                        controller.updateDisplay();
+                    });
+                }
+
                 // Store bidirectional mirror references for setSIValue sync
                 if (!controller._mirrorControllers) controller._mirrorControllers = [];
                 if (!mirroredController._mirrorControllers) mirroredController._mirrorControllers = [];
