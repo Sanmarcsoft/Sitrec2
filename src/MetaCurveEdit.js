@@ -394,6 +394,7 @@ class MetaBezierCurveEditor {
 
                 if (canvasWidth <= 58 || canvasHeight <= 54) {
                     console.warn("MetaBezierCurveEditor: canvas is too small", canvasWidth, canvasHeight);
+                    this.g = {x: 0, y: 0, w: Math.max(1, canvasWidth), h: Math.max(1, canvasHeight)};
                     return;
                 }
 
