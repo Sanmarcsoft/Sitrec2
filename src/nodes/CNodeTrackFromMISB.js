@@ -106,11 +106,14 @@ export class CNodeTrackFromMISB extends CNodeTrack {
     }
 
     getValue(frameFloat) {
-        // Apply time offset to the frame before retrieving value
-        // also need to make sure the right things is being recalculated
-        const offset = this.in.misb.timeOffset ?? 0;
-        const offsetFrames = offset * Sit.fps;
-        return super.getValue(frameFloat + offsetFrames);
+        // Apply time offsets to the frame before retrieving value
+        // - timeOffset: manual fine-tuning slider (seconds)
+        // - trackStartTime: absolute start time override (computed to seconds)
+        const misb = this.in.misb;
+        const manualOffset = misb.timeOffset ?? 0;
+        const startTimeOffset = misb.getTrackStartTimeOffsetSeconds?.() ?? 0;
+        const totalOffsetFrames = (manualOffset + startTimeOffset) * Sit.fps;
+        return super.getValue(frameFloat + totalOffsetFrames);
     }
 
 
@@ -249,10 +252,8 @@ export class CNodeTrackFromMISB extends CNodeTrack {
         this.frames = Sit.frames;
         this.useSitFrames = true; // flag to say we need recalculate if Sit.frames changes
 
-        // Re-cache values when needed:
-        // - useAGL: elevation may have changed, affecting altitude
-        // - isRelativeTime: trackStartTimeOffset may have changed, affecting getTime()
-        if (misb.useAGL || misb.isRelativeTime) {
+        // Re-cache values when AGL is used, as elevation may have changed
+        if (misb.useAGL) {
             this.cacheValues();
         }
 

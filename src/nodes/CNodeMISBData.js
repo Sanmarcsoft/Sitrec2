@@ -39,7 +39,6 @@ export class CNodeMISBDataTrack extends CNodeEmptyArray {
             this.parsingBaseTime = v.trackFile.parsingBaseTime;
         }
         this.trackStartTime = "";       // user-entered ISO datetime string
-        this.trackStartTimeOffset = 0;  // ms offset to add in getTime()
 
         this.selectSourceColumns(v.columns || ["SensorLatitude", "SensorLongitude", "SensorTrueAltitude", "AltitudeAGL"]);
 
@@ -68,33 +67,36 @@ export class CNodeMISBDataTrack extends CNodeEmptyArray {
     // Uses onFinishChange to avoid parsing partial input while user is typing.
     setupTrackStartTimeGUI(guiFolder) {
         if (!this.isRelativeTime) return;
-        
+
         guiFolder.add(this, "trackStartTime").name("Track Start Time").listen()
             .onFinishChange(() => {
-                if (this.updateTrackStartTimeOffset()) {
-                    this.recalculateCascade();
+                // Validate that it's either empty or a valid date
+                if (this.trackStartTime && this.trackStartTime.trim() !== "") {
+                    const parsed = Date.parse(this.trackStartTime);
+                    if (isNaN(parsed)) return;  // Invalid date, don't update
                 }
+                this.recalculateCascade();
             })
             .tooltip("Override the start time for this relative-time track (ISO format, e.g., 2024-01-15T10:30:00Z). Leave blank to use global start time.");
-        
-        this.addSimpleSerial("trackStartTime", () => {
-            this.updateTrackStartTimeOffset();
-        });
+
+        this.addSimpleSerial("trackStartTime");
     }
 
-    // Parse trackStartTime and compute offset from parsingBaseTime.
-    // Returns true if valid (empty or valid date), false if invalid (no update).
-    updateTrackStartTimeOffset() {
+    // Compute time offset in seconds from trackStartTime.
+    // Used by CNodeTrackFromMISB.getValue() to combine with timeOffset.
+    // Returns 0 if trackStartTime is empty or invalid.
+    getTrackStartTimeOffsetSeconds() {
         if (!this.trackStartTime || this.trackStartTime.trim() === "") {
-            this.trackStartTimeOffset = 0;
-            return true;
+            return 0;
         }
         const parsed = Date.parse(this.trackStartTime);
         if (isNaN(parsed)) {
-            return false;
+            return 0;
         }
-        this.trackStartTimeOffset = parsed - this.parsingBaseTime;
-        return true;
+        // parsingBaseTime is when track timestamps were computed
+        // trackStartTime is when user says track actually started
+        // Return offset in seconds (negative if track starts later than parsing base)
+        return (this.parsingBaseTime - parsed) / 1000;
     }
 
     exportMISBCSV(inspect = false) {
@@ -234,10 +236,6 @@ export class CNodeMISBDataTrack extends CNodeEmptyArray {
             time = time / 1000
         } else if (time < 31568461000) { // <1971 in milliseconds, less than 2970 in seconds, so seconds
             time = time * 1000
-        }
-        // Apply user-specified start time offset for relative-time tracks
-        if (this.trackStartTimeOffset) {
-            time += this.trackStartTimeOffset;
         }
         return time
     }
