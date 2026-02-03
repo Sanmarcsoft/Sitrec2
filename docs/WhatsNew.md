@@ -5,20 +5,30 @@
 
 IMPORTANT: Always check what the last documented version is, and update ALL missing versions up to the current version.
 
+CRITICAL - DO NOT HALLUCINATE:
+- ONLY document features that are explicitly mentioned in git commit messages
+- NEVER invent, guess, or assume features that might exist
+- If a commit message is unclear, examine the actual code changes
+- If you cannot verify a feature from commits, DO NOT include it
+- It is better to have a sparse changelog than an inaccurate one
+
 When updating this changelog:
 
 1. **Check last documented version**: Look at the first version heading below these instructions
 2. **Get version tags**: Run `git tag -l "2.*" --sort=-version:refname --format='%(refname:short)|%(creatordate:short)' | head -20`
 3. **Get commits between versions**: Run `git log [old_tag]..[new_tag] --pretty=format:"%s"` for each missing version
+   - To find the previous tag, list all tags and find the one before: `git tag -l "2.*" --sort=-version:refname`
 4. **Get commits since last tag**: Run `git log [latest_tag]..HEAD --pretty=format:"%s"` for unreleased changes
-5. **Categorize entries**:
+5. **Verify each entry**: Every changelog entry MUST correspond to an actual commit message
+6. **Categorize entries**:
    - **New Features**: New functionality, UI additions, new file format support
    - **Improvements**: Enhancements to existing features, performance, UX improvements
    - **Bug Fixes**: Entries starting with "Fixed", "Fix", corrections to existing behavior
-6. **Write clean descriptions**: Convert commit messages to user-friendly descriptions. Look at actual code changes if the commit message is unclear.
-7. **Format**: Use present tense, focus on user benefit, be concise
-8. **Add new versions at the top** of the document, below these instructions
-9. **Include the date** with each version heading
+7. **Write clean descriptions**: Convert commit messages to user-friendly descriptions. Look at actual code changes if the commit message is unclear.
+8. **Format**: Use present tense, focus on user benefit, be concise
+9. **Add new versions at the top** of the document, below these instructions
+10. **Include the date** with each version heading
+11. **Omit empty sections**: If a version has no New Features, don't include that heading
 
 Example entry format:
 ## Version X.Y.Z (YYYY-MM-DD)
@@ -32,6 +42,35 @@ Example entry format:
 ### Bug Fixes
 - Fixed issue description
 -->
+
+---
+
+## Version 2.26.5 (2026-02-03)
+
+### New Features
+- **FlightClub Import**: Drop a .json FlightClub file to create separate tracks for each stage (e.g., filename-Stage_1.csv), with mission info displayed in notes
+- **Alt-Az File Import**: Import Alt-Az files exported from FlightClub
+- **User-Defined Start Times**: Allow user-defined start times for relative time tracks
+- **New Tracking Algorithm**: Added new tracking algorithm with improved base "Template Match" algorithm
+
+### Improvements
+- **Notes Shortcut**: Press "N" to toggle notes, Shift-N to pseudo-dock notes on right side
+- **Date/Time Parsing**: Parsing date/time with chrono-node for simplified relative time calculations
+- **Manual Tracking**: "Limit AB" off by default with updated tooltip
+- **Building Edit Mode**: Maintain sidebar status for edit menus, closing edit menu exits edit mode
+- **Cloud Properties**: Use correct small units for all cloud properties
+- **Mirrored Menus**: Open sub-menus on mirrored menus by default
+- **MISB Export**: Export missing sensor roll column for MISB-compliant LOS export
+- **Double-Sided Roof Material**: Eaves now look better with double-sided material
+
+### Bug Fixes
+- Fixed notes view shrinking due to event handlers not being cleaned up on dispose
+- Fixed mirroring of controls that use onFinishChange, not just onChange
+- Fixed unit change now affects mirrored controllers as well as the original
+- Fixed mirrored controller updating when value is altered by a third different controller
+- Fixed edit mode and edit menus show/hide/enable/disable logic with buildings
+- Fixed small graph canvas size crash on mobile
+- Added test to ensure app starts up for mobile screen size
 
 ---
 
@@ -596,195 +635,188 @@ Example entry format:
 
 ## Version 2.12.0 (2025-11-25)
 
-### New Features
-- **Satellite flare prediction bands** showing where Starlink flares are visible
-- **Frame scrubbing with mouse wheel** in video overlay
-
 ### Improvements
-- Smooth motion for arrow indicators and flare lines
-- Refined flare band accuracy to match actual reflections
+- S3 presigned multipart uploading support
 
 ---
 
 ## Version 2.11.0 (2025-11-17)
 
 ### New Features
-- **Curve smoothing controls** with user-defined points and tension
-- **Synthetic object creation** with position presets
-- **Dark/Light theme support** for chat interface
-- **Chat history navigation** with up/down arrows
+- **Audio file support**: Play audio-only files (mp3, wav, ogg, flac, webm, aac, aif, m4a) with visualization
+- **Elevation pseudo-color**: Map type showing elevation with color coding
+- **Ridgeline inset** display option
 
 ### Improvements
-- Better AI handling of complex function calls
-- Track smoothing with configurable parameters
-- Improved AI system prompts for more concise answers
+- Support for changing playback framerate for audio
+- Audio/video cleanup on dispose
+- Support for iPhone .mov files with multiple audio streams
 
 ### Bug Fixes
-- Fixed ATFLIR overlay control visibility
-- Fixed smoothing crashing with small number of frames
-- Fixed curve editing with updated control points
+- Fixed Ocean surface display in Elevation Pseudo-Color map type
 
 ---
 
 ## Version 2.10.0 (2025-11-12)
 
 ### New Features
-- **AI Assistant chatbot** with persistent sessions
-- **View presets** for quick layout switching (Main+Look, Video+Look, stacked views)
-- **AGL altitude mode** for camera and target positioning
+- **FOV Editor**: Visual editor for field of view with max slider
 
 ### Improvements
-- Better AI handling of menu changes and models
-- Rate limiting with user group tiers
-- Improved satellite and star scaling consistency
+- Additional video effects and convolution filters
+- Improved track point editing widget
+- Restored brightness/contrast controls to video view
 
 ### Bug Fixes
-- Fixed tracking node scaling and serialization
-- Fixed linear extrapolation of final track segment
-- Fixed zooming in Look View
+- Fixed issues with dragging a view while over its tab menu
+- Fixed object tracker and pointer events
+- Fixed synth track deletion
 
 ---
 
 ## Version 2.9.0 (2025-11-04)
 
 ### New Features
-- **Wind layer visualization** with animated particles
-- **AI-powered scene setup** via natural language
-- **Multiple satellite source support** (Celestrak, Space-Track)
+- **AR Mode**: Long press on compass to activate augmented reality mode on mobile devices
 
 ### Improvements
-- Optimized satellite rendering performance
-- Better handling of large satellite catalogs
-- Improved wind data loading and caching
+- Compass testbed improvements
+- Ensure custom menus are on-screen when created
 
 ### Bug Fixes
-- Fixed satellite visibility calculations
-- Fixed wind layer transparency issues
+- Fixed satellite menu visibility and showing/hiding track based on valid satellite names
+- Fixed issue with saved rotation for buildings
+- Fixed issue where neighboring points were not being moved in the horizontal plane when dragging a corner
+- Fixed fiddly rotation handles
+- Removed unused code for dragging roof vertices
 
 ---
 
 ## Version 2.8.0 (2025-11-02)
 
 ### New Features
-- **WMTS terrain layer support** for custom map overlays
-- **Configurable terrain sources** including NRL layers
-- **Satellite magnitude display** showing brightness values
+- **Building editor**: Create and edit 3D buildings with rooflines
+- **WASD controls** for camera movement
+- **Feature labels**: 3D labels from CSV with arrows
+- **Earth shadow display**: Show location of Earth's shadow at given altitude
+- **Mobile support**: Pinch controls, touch camera controls, mobile file loading
 
 ### Improvements
-- Better terrain tile loading and caching
-- Improved satellite pass predictions
+- Double-click on menu tab to close
+- Undo/redo support for building editor
+- Better conforming buildings to ground elevation
+- Adaptive frame rate for performance
+- VB measure (renamed from AB measure)
+
+### Bug Fixes
+- Fixed flare region display
+- Fixed satellite arrows cleanup with large time jumps
+- Fixed planet brightness GUI error
 
 ---
 
 ## Version 2.7.0 (2025-10-11)
 
 ### New Features
-- **Custom CSV track import** with flexible column mapping
-- **AGL (Above Ground Level) columns** support in track files
-- **Geolocation-based startup** using IP location
-- **Time zone auto-detection** from client
+- **Settings menu**: Added to Sitrec menu with terrain max details slider
+- **LOS exporting**: Export Line of Sight data with uncertainty values
+- **LOS viewer tool**: Standalone viewer for exported ENU LOS data
 
 ### Improvements
-- Better handling of epoch timestamps in various formats
-- Improved startup experience for Starlink sitch
-- Cookie-based caching of user location
+- Subdivision maps on by default
+- Docker development environment improvements
+- Terrain tile handling improvements with minZoom support
+- Time offset for tracks (up to 30 seconds)
+- Covering holes at poles with grey sphere
 
 ### Bug Fixes
-- Fixed custom CSV tracks with no name field
-- Fixed terrain loading before track creation
-- Fixed time zone parsing for negative offsets
+- Fixed Docker volume mount issues
+- Fixed race condition in map loading and cleanup
 
 ---
 
 ## Version 2.6.0 (2025-10-02)
 
 ### New Features
-- **FR24 flight data integration** for real aircraft tracks
-- **Rubber Duck CSV format** support extracted from FR24
+- **Context menus**: Right-click on planets, satellites, tracks, and ground for context-sensitive options
+- **Aircraft model lights**: Strobing nav lights with configurable timing
 
 ### Improvements
-- Better date/time parsing in various formats
-- Improved track file detection and loading
+- More robust MISB/KLV file parsing with better error handling
+- Improved light timing for 737 model
+- TS file validation and improved parsing
+- Suppressing context menus when right-clicking on a menu
+
+### Bug Fixes
+- Fixed timing of short duration lights
 
 ---
 
 ## Version 2.5.0 (2025-09-08)
 
-### New Features
-- **Video object tracking overlay** with movable tracking point
-- **Full-screen video toggle** with double-click
-- **Mouse wheel zoom** in video view
-
 ### Improvements
-- Better video playback controls
-- Improved overlay visibility management
-- Aspect ratio detection for video layout
+- **Build system updates**: Brought up to date for external builds
+- Standalone server support for quick install tests
+- Made chatbot install optional
+- Moved custom URL functions into config.js
 
 ### Bug Fixes
-- Fixed video window initialization
-- Fixed tracking overlay coordinate systems
+- Fixed circular dependency checking for multiple runs
+- Fixed keyboard shortcuts display
 
 ---
 
 ## Version 2.4.0 (2025-07-20)
 
 ### New Features
-- **AI chatbot integration** for natural language scene control
-- **Mathematical expressions** in chat commands
-- **Camera pointing via RA/Dec** for celestial objects
-- **3D aircraft lights** with configurable colors
+- **AI Assistant chatbot**: Natural language scene control with persistent chat history
+- **Camera pointing via RA/Dec**: Look at static celestial objects like stars and constellations
+- **Auto time zone detection** from client
 
 ### Improvements
-- Improved time zone handling in chat
-- Better geolocation using IP-based lookup
-- Dark theme for chat interface
+- Dark and light themes for chat interface (defaults to dark)
+- Better handling of time zones with +/- format
+- Draggable chat window with close button
 
 ### Bug Fixes
-- Fixed button presses getting through chat window
+- Fixed button presses and double clicks getting through chat window
 - Fixed paragraphs in chat display
 
 ---
 
 ## Version 2.3.0 (2025-07-14)
 
-### New Features
-- **Flare prediction lines** showing satellite flash directions
-- **Satellite arrow indicators** for motion direction
-
 ### Improvements
-- More accurate flare band positioning
-- Smooth animation for indicators
-
-### Bug Fixes
-- Fixed geolocation reliability issues
-- Fixed drag-and-drop for view presets
+- **IP-based geolocation**: More reliable than browser-based geolocation
+- Improved startup experience for Starlink sitch
 
 ---
 
 ## Version 2.2.0 (2025-07-13)
 
 ### New Features
-- **Geolocation startup** for automatic location detection
+- **3D model lights**: Basic 3D lights with support for extracting lights from GLTF files
 - **Time zone display** in UI elements
-- **3D model lights extraction** from GLTF files
 
 ### Improvements
-- Better Starlink loading experience
-- Expanded flare visibility bands
+- Expanded flare band to better match actual reflections
+- Non-Starlink satellites now displayed in bluish white
 
 ---
 
 ## Version 2.1.0 (2025-07-01)
 
-### New Features
-- **Elastic slider controls** for finer parameter adjustment
-- **Optional datetime and latlon URL parameters**
-- **Touch scroll/zoom disabled** for better mobile experience
-
 ### Improvements
-- Better control of altitude values with elastic shrinking
-- Improved label visibility for satellites
+- Better perceptual scaling of stars and satellites
+- Track management with per-track smoothing controls
+- Video time display now in top right corner
+- Flow orb improvements
+- Dynamic subdivision now a menu option
+- Global object scale and sim speed up to 500
+- Added "Show in look view" to Contents menu
 
 ### Bug Fixes
-- Fixed filenames ending with user ID not being found
-- Fixed tracking default single point positioning
+- Fixed point sprite scaling when viewport changes size
+- Fixed camera up vector after dragging long distance
+- Fixed speed graphs for sitches not near the origin
+- Fixed aspect ratios on render targets
