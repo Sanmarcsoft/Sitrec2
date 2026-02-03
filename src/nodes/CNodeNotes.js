@@ -150,7 +150,7 @@ class CNodeNotes extends CNodeView {
             this.hide();
         });
 
-        document.addEventListener('keydown', (e) => {
+        this.keydownHandler = (e) => {
             if (e.key === 'Escape' && this.visible && document.activeElement !== this.textArea) {
                 this.hide();
             }
@@ -164,7 +164,8 @@ class CNodeNotes extends CNodeView {
                     this.toggleVisibility();
                 }
             }
-        });
+        };
+        document.addEventListener('keydown', this.keydownHandler);
 
         this.textArea.addEventListener('focus', () => {
             this.showTextArea();
@@ -192,6 +193,7 @@ class CNodeNotes extends CNodeView {
     }
 
     toggleDockedMode() {
+        console.log(`toggleDockedMode: visible=${this.visible}, dockedMode=${this.dockedMode}, savedViewPositions=${!!this.savedViewPositions}`);
         if (this.visible && this.dockedMode) {
             this.hide();
         } else {
@@ -200,7 +202,15 @@ class CNodeNotes extends CNodeView {
     }
 
     showDocked() {
-        if (this.dockedMode) return;
+        console.log(`showDocked: dockedMode=${this.dockedMode}, visible=${this.visible}, savedViewPositions=${!!this.savedViewPositions}`);
+        if (this.dockedMode) {
+            console.log("showDocked: already in docked mode, returning");
+            return;
+        }
+        if (this.savedViewPositions) {
+            console.warn("showDocked: savedViewPositions exists but dockedMode is false - clearing stale state");
+            this.savedViewPositions = null;
+        }
         
         const notesWidth = 0.2;
         
@@ -233,6 +243,7 @@ class CNodeNotes extends CNodeView {
     }
 
     restoreViewPositions() {
+        console.log(`restoreViewPositions: savedViewPositions=${!!this.savedViewPositions}, dockedMode=${this.dockedMode}`);
         if (!this.savedViewPositions) return;
         
         ViewMan.iterate((id, view) => {
@@ -287,6 +298,7 @@ class CNodeNotes extends CNodeView {
     }
 
     hide() {
+        console.log(`hide: dockedMode=${this.dockedMode}, visible=${this.visible}`);
         if (this.dockedMode) {
             this.restoreViewPositions();
             this.div.style.borderRadius = '8px';
@@ -312,6 +324,11 @@ class CNodeNotes extends CNodeView {
     }
 
     dispose() {
+        if (this.keydownHandler) {
+            document.removeEventListener('keydown', this.keydownHandler);
+        }
+        this.savedViewPositions = null;
+        this.dockedMode = false;
         super.dispose();
     }
 }
