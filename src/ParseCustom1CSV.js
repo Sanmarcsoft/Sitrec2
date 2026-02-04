@@ -33,7 +33,7 @@ export function extractPBACSV(text) {
 const CustomCSVFormats = {
     CUSTOM1: {
         trackID:  ["THRESHERID", "TRACK_ID", "STAGENUMBER"],
-        time:     ["TIME", "TIMESTAMP", "DATE", "UTC", "DATETIME", "DATE_TIME", "DATETIME_UTC", "DTG", "DT"],
+        time:     ["TIME", "TIMESTAMP", "DATE", "UTC", "DATETIME", "DATE_TIME", "DATETIME_UTC", "DTG", "DT", "FRAME"],
         lat:      ["LAT", "LATITUDE", "TPLAT", "LATITUDEDEGS"],
         lon:      ["LON", "LONG", "LONGITUDE", "TPLON", "LONGITUDEDEGS"],
         alt:      ["ALTITUDE", "ALT", "ALTITUDE (m)*", "TPHAE", "alt_m"],
@@ -92,9 +92,10 @@ export function parseCustom1CSV(csv) {
     const aircraftCol = findColumn(csv, headerValues.aircraft, true)
     const callsignCol = findColumn(csv, headerValues.callsign, true)
 
+    const timeColHeader = csv[0][dateCol];
     console.log("Detected Custom1 CSV format with columns: " +
         "trackIDCol=" + trackIDCol + ", " +
-    "dateCol=" + dateCol + ", latCol=" + latCol +
+    "dateCol=" + dateCol + " (\"" + timeColHeader + "\"), latCol=" + latCol +
         ", lonCol=" + lonCol + ", altCol=" + altCol +
         ", aglCol=" + aglCol +
         ", altFeet=" + altFeet +
@@ -111,6 +112,14 @@ export function parseCustom1CSV(csv) {
 
     let isNumberTime = false;
     let isRelativeTime = false;
+    let isFrameTime = false;
+
+    // Check if the time column header is "FRAME" (case-insensitive)
+    const timeHeader = csv[0][dateCol].toUpperCase();
+    if (timeHeader === "FRAME") {
+        isFrameTime = true;
+        isRelativeTime = true;
+    }
 
     const firstDateValue = csv[1][dateCol];
     // is it just a postive number, possible with decimal point?
@@ -122,7 +131,7 @@ export function parseCustom1CSV(csv) {
         // not perfect, but works for most cases
         // we assume if the first date is less than 1, it's relative time in seconds
         const firstDate = Number(csv[1][dateCol]);
-        if (firstDate < 1) {
+        if (firstDate < 1 && !isFrameTime) {
             isRelativeTime = true;
         }
     }
@@ -134,7 +143,12 @@ export function parseCustom1CSV(csv) {
         let date = null;
         // date can either be an ISO date string, or a number (epoch time in µs, ms or seconds)
         // parseISODate assumes Zulu time if no timezone specified
-        if (isNumberTime) {
+        if (isFrameTime) {
+            // frame number - convert to time using fps
+            const frame = Number(csv[i][dateCol]);
+            const startTime = GlobalDateTimeNode.dateStart.valueOf();
+            date = startTime + (frame / Sit.fps * 1000);
+        } else if (isNumberTime) {
             // try to parse as a number
             // we don't distinguish the units here, as that's handled by CNodeMISBData::getTime()
             date = Number(csv[i][dateCol]);

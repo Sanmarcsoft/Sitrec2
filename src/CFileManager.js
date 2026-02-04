@@ -2592,7 +2592,7 @@ export function detectCSVType(csv) {
 
 
     // MISB_FULL is the exported format from CNodeMISBDataTrack.exportMISBCSV
-    // It has all MISB columns with headers matching the MISB field names exactly
+    // It has all MISB columns with headers matching the MISB field names exactlyThe
     // First columns are: unknown, Checksum, UnixTimeStamp, MissionID, ...
     if (csv[0][1] === "Checksum" && csv[0][2] === "UnixTimeStamp" && csv[0][3] === "MissionID") {
         return "MISB_FULL";
