@@ -4,7 +4,8 @@
 import {CNodeViewUI} from "./CNodeViewUI";
 import {getCompassHeading} from "../SphericalMath";
 import {MV3} from "../threeUtils";
-import {EUSToLLA} from "../LLA-ECEF-ENU";
+import {getPointBelow} from "../threeExt";
+import {EUSToLLA, haversineDistanceKM} from "../LLA-ECEF-ENU";
 import {forward as mgrsForward} from "mgrs";
 import {degrees} from "../utils";
 import {NodeMan} from "../Globals";
@@ -23,12 +24,33 @@ export class   CNodeMQ9UI extends CNodeViewUI {
         this.gridRows = 30;
         this.gridTexts = [];
 
+        // Display mode indices for cycling (0 = MGRS, 1 = Lat/Long decimal, 2 = Lat/Long DMS)
+        this.acftPosMode = v.acftPosMode ?? 0;
+        this.targetPosMode = v.targetPosMode ?? 0;
+        // Altitude mode (0 = MSL, 1 = HAT)
+        this.acftAltMode = v.acftAltMode ?? 0;
+        this.targetAltMode = v.targetAltMode ?? 0;
+        // Distance mode (0 = M, 1 = KM, 2 = NM)
+        this.slrMode = v.slrMode ?? 0;
+        this.grnMode = v.grnMode ?? 0;
+        // IR mode (0 = IR WHT, 1 = IR BLK, 2 = WHT, 3 = BLK, 4 = EO)
+        this.irMode = v.irMode ?? 0;
+
+        this.addSimpleSerial("acftPosMode");
+        this.addSimpleSerial("targetPosMode");
+        this.addSimpleSerial("acftAltMode");
+        this.addSimpleSerial("targetAltMode");
+        this.addSimpleSerial("slrMode");
+        this.addSimpleSerial("grnMode");
+        this.addSimpleSerial("irMode");
+
         const grey = '#888888';
 
         // Left side text (dummy - grey, left aligned)
         this.addGridText(1, 1, "JAREA", grey, 'left');
         this.addGridText(1, 2, "NAR", grey, 'left');
-        this.addGridText(1, 3, "IR WHT", grey, 'left');
+        // IR mode - clickable to cycle IR WHT/IR BLK/WHT/BLK/EO
+        this.irModeText = this.addGridText(1, 3, "IR WHT", '#FFFFFF', 'left', 'irMode');
         this.addGridText(1, 4, "P1", grey, 'left');
         this.addGridText(1, 5, "92/131", grey, 'left');
         this.addGridText(1, 6, "1173", grey, 'left');
@@ -36,9 +58,11 @@ export class   CNodeMQ9UI extends CNodeViewUI {
 
         // Right side top - ACFT position (dynamic, right aligned)
         this.addGridText(60, 5, "ACFT", '#FFFFFF', 'right');
-        this.acftZone = this.addGridText(60, 6, "38S KC", '#FFFFFF', 'right');
-        this.acftEasting = this.addGridText(60, 7, "00000 00000", '#FFFFFF', 'right');
-        this.acftAlt = this.addGridText(60, 8, "00000 MSL", '#FFFFFF', 'right');
+        // ACFT position rows - clickable to cycle MGRS/LatLon/DMS
+        this.acftZone = this.addGridText(60, 6, "38S KC", '#FFFFFF', 'right', 'acftPos');
+        this.acftEasting = this.addGridText(60, 7, "00000 00000", '#FFFFFF', 'right', 'acftPos');
+        // ACFT altitude - clickable to cycle MSL/HAT
+        this.acftAlt = this.addGridText(60, 8, "00000 MSL", '#FFFFFF', 'right', 'acftAlt');
 
         // Right side middle (dummy - grey, right aligned)
         this.addGridText(60, 12, "LST", grey, 'right');
@@ -46,24 +70,131 @@ export class   CNodeMQ9UI extends CNodeViewUI {
         this.addGridText(60, 14, "1111", grey, 'right');
 
         // Right side bottom - target position (dynamic, right aligned)
-        this.targetZone = this.addGridText(60, 21, "38S KC+", '#FFFFFF', 'right');
-        this.targetEasting = this.addGridText(60, 22, "00000 00000+", '#FFFFFF', 'right');
-        this.targetBRG = this.addGridText(60, 23, "BRG       000", '#FFFFFF', 'right');
-        this.targetSLR = this.addGridText(60, 24, "SLR    0000M+", '#FFFFFF', 'right');
-        this.targetGRN = this.addGridText(60, 25, "GRN    0000M+", '#FFFFFF', 'right');
-        this.addGridText(60, 26, "TWD     103M+", grey, 'right');
-        this.addGridText(60, 27, "ELV    489FT+", grey, 'right');
+        // Target position rows - clickable to cycle MGRS/LatLon/DMS
+        this.targetZone = this.addGridText(60, 21, "38S KC", '#FFFFFF', 'right', 'targetPos');
+        this.targetEasting = this.addGridText(60, 22, "00000 00000", '#FFFFFF', 'right', 'targetPos');
+        // BRG - label left-aligned, value right-aligned
+        this.addGridText(47, 23, "BRG", '#FFFFFF', 'left');
+        this.targetBRGVal = this.addGridText(60, 23, "000", '#FFFFFF', 'right');
+        // SLR - label left-aligned, value right-aligned, clickable to cycle M/KM/NM
+        this.addGridText(47, 24, "SLR", '#FFFFFF', 'left');
+        this.targetSLRVal = this.addGridText(60, 24, "0000M", '#FFFFFF', 'right', 'slr');
+        // GRN - label left-aligned, value right-aligned, clickable to cycle M/KM/NM
+        this.addGridText(47, 25, "GRN", '#FFFFFF', 'left');
+        this.targetGRNVal = this.addGridText(60, 25, "0000M", '#FFFFFF', 'right', 'grn');
+        this.addGridText(47, 26, "TWD", grey, 'left');
+        this.addGridText(60, 26, "103M", grey, 'right');
+        this.addGridText(47, 27, "ELV", grey, 'left');
+        this.addGridText(60, 27, "489FT", grey, 'right');
 
         // Bottom (dummy - grey)
         this.addGridText(1, 28, "SEL", grey, 'left');
         this.addGridText(1, 29, "00:03:59", grey, 'left');
         this.addGridText(30, 28, "ELRF", grey, 'center');
+
+        // Enable pointer events for click detection
+        this.canvas.style.pointerEvents = 'auto';
+        this.canvas.addEventListener('click', (e) => this.handleClick(e));
     }
 
-    addGridText(col, row, text, color = '#FFFFFF', align = 'left') {
-        const entry = { col, row, text, color, align };
+    addGridText(col, row, text, color = '#FFFFFF', align = 'left', clickGroup = null) {
+        const entry = { col, row, text, color, align, clickGroup, bbox: null };
         this.gridTexts.push(entry);
         return entry;
+    }
+
+    handleClick(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        for (const t of this.gridTexts) {
+            if (t.clickGroup && t.bbox) {
+                if (x >= t.bbox.x && x <= t.bbox.x + t.bbox.w &&
+                    y >= t.bbox.y && y <= t.bbox.y + t.bbox.h) {
+                    this.cycleDisplayMode(t.clickGroup);
+                    return;
+                }
+            }
+        }
+    }
+
+    cycleDisplayMode(group) {
+        switch (group) {
+            case 'acftPos':
+                // Cycle: 0=MGRS, 1=Decimal, 2=DMS
+                this.acftPosMode = (this.acftPosMode + 1) % 3;
+                break;
+            case 'targetPos':
+                this.targetPosMode = (this.targetPosMode + 1) % 3;
+                break;
+            case 'acftAlt':
+                // Cycle: 0=MSL, 1=HAT
+                this.acftAltMode = (this.acftAltMode + 1) % 2;
+                break;
+            case 'slr':
+                // Cycle: 0=M, 1=KM, 2=NM
+                this.slrMode = (this.slrMode + 1) % 3;
+                break;
+            case 'grn':
+                this.grnMode = (this.grnMode + 1) % 3;
+                break;
+            case 'irMode':
+                // Cycle: 0=IR WHT, 1=IR BLK, 2=WHT, 3=BLK, 4=EO
+                this.irMode = (this.irMode + 1) % 5;
+                break;
+        }
+    }
+
+    // Format latitude in DMS: DD°MM'SS.S"N/S
+    formatLatDMS(lat) {
+        const dir = lat >= 0 ? 'N' : 'S';
+        lat = Math.abs(lat);
+        const deg = Math.floor(lat);
+        const minFloat = (lat - deg) * 60;
+        const min = Math.floor(minFloat);
+        const sec = (minFloat - min) * 60;
+        return `${deg.toString().padStart(2, '0')}°${min.toString().padStart(2, '0')}'${sec.toFixed(1).padStart(4, '0')}"${dir}`;
+    }
+
+    // Format longitude in DMS: DD°MM'SS.S"E/W (no leading zero on degrees)
+    formatLonDMS(lon) {
+        const dir = lon >= 0 ? 'E' : 'W';
+        lon = Math.abs(lon);
+        const deg = Math.floor(lon);
+        const minFloat = (lon - deg) * 60;
+        const min = Math.floor(minFloat);
+        const sec = (minFloat - min) * 60;
+        return `${deg}°${min.toString().padStart(2, '0')}'${sec.toFixed(1).padStart(4, '0')}"${dir}`;
+    }
+
+    // Format distance based on mode (0=M, 1=KM, 2=NM)
+    // Meters: 0 decimal places, KM/NM: 2 decimal places
+    formatDistance(meters, mode) {
+        switch (mode) {
+            case 0: // Meters - integer
+                return `${Math.round(meters)}M`;
+            case 1: // Kilometers (1 km = 1000 m) - 2 decimal places
+                return `${(meters / 1000).toFixed(2)}KM`;
+            case 2: // Nautical miles (1 NM = 1852 m) - 2 decimal places
+                return `${(meters / 1852).toFixed(2)}NM`;
+            default:
+                return `${Math.round(meters)}M`;
+        }
+    }
+
+    // Get terrain elevation at a lat/lon position (returns meters)
+    getTerrainElevation(lla) {
+        const terrainNode = NodeMan.get("TerrainModel", false);
+        if (terrainNode && terrainNode.maps && terrainNode.UI) {
+            const map = terrainNode.maps[terrainNode.UI.mapType]?.map;
+            if (map) {
+                let elevation = map.getElevationInterpolated(lla.x, lla.y);
+                if (elevation < 0) elevation = 0;
+                return elevation;
+            }
+        }
+        return 0;
     }
 
 
@@ -81,16 +212,48 @@ export class   CNodeMQ9UI extends CNodeViewUI {
         // also used by CNodeCompassUI
         const heading = getCompassHeading(camera.position, forward, camera);
 
+        // Update IR mode text based on current mode
+        const irModeLabels = ['IR WHT', 'IR BLK', 'WHT', 'BLK', 'EO'];
+        this.irModeText.text = irModeLabels[this.irMode];
+
         // Update ACFT position from camera
+        // lla.x = latitude, lla.y = longitude, lla.z = altitude (meters)
         const lla = EUSToLLA(camera.position);
-        const mgrs = mgrsForward([lla.y, lla.x], 5);
-        const zone = mgrs.substring(0, 5);
-        const easting = mgrs.substring(5, 10);
-        const northing = mgrs.substring(10, 15);
-        const altFeet = Math.round(lla.z * 3.28084);
-        this.acftZone.text = zone;
-        this.acftEasting.text = `${easting} ${northing}`;
-        this.acftAlt.text = `${altFeet} MSL`;
+
+        // Format ACFT position based on display mode
+        if (this.acftPosMode === 0) {
+            // MGRS format: Zone (3 chars) + Grid Square (2 chars) on line 1, Easting + Northing on line 2
+            const mgrs = mgrsForward([lla.y, lla.x], 5);
+            const zone = mgrs.substring(0, 5);
+            const easting = mgrs.substring(5, 10);
+            const northing = mgrs.substring(10, 15);
+            this.acftZone.text = zone;
+            this.acftEasting.text = `${easting} ${northing}`;
+        } else if (this.acftPosMode === 1) {
+            // Decimal degrees: lat on line 1, lon on line 2
+            this.acftZone.text = `${lla.x.toFixed(5)}`;
+            this.acftEasting.text = `${lla.y.toFixed(5)}`;
+        } else {
+            // DMS format: DD°MM'SS.S"N/S for lat, DDD°MM'SS.S"E/W for lon
+            this.acftZone.text = this.formatLatDMS(lla.x);
+            this.acftEasting.text = this.formatLonDMS(lla.y);
+        }
+
+        // Format ACFT altitude based on display mode
+        // Altitude is in meters, convert to feet (1 meter = 3.28084 feet)
+        // Use toLocaleString() to add commas for thousands
+        const altMSL = lla.z;
+        const altFeetMSL = Math.round(altMSL * 3.28084);
+        if (this.acftAltMode === 0) {
+            // MSL: Mean Sea Level altitude
+            this.acftAlt.text = `${altFeetMSL.toLocaleString()} MSL`;
+        } else {
+            // HAT: Height Above Terrain = altitude - terrain elevation
+            const terrainElevation = this.getTerrainElevation(lla);
+            const hatMeters = altMSL - terrainElevation;
+            const hatFeet = Math.round(hatMeters * 3.28084);
+            this.acftAlt.text = `${hatFeet.toLocaleString()} HAT`;
+        }
 
         // Update target position if available
         if (!this.in.target) {
@@ -101,30 +264,48 @@ export class   CNodeMQ9UI extends CNodeViewUI {
         if (this.in.target) {
             const targetPos = this.in.target.p(frame);
             const targetLLA = EUSToLLA(targetPos);
-            const targetMgrs = mgrsForward([targetLLA.y, targetLLA.x], 5);
-            const targetZoneStr = targetMgrs.substring(0, 3) + " " + targetMgrs.substring(3, 5) + " " + targetMgrs.substring(5, 10);
-            const targetEastingStr = ""; // targetMgrs.substring(5, 10);
-            const targetNorthingStr = targetMgrs.substring(10, 15);
-            this.targetZone.text = `${targetZoneStr}+`;
-            this.targetEasting.text = `${targetEastingStr} ${targetNorthingStr}+`;
 
-            // Bearing from camera to target (true bearing clockwise from north)
+            // Format target position based on display mode
+            if (this.targetPosMode === 0) {
+                // MGRS format
+                const targetMgrs = mgrsForward([targetLLA.y, targetLLA.x], 5);
+                const targetZoneStr = targetMgrs.substring(0, 3) + " " + targetMgrs.substring(3, 5) + " " + targetMgrs.substring(5, 10);
+                const targetNorthingStr = targetMgrs.substring(10, 15);
+                this.targetZone.text = targetZoneStr;
+                this.targetEasting.text = targetNorthingStr;
+            } else if (this.targetPosMode === 1) {
+                // Decimal degrees
+                this.targetZone.text = `${targetLLA.x.toFixed(5)}`;
+                this.targetEasting.text = `${targetLLA.y.toFixed(5)}`;
+            } else {
+                // DMS format
+                this.targetZone.text = this.formatLatDMS(targetLLA.x);
+                this.targetEasting.text = this.formatLonDMS(targetLLA.y);
+            }
+
+            // Bearing from camera to target
+            // Calculate true bearing (clockwise from north) using horizontal vector from camera to target
             const toTarget = targetPos.clone().sub(camera.position);
             const bearingRad = getCompassHeading(camera.position, toTarget.normalize(), null);
+            // Convert radians to degrees, normalize to 0-360 range
             const bearingDeg = ((degrees(bearingRad) % 360) + 360) % 360;
-            this.targetBRG.text = `BRG       ${Math.round(bearingDeg).toString().padStart(3, '0')}`;
+            this.targetBRGVal.text = `${Math.round(bearingDeg)} T`;
 
-            // Slant range (camera to target LOS length)
+            // SLR: Slant Range - direct 3D distance from camera to target (line-of-sight distance)
             const slantRange = camera.position.distanceTo(targetPos);
-            this.targetSLR.text = `SLR   ${Math.round(slantRange).toString().padStart(5)}M+`;
+            this.targetSLRVal.text = this.formatDistance(slantRange, this.slrMode);
 
-            // Ground range (horizontal distance)
-            const camPosGround = camera.position.clone();
-            const targetPosGround = targetPos.clone();
-            camPosGround.y = 0;
-            targetPosGround.y = 0;
-            const groundRange = camPosGround.distanceTo(targetPosGround);
-            this.targetGRN.text = `GRN   ${Math.round(groundRange).toString().padStart(5)}M+`;
+            // GRN: Ground Range - distance along ground surface between projected points
+            // Project camera and target positions onto terrain/sphere surface using getPointBelow
+            const camGroundPos = getPointBelow(camera.position);
+            const targetGroundPos = getPointBelow(targetPos);
+            // Convert ground positions to lat/lon and use Haversine formula for great-circle distance
+            const camGroundLLA = EUSToLLA(camGroundPos);
+            const targetGroundLLA = EUSToLLA(targetGroundPos);
+            // haversineDistanceKM returns distance in km, convert to meters
+            const groundRangeKM = haversineDistanceKM(camGroundLLA.x, camGroundLLA.y, targetGroundLLA.x, targetGroundLLA.y);
+            const groundRange = groundRangeKM * 1000;
+            this.targetGRNVal.text = this.formatDistance(groundRange, this.grnMode);
         }
 
         // after updating any text (none yet), render the text
@@ -178,6 +359,20 @@ export class   CNodeMQ9UI extends CNodeViewUI {
             }
             const y = gridY + (t.row - 1) * charHeight;
             c.fillText(t.text, x, y);
+
+            // Store bounding box for click detection on clickable elements
+            if (t.clickGroup) {
+                const textWidth = c.measureText(t.text).width;
+                let bboxX;
+                if (t.align === 'right') {
+                    bboxX = x - textWidth;
+                } else if (t.align === 'center') {
+                    bboxX = x - textWidth / 2;
+                } else {
+                    bboxX = x;
+                }
+                t.bbox = { x: bboxX, y: y, w: textWidth, h: charHeight };
+            }
         }
 
 
