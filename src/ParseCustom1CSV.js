@@ -4,6 +4,7 @@ import {findColumn, parseISODate} from "./ParseUtils";
 import {MISB, MISBFields} from "./MISBUtils";
 import {GlobalDateTimeNode, Sit} from "./Globals";
 import {f2m} from "./utils";
+import {parseMGRS} from "./CoordinateParser";
 
 export function isPBAFile(text) {
     return text.startsWith("---Pico Balloon Archive");
@@ -36,6 +37,7 @@ const CustomCSVFormats = {
         time:     ["TIME", "TIMESTAMP", "DATE", "UTC", "DATETIME", "DATE_TIME", "DATETIME_UTC", "DTG", "DT", "FRAME"],
         lat:      ["LAT", "LATITUDE", "TPLAT", "LATITUDEDEGS"],
         lon:      ["LON", "LONG", "LONGITUDE", "TPLON", "LONGITUDEDEGS"],
+        mgrs:     ["MGRS", "GRID", "GRIDREF", "GRID_REF"],
         alt:      ["ALTITUDE", "ALT", "ALTITUDE (m)*", "TPHAE", "alt_m"],
         agl:      ["AGL", "ALT (m/agl)"],
         altFeet:  ["ALTITUDE (FT)", "ALT (FT)", "ALTITUDE(FT)", "ALT(FT)"],
@@ -49,23 +51,20 @@ const CustomCSVFormats = {
 
 export function isCustom1(csv) {
     // CUSTOM1 is one of several custom track format exported from some database
-    // at a minimum it has time, lat, lon, alt
+    // at a minimum it has time, lat, lon (or MGRS as alternative to lat/lon)
     // optionally it has aircraft and callsign
 
     // csv[0] is the header row
-    // given
     const headerValues= CustomCSVFormats.CUSTOM1;
-    // we only need time, lat, lon
-    // we can ignore the rest
-    if (findColumn(csv, headerValues.time, true) !== -1
-        && findColumn(csv, headerValues.lat, true) !== -1
-        && findColumn(csv, headerValues.lon, true) !== -1
-        // alt is not required for detection
-        //      && (findColumn(csv, headerValues.alt, true) !== -1 || findColumn(csv, headerValues.agl, true) !== -1)
-    ) {
+    // we need time and either (lat+lon) or mgrs
+    const hasTime = findColumn(csv, headerValues.time, true) !== -1;
+    const hasLatLon = findColumn(csv, headerValues.lat, true) !== -1
+        && findColumn(csv, headerValues.lon, true) !== -1;
+    const hasMGRS = findColumn(csv, headerValues.mgrs, true) !== -1;
+
+    if (hasTime && (hasLatLon || hasMGRS)) {
         return true;
     }
-
 
     return false;
 }
@@ -84,6 +83,7 @@ export function parseCustom1CSV(csv) {
     const dateCol =     findColumn(csv, headerValues.time, true)
     const latCol =      findColumn(csv, headerValues.lat, true)
     const lonCol =      findColumn(csv, headerValues.lon, true)
+    const mgrsCol =     findColumn(csv, headerValues.mgrs, true)
     const altCol =      findColumn(csv, headerValues.alt, true)
     const altFeet =     findColumn(csv, headerValues.altFeet, true)
     const altKmCol =    findColumn(csv, headerValues.altKm, true)
@@ -92,11 +92,14 @@ export function parseCustom1CSV(csv) {
     const aircraftCol = findColumn(csv, headerValues.aircraft, true)
     const callsignCol = findColumn(csv, headerValues.callsign, true)
 
+    const useMGRS = mgrsCol !== -1 && (latCol === -1 || lonCol === -1);
+
     const timeColHeader = csv[0][dateCol];
     console.log("Detected Custom1 CSV format with columns: " +
         "trackIDCol=" + trackIDCol + ", " +
     "dateCol=" + dateCol + " (\"" + timeColHeader + "\"), latCol=" + latCol +
-        ", lonCol=" + lonCol + ", altCol=" + altCol +
+        ", lonCol=" + lonCol + ", mgrsCol=" + mgrsCol + (useMGRS ? " (using MGRS)" : "") +
+        ", altCol=" + altCol +
         ", aglCol=" + aglCol +
         ", altFeet=" + altFeet +
         ", altKmCol=" + altKmCol +
@@ -168,8 +171,21 @@ export function parseCustom1CSV(csv) {
         // at this point date is in milliseconds or microseconds since epoch
         MISBArray[i - 1][MISB.UnixTimeStamp] = date;
 
-        MISBArray[i - 1][MISB.SensorLatitude] = Number(csv[i][latCol])
-        MISBArray[i - 1][MISB.SensorLongitude] = Number(csv[i][lonCol])
+        if (useMGRS) {
+            const mgrsValue = csv[i][mgrsCol];
+            const coords = parseMGRS(mgrsValue);
+            if (coords) {
+                MISBArray[i - 1][MISB.SensorLatitude] = coords.lat;
+                MISBArray[i - 1][MISB.SensorLongitude] = coords.lon;
+            } else {
+                console.warn(`Invalid MGRS value at row ${i}: ${mgrsValue}`);
+                MISBArray[i - 1][MISB.SensorLatitude] = null;
+                MISBArray[i - 1][MISB.SensorLongitude] = null;
+            }
+        } else {
+            MISBArray[i - 1][MISB.SensorLatitude] = Number(csv[i][latCol])
+            MISBArray[i - 1][MISB.SensorLongitude] = Number(csv[i][lonCol])
+        }
 
         if (trackIDCol !== -1) {
             MISBArray[i - 1][MISB.TrackID] = csv[i][trackIDCol];
