@@ -433,10 +433,13 @@ export class   CNodeMQ9UI extends CNodeViewUI {
         // Graticule dimensions - use same fontSize as grid text
         const gratCenterX = gridX + gridW / 2;
         const gratWidth = gridW * 0.25;
-        const boxWidth = charWidth * 5;
-        const boxHeight = charHeight * 1.2;
+        const boxPadding = charWidth * 0.05;
+        const boxWidth = charWidth * 3 + boxPadding * 2;
+        const boxHeight = charHeight * 1.1;
         const tickHeight = charHeight * 0.6;
+        const triSize = charHeight * 0.4;
         const gratY = gridY + charHeight * 0.2;
+        const scaleY = gratY + boxHeight + triSize + tickHeight;
 
         c.strokeStyle = '#FFFFFF';
         c.fillStyle = '#FFFFFF';
@@ -444,11 +447,11 @@ export class   CNodeMQ9UI extends CNodeViewUI {
 
         // Draw the scale line
         c.beginPath();
-        c.moveTo(gratCenterX - gratWidth / 2, gratY + boxHeight + tickHeight * 0.5);
-        c.lineTo(gratCenterX + gratWidth / 2, gratY + boxHeight + tickHeight * 0.5);
+        c.moveTo(gratCenterX - gratWidth / 2, scaleY);
+        c.lineTo(gratCenterX + gratWidth / 2, scaleY);
         c.stroke();
 
-        // Draw ticks at -180, -150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150, 180
+        // Draw ticks above the line
         const tickAngles = [-180, -150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150, 180];
         const majorTicks = [-180, -90, 0, 90, 180];
         for (const angle of tickAngles) {
@@ -456,31 +459,33 @@ export class   CNodeMQ9UI extends CNodeViewUI {
             const isMajor = majorTicks.includes(angle);
             const th = isMajor ? tickHeight : tickHeight * 0.5;
             c.beginPath();
-            c.moveTo(tickX, gratY + boxHeight + tickHeight * 0.5 - th / 2);
-            c.lineTo(tickX, gratY + boxHeight + tickHeight * 0.5 + th / 2);
+            c.moveTo(tickX, scaleY);
+            c.lineTo(tickX, scaleY - th);
             c.stroke();
         }
 
-        // Draw heading box with track heading value
+        // Draw heading box with track heading value (T outside box)
         c.strokeRect(gratCenterX - boxWidth / 2, gratY, boxWidth, boxHeight);
         c.font = `${fontSize}px monospace`;
         c.textAlign = 'center';
         c.textBaseline = 'middle';
-        c.fillText(`${Math.round(trackHeadingDeg)}T`, gratCenterX, gratY + boxHeight / 2);
+        c.fillText(`${Math.round(trackHeadingDeg)}`, gratCenterX, gratY + boxHeight / 2);
+        // T outside the box to the right
+        c.textAlign = 'left';
+        c.fillText('T', gratCenterX + boxWidth / 2 + 2, gratY + boxHeight / 2);
 
         // Draw solid triangle below the box pointing down
-        const triSize = charHeight * 0.5;
         c.beginPath();
-        c.moveTo(gratCenterX, gratY + boxHeight);
-        c.lineTo(gratCenterX - triSize / 2, gratY + boxHeight + triSize);
-        c.lineTo(gratCenterX + triSize / 2, gratY + boxHeight + triSize);
+        c.moveTo(gratCenterX - triSize / 2, gratY + boxHeight);
+        c.lineTo(gratCenterX + triSize / 2, gratY + boxHeight);
+        c.lineTo(gratCenterX, gratY + boxHeight + triSize);
         c.closePath();
         c.fill();
 
         // Draw inverted V (caret) for camera azimuth with number below
         const caretX = gratCenterX + (relativeAzimuth / 180) * (gratWidth / 2);
-        const caretY = gratY + boxHeight + tickHeight * 0.5 + tickHeight;
-        const caretSize = charHeight * 0.5;
+        const caretY = scaleY + charHeight * 0.15;
+        const caretSize = charHeight * 0.4;
         c.beginPath();
         c.moveTo(caretX - caretSize / 2, caretY + caretSize);
         c.lineTo(caretX, caretY);
@@ -489,7 +494,8 @@ export class   CNodeMQ9UI extends CNodeViewUI {
 
         // Draw relative azimuth number below the caret
         c.font = `${fontSize}px monospace`;
-        c.fillText(`${Math.round(relativeAzimuth)}`, caretX, caretY + caretSize + charHeight * 0.5);
+        c.textAlign = 'center';
+        c.fillText(`${Math.round(relativeAzimuth)}`, caretX, caretY + caretSize + charHeight * 0.6);
 
     }
 
