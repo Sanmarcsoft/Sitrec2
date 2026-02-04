@@ -14,7 +14,10 @@ export class   CNodeMQ9UI extends CNodeViewUI {
 
     constructor(v) {
         super(v);
-        this.input("camera");  // a camera node
+        this.input("camera");  // a camera node, this is the camera track
+
+        // optional camera track for reticle display
+        this.addInput("cameraTrack", NodeMan.get("cameraTrackSwitchSmooth"), true);
 
         this.cx = 50;
         this.cy = 50;
@@ -407,6 +410,86 @@ export class   CNodeMQ9UI extends CNodeViewUI {
         c.lineTo(this.px_square(this.cx + crosshairLength), this.py(this.cy));
         c.stroke();
 
+        // Heading graticule at top of display
+        // Get track heading from camera track velocity
+        let trackHeadingDeg = 0;
+        if (this.in.cameraTrack) {
+            const trackPos = this.in.cameraTrack.p(frame);
+            const nextFrame = frame + 1;
+            const nextPos = this.in.cameraTrack.p(nextFrame);
+            const velocity = nextPos.clone().sub(trackPos);
+            if (velocity.lengthSq() > 0.001) {
+                const trackHeadingRad = getCompassHeading(trackPos, velocity.normalize(), null);
+                trackHeadingDeg = ((degrees(trackHeadingRad) % 360) + 360) % 360;
+            }
+        }
+
+        // Camera azimuth relative to track heading
+        const cameraHeadingDeg = ((degrees(heading) % 360) + 360) % 360;
+        let relativeAzimuth = cameraHeadingDeg - trackHeadingDeg;
+        if (relativeAzimuth > 180) relativeAzimuth -= 360;
+        if (relativeAzimuth < -180) relativeAzimuth += 360;
+
+        // Graticule dimensions - use same fontSize as grid text
+        const gratCenterX = gridX + gridW / 2;
+        const gratWidth = gridW * 0.25;
+        const boxWidth = charWidth * 5;
+        const boxHeight = charHeight * 1.2;
+        const tickHeight = charHeight * 0.6;
+        const gratY = gridY + charHeight * 0.2;
+
+        c.strokeStyle = '#FFFFFF';
+        c.fillStyle = '#FFFFFF';
+        c.lineWidth = 1;
+
+        // Draw the scale line
+        c.beginPath();
+        c.moveTo(gratCenterX - gratWidth / 2, gratY + boxHeight + tickHeight * 0.5);
+        c.lineTo(gratCenterX + gratWidth / 2, gratY + boxHeight + tickHeight * 0.5);
+        c.stroke();
+
+        // Draw ticks at -180, -150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150, 180
+        const tickAngles = [-180, -150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150, 180];
+        const majorTicks = [-180, -90, 0, 90, 180];
+        for (const angle of tickAngles) {
+            const tickX = gratCenterX + (angle / 180) * (gratWidth / 2);
+            const isMajor = majorTicks.includes(angle);
+            const th = isMajor ? tickHeight : tickHeight * 0.5;
+            c.beginPath();
+            c.moveTo(tickX, gratY + boxHeight + tickHeight * 0.5 - th / 2);
+            c.lineTo(tickX, gratY + boxHeight + tickHeight * 0.5 + th / 2);
+            c.stroke();
+        }
+
+        // Draw heading box with track heading value
+        c.strokeRect(gratCenterX - boxWidth / 2, gratY, boxWidth, boxHeight);
+        c.font = `${fontSize}px monospace`;
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        c.fillText(`${Math.round(trackHeadingDeg)}T`, gratCenterX, gratY + boxHeight / 2);
+
+        // Draw solid triangle below the box pointing down
+        const triSize = charHeight * 0.5;
+        c.beginPath();
+        c.moveTo(gratCenterX, gratY + boxHeight);
+        c.lineTo(gratCenterX - triSize / 2, gratY + boxHeight + triSize);
+        c.lineTo(gratCenterX + triSize / 2, gratY + boxHeight + triSize);
+        c.closePath();
+        c.fill();
+
+        // Draw inverted V (caret) for camera azimuth with number below
+        const caretX = gratCenterX + (relativeAzimuth / 180) * (gratWidth / 2);
+        const caretY = gratY + boxHeight + tickHeight * 0.5 + tickHeight;
+        const caretSize = charHeight * 0.5;
+        c.beginPath();
+        c.moveTo(caretX - caretSize / 2, caretY + caretSize);
+        c.lineTo(caretX, caretY);
+        c.lineTo(caretX + caretSize / 2, caretY + caretSize);
+        c.stroke();
+
+        // Draw relative azimuth number below the caret
+        c.font = `${fontSize}px monospace`;
+        c.fillText(`${Math.round(relativeAzimuth)}`, caretX, caretY + caretSize + charHeight * 0.5);
 
     }
 
