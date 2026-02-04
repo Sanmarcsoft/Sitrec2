@@ -44,9 +44,15 @@ export class CNodeControllerObjectTilt extends CNodeController {
 
 
 
-        // This is specific to the flying saucer
+        // Add orientation type menu - initially to physics, can be moved later
+        this.noMenu = v.noMenu;
+        this.tiltTypeGui = null;
+        this.tiltTypeGuiParent = null;
+        console.log("CNodeControllerObjectTilt constructor, tiltType:", this.tiltType, "noMenu:", v.noMenu)
         if (this.tiltType !== "banking" && !v.noMenu) {
-            guiMenus.physics.add(this,"tiltType",{
+            console.log("  Creating tiltType GUI in physics menu")
+            this.tiltTypeGuiParent = guiMenus.physics;
+            this.tiltTypeGui = this.tiltTypeGuiParent.add(this,"tiltType",{
                 banking:"banking",
                 none:"none", // we need a none if we are going to use it to init things
                 frontPointing:"frontPointing",
@@ -70,6 +76,36 @@ export class CNodeControllerObjectTilt extends CNodeController {
     dispose() {
         super.dispose()
         NodeMan.unlinkDisposeRemove(this.smoothedTrack)
+        if (this.tiltTypeGui) {
+            this.tiltTypeGui.destroy();
+            this.tiltTypeGui = null;
+        }
+    }
+
+    // Move the tilt type GUI from physics menu to the object's GUI folder
+    moveGuiTo(newParent) {
+        console.log("moveGuiTo called, tiltTypeGui:", this.tiltTypeGui, "parent:", this.tiltTypeGuiParent, "newParent:", newParent)
+        if (this.tiltTypeGui && this.tiltTypeGuiParent !== newParent) {
+            console.log("  Moving tilt type GUI to new parent")
+            // Destroy the old one
+            this.tiltTypeGui.destroy();
+            // Create new one in the target folder
+            this.tiltTypeGuiParent = newParent;
+            this.tiltTypeGui = newParent.add(this,"tiltType",{
+                banking:"banking",
+                none:"none",
+                frontPointing:"frontPointing",
+                frontPointingAir:"frontPointingAir",
+                axialPush:"axialPush",
+                axialPull:"axialPull",
+                axialPushZeroG:"axialPushZeroG",
+                axialPullZeroG:"axialPullZeroG",
+                bottomPointing:"bottomPointing",
+                bottomPointingAir:"bottomPointingAir",
+                glareAngle:"glareAngle",
+            }).name("Object Orientation type")
+                .listen(()=>{setRenderOne(true)})
+        }
     }
 
     modSerialize() {
@@ -98,8 +134,10 @@ export class CNodeControllerObjectTilt extends CNodeController {
                 // }
 
                 // if we have a wind vector then subtract that to get the nose heading
+                // pass the track position to get wind in the correct local frame
                 if (this.in.wind !== undefined) {
-                    const windVector = this.in.wind.v(f)
+                    const trackPos = this.in.track.p(f)
+                    const windVector = this.in.wind.getValueFrame(f, trackPos)
                     next.sub(windVector)
                 }
 
@@ -155,9 +193,10 @@ export class CNodeControllerObjectTilt extends CNodeController {
                         const fwd = velocity.clone().normalize()
                         let angularVelocity = velocityA.angleTo(velocityB) / sampleDuration;  // radians per second
 
-                        // is it left or right turn? If the cross product of the two velocities is up, then it's a right turn
+                        // is it left or right turn? Use local up vector instead of global Y
                         const cross = V3().crossVectors(velocityA, velocityB)
-                        const right = cross.y > 0
+                        const localUp = getLocalUpVector(pos)
+                        const right = cross.dot(localUp) > 0
                         if (right)
                             angularVelocity = -angularVelocity
 
@@ -215,7 +254,8 @@ export class CNodeControllerObjectTilt extends CNodeController {
                             accelerationDir.negate()
 
                         if (this.tiltType === "axialPull" || this.tiltType === "axialPush") {
-                            const gravity = V3(0, -9.81 / this.fps / this.fps, 0) // 9.81 is per sercond, so divide by fps^2 to get per frame
+                            const localDown = getLocalUpVector(pos).negate()
+                            const gravity = localDown.multiplyScalar(9.81 / this.fps / this.fps) // 9.81 is per second, so divide by fps^2 to get per frame
                             accelerationDir.sub(gravity) // add in a force opposite gravity
                         }
 

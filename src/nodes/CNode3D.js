@@ -107,22 +107,22 @@ export class CNode3D extends CNode {
     }
 
     addController(type, def) {
-//        console.log("Adding CONTROLLER " + type + " to " + this.id)
         assert(def.camera === undefined, "Adding a controller with a camera defined, should be object!")
         if (def.id === undefined) {
             def.id = this.id + "_Controller" + type;
-//            console.warn("Controller added without id, using " + def.id)
         }
-        this.addControllerNode(NodeFactory.create("Controller"+type, def))
+        const controller = NodeFactory.create("Controller"+type, def);
+        this.addControllerNode(controller)
         return this;
     }
 
     addControllerNode(node) {
-// having this introduces circular dependency with CNodeView's including CNodeCamera
-//        assert(node instanceof CNodeController || node instanceof CNodeSwitch,
-//            "Calling addControllerNode with non Controller or Switch");
         node.isController = true;
         this.addInput(node.id, node)
+        // If object has GUI and controller supports moving GUI, move it to object's folder
+        if (this.gui && typeof this.gui.add === 'function' && typeof node.moveGuiTo === 'function') {
+            node.moveGuiTo(this.gui);
+        }
         return this;
     }
 
