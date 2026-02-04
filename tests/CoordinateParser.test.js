@@ -12,26 +12,35 @@ describe("parseMGRS", () => {
         const result = parseMGRS("37SCR1192692923");
         expect(result).not.toBeNull();
         expect(result.lat).toBeCloseTo(32.4576, 3);
+        expect(result.lon).toBeCloseTo(36.999, 3);
     });
 
     test("parses lowercase MGRS", () => {
         const result = parseMGRS("37scr1192692923");
         expect(result).not.toBeNull();
+        expect(result.lat).toBeCloseTo(32.4576, 3);
+        expect(result.lon).toBeCloseTo(36.999, 3);
     });
 
     test("parses 4-digit MGRS", () => {
         const result = parseMGRS("18SUJ2337");
         expect(result).not.toBeNull();
+        expect(result.lat).toBeCloseTo(39.169, 2);
+        expect(result.lon).toBeCloseTo(-77.043, 2);
     });
 
     test("parses 6-digit MGRS", () => {
         const result = parseMGRS("18SUJ233378");
         expect(result).not.toBeNull();
+        expect(result.lat).toBeCloseTo(39.172, 2);
+        expect(result.lon).toBeCloseTo(-77.045, 2);
     });
 
     test("parses 8-digit MGRS", () => {
         const result = parseMGRS("18SUJ23343789");
         expect(result).not.toBeNull();
+        expect(result.lat).toBeCloseTo(39.172, 2);
+        expect(result.lon).toBeCloseTo(-77.045, 2);
     });
 
     test("returns null for invalid MGRS", () => {
@@ -257,6 +266,7 @@ describe("parseLatLonPair", () => {
             const result = parseLatLonPair("37SCR1192692923");
             expect(result).not.toBeNull();
             expect(result.lat).toBeCloseTo(32.4576, 3);
+            expect(result.lon).toBeCloseTo(36.999, 3);
         });
     });
 
@@ -285,8 +295,8 @@ describe("parseLatLonPair", () => {
 describe("parseCoordinate", () => {
     test("returns MGRS result with lat/lon", () => {
         const result = parseCoordinate("37SCR1192692923");
-        expect(result.lat).toBeDefined();
-        expect(result.lon).toBeDefined();
+        expect(result.lat).toBeCloseTo(32.4576, 3);
+        expect(result.lon).toBeCloseTo(36.999, 3);
     });
 
     test("returns lat/lon pair", () => {
@@ -324,12 +334,15 @@ describe("real-world examples", () => {
     test("Aviation format", () => {
         const result = parseLatLonPair("N40 42.77 W074 00.36");
         expect(result).not.toBeNull();
+        expect(result.lat).toBeCloseTo(40.7128, 3);
+        expect(result.lon).toBeCloseTo(-74.006, 2);
     });
 
     test("Military MGRS", () => {
         const result = parseCoordinate("18T WL 80 60");
         expect(result).not.toBeNull();
-        expect(result.lat).toBeDefined();
+        expect(result.lat).toBeCloseTo(41.192, 2);
+        expect(result.lon).toBeCloseTo(-74.040, 2);
     });
 
     test("degree symbol variations", () => {
@@ -342,6 +355,7 @@ describe("real-world examples", () => {
             const result = parseLatLonPair(format);
             expect(result).not.toBeNull();
             expect(result.lat).toBeCloseTo(45.508333, 3);
+            expect(result.lon).toBeCloseTo(-122.508333, 3);
         }
     });
 });
