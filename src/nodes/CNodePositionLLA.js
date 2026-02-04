@@ -20,6 +20,7 @@ import {getApproximateLocationFromIP} from "../GeoLocation";
 import {customAltitudeFunction, customLocationFunction} from "../../config/config";
 import {showError} from "../showError";
 import {f2m} from "../utils";
+import {parseLatLonPair, parseSingleCoordinate} from "../CoordinateParser";
 
 export class CNodePositionLLA extends CNodeTrack {
     constructor(v) {
@@ -50,35 +51,25 @@ export class CNodePositionLLA extends CNodeTrack {
                    stepExplicit: false, // prevent snapping
                    noSlider: true,
                    onChange: (v) => {
-                       // Get the text of the input to see if they pasted in Lat, Lon
-                       // like 40.9096508,-74.0734146
-                       // if so, then split it and set the values
                        const input = this.guiLat.guiEntry.$input.value;
-                       // strip off any degrees symbols
-                       const inputNoDeg = input.replace(/°/g, "");
-                       let split = inputNoDeg.split(",");
-                       if (split.length === 1) {
-                           split = inputNoDeg.split(" ");
+                       const pair = parseLatLonPair(input);
+                       if (pair) {
+                           this.guiLat.guiEntry.$input.value = pair.lat;
+                           this._LLA[0] = pair.lat;
+                           this._LLA[1] = pair.lon;
+                           this.guiLon.value = pair.lon;
+                           this.recalculateCascade()
+                           EventManager.dispatchEvent("PositionLLA.onChange", {id: this.id})
+                           return;
                        }
-
-                       if (split.length === 2) {
-                           const lat = parseFloat(split[0]);
-                           const lon = parseFloat(split[1]);
-                           if (!isNaN(lat) && !isNaN(lon)) {
-                               this.guiLat.guiEntry.$input.value = lat;
-                               this._LLA[0] = lat;
-                               this._LLA[1] = lon;
-                               this.guiLon.value = lon;
-                               this.recalculateCascade()
-                               EventManager.dispatchEvent("PositionLLA.onChange", {id: this.id})
-                               return;
-                           }
+                       const single = parseSingleCoordinate(input);
+                       if (single !== null) {
+                           this._LLA[0] = single;
+                       } else {
+                           this._LLA[0] = parseFloat(v);
                        }
-                       this._LLA[0] = parseFloat(v);
                        EventManager.dispatchEvent("PositionLLA.onChange", {id: this.id})
-
                        this.recalculateCascade()
-
                    }
                }, v.gui)
 
@@ -91,10 +82,15 @@ export class CNodePositionLLA extends CNodeTrack {
                    stepExplicit: false, // prevent snapping
                    noSlider: true,
                    onChange: (v) => {
-                       this._LLA[1] = v;
+                       const input = this.guiLon.guiEntry.$input.value;
+                       const single = parseSingleCoordinate(input);
+                       if (single !== null) {
+                           this._LLA[1] = single;
+                       } else {
+                           this._LLA[1] = v;
+                       }
                        this.recalculateCascade()
                        EventManager.dispatchEvent("PositionLLA.onChange", {id: this.id})
-
                    }
                 }, v.gui)
 
@@ -138,47 +134,47 @@ export class CNodePositionLLA extends CNodeTrack {
 
                 if (customLocationFunction !== undefined) {
                     gui.add(this, "lookupString").name("Lookup").onFinishChange(async () => {
-                        // given a string like "Sacramento, CA"
-                        // use the configurable location and altitude functions
                         if (this.lookupString.length > 0) {
                             try {
-                                // First, get the location using the configurable function
-                                const location = await customLocationFunction(this.lookupString);
+                                const coord = parseLatLonPair(this.lookupString);
+                                let lat, lon;
+                                if (coord) {
+                                    lat = coord.lat;
+                                    lon = coord.lon;
+                                } else {
+                                    const location = await customLocationFunction(this.lookupString);
+                                    if (!location) {
+                                        alert("No results found for " + this.lookupString);
+                                        return;
+                                    }
+                                    [lat, lon] = location;
+                                }
 
-                                if (location) {
-                                    const [lat, lon] = location;
-                                    this.guiLat.value = lat;
-                                    this.guiLon.value = lon;
-                                    this._LLA[0] = lat;
-                                    this._LLA[1] = lon;
-                                    // set the altitude to 0 initially
-                                    this._LLA[2] = 0;
+                                this.guiLat.value = lat;
+                                this.guiLon.value = lon;
+                                this._LLA[0] = lat;
+                                this._LLA[1] = lon;
+                                this._LLA[2] = 0;
+                                this.guiAlt.setValueWithUnits(this._LLA[2], "metric", "small", true);
+                                this.recalculateCascade();
+                                EventManager.dispatchEvent("PositionLLA.onChange", {id: this.id});
+
+                                const altitude = await customAltitudeFunction(lat, lon);
+                                if (altitude > 0) {
+                                    this._LLA[2] = altitude;
                                     this.guiAlt.setValueWithUnits(this._LLA[2], "metric", "small", true);
                                     this.recalculateCascade();
-                                    EventManager.dispatchEvent("PositionLLA.onChange", {id: this.id});
+                                }
 
-                                    // Then, get the altitude using the configurable function
-                                    const altitude = await customAltitudeFunction(lat, lon);
-                                    if (altitude > 0) {
-                                        this._LLA[2] = altitude;
-                                        this.guiAlt.setValueWithUnits(this._LLA[2], "metric", "small", true);
-                                        this.recalculateCascade();
-                                    } else {
-                                        // console.warn("No elevation data found for " + this.lookupString);
-                                    }
+                                this.goTo();
+                                EventManager.dispatchEvent("PositionLLA.onChange", {id: this.id});
 
-                                    this.goTo();
-                                    EventManager.dispatchEvent("PositionLLA.onChange", {id: this.id});
-
-                                    if (NodeMan.exists("terrainUI")) {
-                                        const terrainUI = NodeMan.get("terrainUI");
-                                        terrainUI.lat = this._LLA[0];
-                                        terrainUI.lon = this._LLA[1];
-                                        terrainUI.flagForRecalculation();
-                                        terrainUI.startLoading = true;
-                                    }
-                                } else {
-                                    alert("No results found for " + this.lookupString);
+                                if (NodeMan.exists("terrainUI")) {
+                                    const terrainUI = NodeMan.get("terrainUI");
+                                    terrainUI.lat = this._LLA[0];
+                                    terrainUI.lon = this._LLA[1];
+                                    terrainUI.flagForRecalculation();
+                                    terrainUI.startLoading = true;
                                 }
                             } catch (error) {
                                 showError("Error during lookup: ", error);
