@@ -25,43 +25,43 @@ export class   CNodeMQ9UI extends CNodeViewUI {
 
         const grey = '#888888';
 
-        // Left side text (dummy - grey)
-        this.addGridText(1, 1, "JAREA", grey);
-        this.addGridText(1, 2, "NAR", grey);
-        this.addGridText(1, 3, "IR WHT", grey);
-        this.addGridText(1, 4, "P1", grey);
-        this.addGridText(1, 5, "92/131", grey);
-        this.addGridText(1, 6, "1173", grey);
-        this.addGridText(1, 7, "23C", grey);
+        // Left side text (dummy - grey, left aligned)
+        this.addGridText(1, 1, "JAREA", grey, 'left');
+        this.addGridText(1, 2, "NAR", grey, 'left');
+        this.addGridText(1, 3, "IR WHT", grey, 'left');
+        this.addGridText(1, 4, "P1", grey, 'left');
+        this.addGridText(1, 5, "92/131", grey, 'left');
+        this.addGridText(1, 6, "1173", grey, 'left');
+        this.addGridText(1, 7, "23C", grey, 'left');
 
-        // Right side top - ACFT position (dynamic)
-        this.addGridText(51, 5, "ACFT");
-        this.acftZone = this.addGridText(51, 6, "38S KC");
-        this.acftEasting = this.addGridText(47, 7, "00000 00000");
-        this.acftAlt = this.addGridText(48, 8, "00000 MSL");
+        // Right side top - ACFT position (dynamic, right aligned)
+        this.addGridText(60, 5, "ACFT", '#FFFFFF', 'right');
+        this.acftZone = this.addGridText(60, 6, "38S KC", '#FFFFFF', 'right');
+        this.acftEasting = this.addGridText(60, 7, "00000 00000", '#FFFFFF', 'right');
+        this.acftAlt = this.addGridText(60, 8, "00000 MSL", '#FFFFFF', 'right');
 
-        // Right side middle (dummy - grey)
-        this.addGridText(51, 12, "LST", grey);
-        this.addGridText(51, 13, "IDLE", grey);
-        this.addGridText(51, 14, "1111", grey);
+        // Right side middle (dummy - grey, right aligned)
+        this.addGridText(60, 12, "LST", grey, 'right');
+        this.addGridText(60, 13, "IDLE", grey, 'right');
+        this.addGridText(60, 14, "1111", grey, 'right');
 
-        // Right side bottom - target position (dynamic)
-        this.targetZone = this.addGridText(44, 21, "38S KC+");
-        this.targetEasting = this.addGridText(43, 22, "00000 00000+");
-        this.targetBRG = this.addGridText(43, 23, "BRG       000");
-        this.targetSLR = this.addGridText(43, 24, "SLR    0000M+");
-        this.targetGRN = this.addGridText(43, 25, "GRN    0000M+");
-        this.addGridText(43, 26, "TWD     103M+", grey);
-        this.addGridText(43, 27, "ELV    489FT+", grey);
+        // Right side bottom - target position (dynamic, right aligned)
+        this.targetZone = this.addGridText(60, 21, "38S KC+", '#FFFFFF', 'right');
+        this.targetEasting = this.addGridText(60, 22, "00000 00000+", '#FFFFFF', 'right');
+        this.targetBRG = this.addGridText(60, 23, "BRG       000", '#FFFFFF', 'right');
+        this.targetSLR = this.addGridText(60, 24, "SLR    0000M+", '#FFFFFF', 'right');
+        this.targetGRN = this.addGridText(60, 25, "GRN    0000M+", '#FFFFFF', 'right');
+        this.addGridText(60, 26, "TWD     103M+", grey, 'right');
+        this.addGridText(60, 27, "ELV    489FT+", grey, 'right');
 
         // Bottom (dummy - grey)
-        this.addGridText(1, 28, "SEL", grey);
-        this.addGridText(1, 29, "00:03:59", grey);
-        this.addGridText(26, 28, "ELRF", grey);
+        this.addGridText(1, 28, "SEL", grey, 'left');
+        this.addGridText(1, 29, "00:03:59", grey, 'left');
+        this.addGridText(30, 28, "ELRF", grey, 'center');
     }
 
-    addGridText(col, row, text, color = '#FFFFFF') {
-        const entry = { col, row, text, color };
+    addGridText(col, row, text, color = '#FFFFFF', align = 'left') {
+        const entry = { col, row, text, color, align };
         this.gridTexts.push(entry);
         return entry;
     }
@@ -138,10 +138,17 @@ export class   CNodeMQ9UI extends CNodeViewUI {
         const fontSize = Math.floor(charHeight * 0.9);
         c.font = `${fontSize}px monospace`;
         c.textBaseline = 'top';
-        c.textAlign = 'left';
         for (const t of this.gridTexts) {
             c.fillStyle = t.color;
-            const x = (t.col - 1) * charWidth;
+            c.textAlign = t.align;
+            let x;
+            if (t.align === 'right') {
+                x = t.col * charWidth;
+            } else if (t.align === 'center') {
+                x = (t.col - 0.5) * charWidth;
+            } else {
+                x = (t.col - 1) * charWidth;
+            }
             const y = (t.row - 1) * charHeight;
             c.fillText(t.text, x, y);
         }
