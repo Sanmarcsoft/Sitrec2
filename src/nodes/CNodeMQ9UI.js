@@ -132,9 +132,22 @@ export class   CNodeMQ9UI extends CNodeViewUI {
 
         const c = this.ctx;
 
-        // Render grid-based text
-        const charWidth = this.widthPx / this.gridCols;
-        const charHeight = this.heightPx / this.gridRows;
+        // Get video rect to match grid to video aspect
+        let gridX = 0, gridY = 0, gridW = this.widthPx, gridH = this.heightPx;
+        const videoView = NodeMan.get("video", false);
+        if (videoView && videoView.getSourceAndDestCoords) {
+            videoView.getSourceAndDestCoords();
+            gridX = videoView.dx;
+            gridY = videoView.dy;
+            gridW = videoView.dWidth;
+            gridH = videoView.dHeight;
+        }
+
+        // Render grid-based text (inset by one character on left and right)
+        const charWidth = gridW / (this.gridCols + 2);
+        const charHeight = gridH / this.gridRows;
+        gridX += charWidth;
+        gridW -= charWidth * 2;
         const fontSize = Math.floor(charHeight * 0.9);
         c.font = `${fontSize}px monospace`;
         c.textBaseline = 'top';
@@ -143,13 +156,13 @@ export class   CNodeMQ9UI extends CNodeViewUI {
             c.textAlign = t.align;
             let x;
             if (t.align === 'right') {
-                x = t.col * charWidth;
+                x = gridX + t.col * charWidth;
             } else if (t.align === 'center') {
-                x = (t.col - 0.5) * charWidth;
+                x = gridX + (t.col - 0.5) * charWidth;
             } else {
-                x = (t.col - 1) * charWidth;
+                x = gridX + (t.col - 1) * charWidth;
             }
-            const y = (t.row - 1) * charHeight;
+            const y = gridY + (t.row - 1) * charHeight;
             c.fillText(t.text, x, y);
         }
 
