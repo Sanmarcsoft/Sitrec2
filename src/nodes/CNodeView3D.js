@@ -2410,7 +2410,8 @@ export class CNodeView3D extends CNodeViewCanvas {
             const menuTitle = `Track: ${closestTrack.trackOb?.menuText || closestTrack.trackID}`;
             
             // Create a standalone menu and mirror the track's GUI folder
-            const standaloneMenu = Globals.menuBar.createStandaloneMenu(menuTitle, event.clientX, event.clientY, true);
+            // Use dismissOnOutsideClick=false so dragging control points doesn't close the menu
+            const standaloneMenu = Globals.menuBar.createStandaloneMenu(menuTitle, event.clientX, event.clientY, false);
             
             // If menu creation was blocked (persistent menu is open), return early
             if (!standaloneMenu) {
