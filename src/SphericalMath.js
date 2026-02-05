@@ -344,7 +344,7 @@ export function getAzElFromPositionAndForward(position, forward) {
 }
 
 
-// given position and a vector, return the heading in degrees relative to the north vector at that position
+// given position and a vector, return the heading in radians relative to the north vector at that position
 export function getCompassHeading(position, forward, camera) {
 
     // get local up vector, the headings are the angle about this axis.
