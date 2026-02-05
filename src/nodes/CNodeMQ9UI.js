@@ -467,22 +467,36 @@ export class   CNodeMQ9UI extends CNodeViewUI {
         c.stroke();
 
         // Heading graticule at top of display
-        // Get track heading from camera track velocity
-        let trackHeadingDeg = 0;
+        // Get airframe heading from camera track velocity corrected for wind
+        // Airframe heading = direction the aircraft is pointing (into the wind relative to ground track)
+        // Air velocity = Ground velocity - Wind velocity
+        let airframeHeadingDeg = 0;
         if (this.in.cameraTrack) {
             const trackPos = this.in.cameraTrack.p(frame);
             const nextFrame = frame + 1;
             const nextPos = this.in.cameraTrack.p(nextFrame);
-            const velocity = nextPos.clone().sub(trackPos);
-            if (velocity.lengthSq() > 0.001) {
-                const trackHeadingRad = getCompassHeading(trackPos, velocity.normalize(), null);
-                trackHeadingDeg = ((degrees(trackHeadingRad) % 360) + 360) % 360;
+            // Ground velocity (meters per frame)
+            const groundVelocity = nextPos.clone().sub(trackPos);
+
+            // Get wind and calculate air velocity
+            const localWind = NodeMan.get("localWind", false);
+            let airVelocity = groundVelocity.clone();
+            if (localWind) {
+                // Wind vector is in meters per frame, same as velocity
+                const windVector = localWind.getValueFrame(frame, trackPos);
+                // Air velocity = Ground velocity - Wind velocity
+                airVelocity.sub(windVector);
+            }
+
+            if (airVelocity.lengthSq() > 0.001) {
+                const airframeHeadingRad = getCompassHeading(trackPos, airVelocity.normalize(), null);
+                airframeHeadingDeg = ((degrees(airframeHeadingRad) % 360) + 360) % 360;
             }
         }
 
-        // Camera azimuth relative to track heading
+        // Camera azimuth relative to airframe heading
         const cameraHeadingDeg = ((degrees(heading) % 360) + 360) % 360;
-        let relativeAzimuth = cameraHeadingDeg - trackHeadingDeg;
+        let relativeAzimuth = cameraHeadingDeg - airframeHeadingDeg;
         if (relativeAzimuth > 180) relativeAzimuth -= 360;
         if (relativeAzimuth < -180) relativeAzimuth += 360;
 
@@ -520,12 +534,12 @@ export class   CNodeMQ9UI extends CNodeViewUI {
             c.stroke();
         }
 
-        // Draw heading box with track heading value (T outside box)
+        // Draw heading box with airframe heading value (T outside box)
         c.strokeRect(gratCenterX - boxWidth / 2, gratY, boxWidth, boxHeight);
         c.font = `${fontSize}px monospace`;
         c.textAlign = 'center';
         c.textBaseline = 'middle';
-        c.fillText(`${Math.round(trackHeadingDeg)}`, gratCenterX, gratY + boxHeight / 2);
+        c.fillText(`${Math.round(airframeHeadingDeg)}`, gratCenterX, gratY + boxHeight / 2);
         // T outside the box to the right
         c.textAlign = 'left';
         c.fillText('T', gratCenterX + boxWidth / 2 + 2, gratY + boxHeight / 2);
