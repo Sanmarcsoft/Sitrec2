@@ -214,6 +214,25 @@ export class CStarField {
     }
 
     /**
+     * Finds a star by its common name (case-insensitive)
+     * @param {string} name Common name to search for
+     * @returns {object|null} Object with {ra, dec} in radians, or null if not found
+     */
+    findStarByName(name) {
+        const lowerName = name.toLowerCase();
+        for (const HR in this.commonNames) {
+            if (this.commonNames[HR].toLowerCase() === lowerName) {
+                const index = HR - 1;
+                return {
+                    ra: this.BSC_RA[index],
+                    dec: this.BSC_DEC[index],
+                };
+            }
+        }
+        return null;
+    }
+
+    /**
      * Gets total number of stars loaded
      * @returns {number} Number of stars
      */

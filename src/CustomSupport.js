@@ -70,6 +70,7 @@ import {deserializeMotionAnalysis, getMotionAnalysisOverlays, serializeMotionAna
 import {setupPanoramaExport} from "./PanoramaExporter";
 import {getCursorPositionFromTopView} from "./mouseMoveView";
 import {addMenuToLeftSidebar, addMenuToRightSidebar, isInLeftSidebar, isInRightSidebar} from "./PageStructure";
+import {CNodeControllerCelestial} from "./nodes/CNodeControllerVarious";
 
 export class CCustomManager {
     constructor() {
@@ -319,6 +320,20 @@ export class CCustomManager {
 
         // Add Settings folder to Sitrec menu
         this.setupSettingsMenu();
+
+        // Add celestial controller to CameraLOSController sweitch
+        // switches automatically disable unselected controllers
+        const cameraLOSController = NodeMan.get("CameraLOSController", false);
+        if (cameraLOSController) {
+            const celestialController = new CNodeControllerCelestial({
+                    id: "celestialController",
+                    celestialObject: "Moon",
+                    camera: "lookCamera",
+                });
+            const lookCamera = NodeMan.get("lookCamera", false);
+            lookCamera.addControllerNode(celestialController);
+            cameraLOSController.addOption("Celestial Lock", celestialController);
+        }
 
         if (Sit.canMod) {
             // we have "SAVE MOD", but "SAVE CUSTOM" is no more, replaced by standard "Save", "Save As", etc.

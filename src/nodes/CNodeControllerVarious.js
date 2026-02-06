@@ -2,12 +2,13 @@ import {atan, degrees, radians, tan} from "../utils";
 import {par} from "../par";
 import {ECEFToLLAVD_Sphere, EUSToECEF, LLAToEUS, wgs84} from "../LLA-ECEF-ENU";
 import {isKeyHeld} from "../KeyBoardHandler";
-import {gui, guiPhysics, NodeMan, setRenderOne, Sit, UndoManager} from "../Globals";
+import {GlobalDateTimeNode, gui, guiPhysics, NodeMan, setRenderOne, Sit, UndoManager} from "../Globals";
 import {getLocalEastVector, getLocalNorthVector, getLocalUpVector} from "../SphericalMath";
 import {adjustHeightAboveGround, clampAboveGround, DebugArrow} from "../threeExt";
 import {CNodeController} from "./CNodeController";
 
 import {MISB} from "../MISBUtils";
+import {getCelestialDirection, getCelestialDirectionFromRaDec} from "../CelestialMath";
 import {Quaternion, Vector2, Vector3} from "three";
 import {assert} from "../assert.js";
 import {getCursorPositionFromTopView} from "../mouseMoveView";
@@ -622,9 +623,105 @@ export function applyPitchAndHeading(object, pitch, heading)
     //    DebugArrow("DroneGimbalHeading", arrowDir2, object.position, 100,"#FFFF00")
 }
 
+export class CNodeControllerCelestial extends CNodeController {
+    constructor(v) {
+        super(v);
+        this.celestialObject = v.celestialObject ?? "Moon";
+        this.lastValidObject = this.celestialObject;
+        this.setGUI(v, "camera");
+        if (this.gui) {
+            this.textController = this.gui.add(this, "celestialObject").name("Celestial Object").onFinishChange(() => {
+                this.validateAndUpdate();
+            }).hide();
+        }
 
+        // special case for update function to handled UI visibility.
+        this.allowUpdate = true;
+    }
 
+    getDirection(name, date, pos) {
+        const capitalizedName = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+        try {
+            const dir = getCelestialDirection(capitalizedName, date, pos);
+            if (dir) return dir;
+        } catch (e) {
+        }
+        const nightSky = NodeMan.get("NightSkyNode", false);
+        if (nightSky && nightSky.starField) {
+            const star = nightSky.starField.findStarByName(name);
+            if (star) {
+                return getCelestialDirectionFromRaDec(star.ra, star.dec, date);
+            }
+        }
+        return null;
+    }
 
+    validateAndUpdate() {
+        const dir = this.getDirection(this.celestialObject, GlobalDateTimeNode.dateNow);
+        if (dir) {
+            this.lastValidObject = this.celestialObject;
+            this.recalculateCascade();
+        } else {
+            console.warn("Invalid celestial object: " + this.celestialObject + ", using " + this.lastValidObject);
+        }
+    }
+
+    hide() {
+        super.hide();
+        if (this.textController) {
+            this.textController.hide();
+        }
+        return this;
+    }
+
+    show() {
+        super.show();
+        if (this.textController) {
+            this.textController.show();
+        }
+        return this;
+    }
+
+    update(f) {
+        super.update(f);
+        // if disabled, then hide the text controller, otherwise show it
+        if (this.gui && this.textController?._hidden === this.enabled ) {
+            if (this.enabled) {
+                this.textController.show();
+            } else {
+                this.textController.hide();
+            }
+        }
+
+    }
+
+    apply(f, objectNode) {
+        const camera = objectNode.camera;
+        const dir = this.getDirection(this.lastValidObject, GlobalDateTimeNode.dateNow, camera.position);
+        if (!dir) {
+            return;
+        }
+        const target = camera.position.clone().add(dir);
+        camera.up = getLocalUpVector(camera.position, wgs84.RADIUS);
+        camera.lookAt(target);
+        objectNode.syncUIPosition();
+    }
+
+    modSerialize() {
+        return {
+            ...super.modSerialize(),
+            celestialObject: this.lastValidObject,
+        };
+    }
+
+    modDeserialize(v) {
+        super.modDeserialize(v);
+        if (v.celestialObject !== undefined) {
+            this.celestialObject = v.celestialObject;
+            this.lastValidObject = v.celestialObject;
+        }
+    }
+}
 
 
 
