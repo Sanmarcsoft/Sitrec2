@@ -373,23 +373,36 @@ if (urlParams.get("mod")) customSitch = urlParams.get("mod");
 
 
 if (customSitch !== null) {
-    // customSitch is the URL of a sitch definition file
-    // fetch it, and then use that as the sitch
+    if (customSitch.endsWith('/')) {
+        const s3Match = customSitch.match(/https:\/\/sitrec\.s3[^\/]*\.amazonaws\.com\/(\d+)\/([^\/]+)\/$/);
+        if (s3Match) {
+            const userId = s3Match[1];
+            const sitchName = decodeURIComponent(s3Match[2]);
+            const latestUrl = SITREC_SERVER + "getsitches.php?get=latestversion&userid=" + userId + "&name=" + encodeURIComponent(sitchName);
+            await fetch(latestUrl, {mode: 'cors'}).then(response => response.json()).then(data => {
+                if (data.latest) {
+                    customSitch = customSitch + data.latest;
+                    console.log("Resolved folder to latest version: " + customSitch);
+                } else {
+                    throw new Error("No versions found in folder: " + customSitch);
+                }
+            });
+        } else {
+            throw new Error("Folder URL not recognized: " + customSitch);
+        }
+    }
+
     await fetch(customSitch, {mode: 'cors'}).then(response => response.text()).then(data => {
         console.log("Custom sitch = " + customSitch)
 
-        // if we have a custom sitch, then we don't want any auto-setup for datetime or locatiosn from loading files
-        // otherwise we'll end up getting a time from the video that will conflict with the sitch time set by the user
         Globals.sitchEstablished = true;
 
         let sitchObject = textSitchToObject(data);
 
         setSit(new CSituation(sitchObject))
 
-        // when loading a custom sitch, we don't want to show the initial drop zone animation
         Sit.initialDropZoneAnimation = false;
         
-        // Expose Sit to window for testing purposes
         if (typeof window !== 'undefined') {
             window.Sit = Sit;
         }

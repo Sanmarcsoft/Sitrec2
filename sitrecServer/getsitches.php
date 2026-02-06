@@ -115,6 +115,89 @@ if (count($_GET) == 0) {
     exit();
 }
 
+// Handle latestversion BEFORE authentication - returns just the latest .js filename
+if (isset($_GET['get']) && $_GET['get'] == "latestversion") {
+    if (!isset($_GET['userid']) || !isset($_GET['name'])) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing userid or name parameter']);
+        exit();
+    }
+    
+    $publicUserID = $_GET['userid'];
+    $name = $_GET['name'];
+    
+    if (!preg_match('/^\d+$/', $publicUserID)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid userid parameter']);
+        exit();
+    }
+    
+    if (!preg_match(SITCH_NAME_PATTERN, $name)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid name parameter']);
+        exit();
+    }
+    $name = basename($name);
+    
+    $publicDir = $publicUserID . "/" . $name;
+    $latestFile = null;
+    
+    if (!$useAWS) {
+        global $UPLOAD_PATH;
+        $localDir = $UPLOAD_PATH . $publicDir;
+        if (!is_dir($localDir)) {
+            echo json_encode(['latest' => null]);
+            exit();
+        }
+        $files = scandir($localDir);
+        foreach ($files as $file) {
+            if (is_file($localDir . '/' . $file) && preg_match('/\.js$/', $file)) {
+                if ($latestFile === null || $file > $latestFile) {
+                    $latestFile = $file;
+                }
+            }
+        }
+        echo json_encode(['latest' => $latestFile]);
+        exit();
+    } else {
+        require 'vendor/autoload.php';
+        global $s3creds;
+        if (!isset($s3creds) || !is_array($s3creds) || empty($s3creds['accessKeyId'])) {
+            http_response_code(503);
+            echo json_encode(['error' => 'Storage not configured']);
+            exit();
+        }
+        $aws = $s3creds;
+        $credentials = new Aws\Credentials\Credentials($aws['accessKeyId'], $aws['secretAccessKey']);
+        $s3 = new Aws\S3\S3Client([
+            'version' => 'latest',
+            'region' => $aws['region'],
+            'credentials' => $credentials
+        ]);
+        try {
+            $objects = $s3->getIterator('ListObjects', array(
+                "Bucket" => $aws['bucket'],
+                "Prefix" => $publicDir . "/"
+            ));
+            foreach ($objects as $object) {
+                $key = $object['Key'];
+                $filename = str_replace($publicDir . "/", "", $key);
+                if ($filename != "" && strpos($filename, '/') === false && preg_match('/\.js$/', $filename)) {
+                    if ($latestFile === null || $filename > $latestFile) {
+                        $latestFile = $filename;
+                    }
+                }
+            }
+            echo json_encode(['latest' => $latestFile]);
+            exit();
+        } catch (Exception $e) {
+            http_response_code(503);
+            echo json_encode(['error' => 'Storage error']);
+            exit();
+        }
+    }
+}
+
 // if there's a "get" parameter then it depends on the value of the "get" parameter
 // if it's "myfiles", then return a list of the files in the local folder
 
