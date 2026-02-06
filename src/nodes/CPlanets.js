@@ -262,6 +262,8 @@ export class CPlanets {
         if (!this.moonMesh) return;
         
         const celestialInfo = Astronomy.Equator("Moon", date, observer, false, false);
+        const geocentricObserver = new Astronomy.Observer(0, 0, 0);
+        const geocentricInfo = Astronomy.Equator("Moon", date, geocentricObserver, false, false);
         const libration = Astronomy.Libration(date);
         const axisInfo = Astronomy.RotationAxis("Moon", date);
         
@@ -278,18 +280,27 @@ export class CPlanets {
         
         const sunDir = new Vector3(sunEquatorial.x, sunEquatorial.y, sunEquatorial.z).normalize();
         
-        const toMoon = new Vector3(equatorial.x, equatorial.y, equatorial.z).normalize();
-        const toEarth = toMoon.clone().negate();
+        const toMoonTopo = new Vector3(equatorial.x, equatorial.y, equatorial.z).normalize();
+        const toEarth = toMoonTopo.clone().negate();
+        
+        const geoRa = (geocentricInfo.ra) / 24 * 2 * Math.PI;
+        const geoDec = radians(geocentricInfo.dec);
+        const geoEquatorial = raDec2Celestial(geoRa, geoDec, this.sphereRadius);
+        const toMoonGeo = new Vector3(geoEquatorial.x, geoEquatorial.y, geoEquatorial.z).normalize();
         
         const moonNorthPole = new Vector3(axisInfo.north.x, axisInfo.north.y, axisInfo.north.z).normalize();
         const moonNorth = moonNorthPole.clone().sub(toEarth.clone().multiplyScalar(moonNorthPole.dot(toEarth))).normalize();
         const moonEast = new Vector3().crossVectors(moonNorth, toEarth).normalize();
         
+        const parallax = toMoonTopo.clone().sub(toMoonGeo);
+        const parallaxEast = parallax.dot(moonEast);
+        const parallaxNorth = parallax.dot(moonNorth);
+        
         const rotMatrix = new Matrix4();
         rotMatrix.makeBasis(moonEast, moonNorth, toEarth);
         
-        const elonRad = radians(-libration.elon);
-        const elatRad = radians(-libration.elat);
+        const elonRad = radians(-libration.elon) + parallaxEast;
+        const elatRad = radians(-libration.elat) + parallaxNorth;
         
         const librationMatrix = new Matrix4();
         librationMatrix.makeRotationFromEuler(new Euler(elatRad, elonRad, 0, 'YXZ'));
