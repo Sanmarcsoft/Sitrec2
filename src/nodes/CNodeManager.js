@@ -143,7 +143,13 @@ export class CNodeManager extends CManager{
         if (node.exportButtons === undefined) {
             node.exportButtons = [];
         }
-        node.exportButtons.push(FileManager.makeExportButton(node, node.exportFunction, node.exportType, node.id))
+
+
+        const button = FileManager.makeExportButton(node, node.exportFunction, node.exportType, node.id);
+
+        if (button) {
+            node.exportButtons.push()
+        }
     }
 
 

@@ -824,6 +824,12 @@ export class CFileManager extends CManager {
         // see if the function provides a description
         const inspect = object[functionName](true);
 
+        // some legacy sitches (GoFast) have some empty arrays
+        // or otherwise not exportable
+        if (inspect === null) {
+            return null;
+        }
+
         assert(inspect !== undefined, `makeExportButton: Expected inspect info from ${functionName} on ${folderName}`);
         tooltip += inspect.desc;
 

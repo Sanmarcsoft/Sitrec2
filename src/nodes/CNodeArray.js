@@ -23,6 +23,11 @@ export class CNodeArray extends CNode {
     // if just a value, then export the value
     exportArray(inspect=false) {
 
+        // if inspect mode, and the array is empty, then return null
+        if (inspect && this.array.length === 0) {
+            return null;
+        }
+
         let csv;
         if (typeof this.array[0] !== "object") {
             csv = "frame, time, value\n";
