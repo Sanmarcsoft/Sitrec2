@@ -16,7 +16,17 @@
  * - configUtils.SITREC_APP: Application root path for resources
  */
 
-import {Sprite, SpriteMaterial, TextureLoader, Vector3} from "three";
+import {
+    Euler,
+    Matrix4,
+    Mesh,
+    ShaderMaterial,
+    SphereGeometry,
+    Sprite,
+    SpriteMaterial,
+    TextureLoader,
+    Vector3
+} from "three";
 import {Sit} from "../Globals";
 import {raDec2Celestial} from "../CelestialMath";
 import {SITREC_APP} from "../configUtils";
@@ -54,8 +64,14 @@ export class CPlanets {
         this.textures = {
             star: null,
             sun: null,
-            moon: null
+            moon: null,
+            moonSurface: null
         };
+        
+        this.moonMesh = null;
+        this.moonDayMesh = null;
+        this.moonMaterial = null;
+        this.moonDayMaterial = null;
         
         this._loadTextures();
     }
@@ -69,6 +85,44 @@ export class CPlanets {
         this.textures.star = textureLoader.load(SITREC_APP + 'data/images/nightsky/MickStar.png');
         this.textures.sun = textureLoader.load(SITREC_APP + 'data/images/nightsky/MickSun.png');
         this.textures.moon = textureLoader.load(SITREC_APP + 'data/images/nightsky/MickMoon.png');
+        this.textures.moonSurface = textureLoader.load(SITREC_APP + 'data/images/nightsky/lroc_color_1k.jpg');
+    }
+    
+    _createMoonMaterial() {
+        return new ShaderMaterial({
+            uniforms: {
+                moonTexture: { value: this.textures.moonSurface },
+                sunDirection: { value: new Vector3(1, 0, 0) },
+            },
+            vertexShader: `
+                varying vec3 vNormal;
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    vNormal = normalize(normal);
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform sampler2D moonTexture;
+                uniform vec3 sunDirection;
+                varying vec3 vNormal;
+                varying vec2 vUv;
+                
+                void main() {
+                    vec3 sunDir = normalize(sunDirection);
+                    float intensity = dot(vNormal, sunDir);
+                    float blendFactor = smoothstep(-0.1, 0.1, intensity);
+                    
+                    vec4 textureColor = texture2D(moonTexture, vUv);
+                    vec4 dayColor = textureColor;
+                    vec4 nightColor = textureColor * 0.02;
+                    
+                    gl_FragColor = mix(nightColor, dayColor, blendFactor);
+                }
+            `,
+            depthWrite: false,
+        });
     }
 
     /**
@@ -101,6 +155,26 @@ export class CPlanets {
                 }
             }
         }
+        
+        if (this.moonMesh && scene) {
+            scene.remove(this.moonMesh);
+            if (this.moonMesh.geometry) this.moonMesh.geometry.dispose();
+        }
+        if (this.moonDayMesh && dayScene) {
+            dayScene.remove(this.moonDayMesh);
+            if (this.moonDayMesh.geometry) this.moonDayMesh.geometry.dispose();
+        }
+        if (this.moonMaterial) {
+            this.moonMaterial.dispose();
+            this.moonMaterial = null;
+        }
+        if (this.moonDayMaterial) {
+            this.moonDayMaterial.dispose();
+            this.moonDayMaterial = null;
+        }
+        this.moonMesh = null;
+        this.moonDayMesh = null;
+        
         this.planetSprites = {};
     }
 
@@ -120,41 +194,115 @@ export class CPlanets {
         assert(params.cameraPos, "CPlanets.addPlanets: cameraPos required");
         assert(params.ecefToLla, "CPlanets.addPlanets: ecefToLla function required");
 
-        // Remove existing planets first to prevent duplicates
         this.removePlanets(scene, dayScene);
 
-        // Safety check
         if (this.planetSprites && Object.keys(this.planetSprites).length > 0) {
             console.warn("CPlanets: planetSprites not empty after removePlanets, forcing cleanup");
             this.planetSprites = {};
         }
 
-        // Create observer position from camera
         const cameraLLA = params.ecefToLla(params.cameraPos);
         const observer = new Astronomy.Observer(cameraLLA.x, cameraLLA.y, cameraLLA.z);
 
-        // Create sprites for each planet
         let n = 0;
         for (const planet of this.planets) {
-            const texture = this._getTextureForPlanet(planet);
             const color = this.planetColors[n++];
-            const spriteMaterial = new SpriteMaterial({map: texture, color: color, depthWrite: false});
-            const sprite = new Sprite(spriteMaterial);
+            
+            if (planet === "Moon") {
+                this.moonMaterial = this._createMoonMaterial();
+                const moonGeometry = new SphereGeometry(1, 32, 32);
+                this.moonMesh = new Mesh(moonGeometry, this.moonMaterial);
+                this.moonMesh.renderOrder = 2;
+                scene.add(this.moonMesh);
+                
+                if (dayScene) {
+                    this.moonDayMaterial = this._createMoonMaterial();
+                    const moonDayGeometry = new SphereGeometry(1, 32, 32);
+                    this.moonDayMesh = new Mesh(moonDayGeometry, this.moonDayMaterial);
+                    this.moonDayMesh.renderOrder = 2;
+                    dayScene.add(this.moonDayMesh);
+                }
+                
+                this.updateMoonMesh(params.date, observer);
+                this.planetSprites[planet] = {
+                    ra: 0, dec: 0, mag: 0, equatorial: new Vector3(),
+                    sprite: this.moonMesh, color: color,
+                    daySkySprite: this.moonDayMesh, isMesh: true
+                };
+            } else {
+                const texture = this._getTextureForPlanet(planet);
+                const spriteMaterial = new SpriteMaterial({map: texture, color: color, depthWrite: false});
+                const sprite = new Sprite(spriteMaterial);
 
-            // Create day sky sprite for Sun and Moon
-            let daySkySprite = null;
-            if ((planet === "Sun" || planet === "Moon") && dayScene) {
-                const daySkyMaterial = new SpriteMaterial({map: texture, color: color, depthWrite: false});
-                daySkySprite = new Sprite(daySkyMaterial);
-                dayScene.add(daySkySprite);
+                let daySkySprite = null;
+                if (planet === "Sun" && dayScene) {
+                    const daySkyMaterial = new SpriteMaterial({map: texture, color: color, depthWrite: false});
+                    daySkySprite = new Sprite(daySkyMaterial);
+                    dayScene.add(daySkySprite);
+                }
+
+                this.updatePlanetSprite(planet, sprite, params.date, observer, daySkySprite);
+                this.planetSprites[planet].color = color;
+                scene.add(sprite);
             }
+        }
+    }
 
-            // Position and update sprite
-            this.updatePlanetSprite(planet, sprite, params.date, observer, daySkySprite);
-            this.planetSprites[planet].color = color;
-
-            // Add night sprite to scene
-            scene.add(sprite);
+    updateMoonMesh(date, observer) {
+        if (!this.moonMesh) return;
+        
+        const celestialInfo = Astronomy.Equator("Moon", date, observer, false, true);
+        const libration = Astronomy.Libration(date);
+        
+        const ra = (celestialInfo.ra) / 24 * 2 * Math.PI;
+        const dec = radians(celestialInfo.dec);
+        const equatorial = raDec2Celestial(ra, dec, this.sphereRadius);
+        
+        const moonRadius = Math.tan(radians(libration.diam_deg / 2)) * this.sphereRadius;
+        
+        const sunInfo = Astronomy.Equator("Sun", date, observer, false, true);
+        const sunRa = (sunInfo.ra) / 24 * 2 * Math.PI;
+        const sunDec = radians(sunInfo.dec);
+        const sunEquatorial = raDec2Celestial(sunRa, sunDec, this.sphereRadius);
+        
+        const sunDir = new Vector3(sunEquatorial.x, sunEquatorial.y, sunEquatorial.z).normalize();
+        
+        const moonDir = new Vector3(equatorial.x, equatorial.y, equatorial.z).normalize();
+        const celestialNorth = new Vector3(0, 0, 1);
+        const moonRight = new Vector3().crossVectors(celestialNorth, moonDir).normalize();
+        const moonUp = new Vector3().crossVectors(moonDir, moonRight).normalize();
+        
+        const rotMatrix = new Matrix4();
+        rotMatrix.makeBasis(moonRight, moonUp, moonDir);
+        
+        const elonRad = radians(libration.elon);
+        const elatRad = radians(libration.elat);
+        
+        const librationMatrix = new Matrix4();
+        librationMatrix.makeRotationFromEuler(new Euler(-elatRad, -elonRad, 0, 'YXZ'));
+        
+        const finalRotation = rotMatrix.clone().multiply(librationMatrix);
+        
+        this.moonMesh.position.set(equatorial.x, equatorial.y, equatorial.z);
+        this.moonMesh.scale.set(moonRadius, moonRadius, moonRadius);
+        this.moonMesh.setRotationFromMatrix(finalRotation);
+        
+        const invRotMatrix = finalRotation.clone().invert();
+        const sunInMoonLocal = sunDir.clone().applyMatrix4(invRotMatrix);
+        
+        this.moonMaterial.uniforms.sunDirection.value.copy(sunInMoonLocal);
+        
+        if (this.moonDayMesh && this.moonDayMaterial) {
+            this.moonDayMesh.position.copy(this.moonMesh.position);
+            this.moonDayMesh.scale.copy(this.moonMesh.scale);
+            this.moonDayMesh.setRotationFromMatrix(finalRotation);
+            this.moonDayMaterial.uniforms.sunDirection.value.copy(sunInMoonLocal);
+        }
+        
+        if (this.planetSprites["Moon"]) {
+            this.planetSprites["Moon"].ra = ra;
+            this.planetSprites["Moon"].dec = dec;
+            this.planetSprites["Moon"].equatorial = equatorial;
         }
     }
 
@@ -169,59 +317,49 @@ export class CPlanets {
      * @param {Sprite} [daySkySprite] Optional day sky sprite to update in parallel
      */
     updatePlanetSprite(planet, sprite, date, observer, daySkySprite = undefined) {
-        // Get celestial coordinates and illumination from Astronomy Engine
+        if (planet === "Moon") {
+            this.updateMoonMesh(date, observer);
+            return;
+        }
+        
         const celestialInfo = Astronomy.Equator(planet, date, observer, false, true);
         const illumination = Astronomy.Illumination(planet, date);
         
-        const ra = (celestialInfo.ra) / 24 * 2 * Math.PI;  // RA in hours -> radians
-        const dec = radians(celestialInfo.dec);             // DEC in degrees -> radians
-        const mag = illumination.mag;                       // Magnitude (brightness)
+        const ra = (celestialInfo.ra) / 24 * 2 * Math.PI;
+        const dec = radians(celestialInfo.dec);
+        const mag = illumination.mag;
         const equatorial = raDec2Celestial(ra, dec, this.sphereRadius);
 
-        // Retrieve stored color for this planet
         let color = "#FFFFFF";
         if (this.planetSprites[planet] !== undefined) {
             color = this.planetSprites[planet].color;
         }
 
-        // Set sprite position on celestial sphere
         sprite.position.set(equatorial.x, equatorial.y, equatorial.z);
 
-        // Calculate sprite scale based on magnitude
-        // Using magnitude scale formula: scale = 10^(-0.4 * (mag - reference))
         var scale = 10 * Math.pow(10, -0.4 * (mag - -5));
         if (scale > 1) scale = 1;
         
-        // Special handling for Sun and Moon
         if (planet === "Sun") scale = 1.9;
-        if (planet === "Moon") scale = 1.9;
         
-        // Apply planet brightness scale (except for Sun and Moon which are fixed size)
-        if (planet !== "Sun" && planet !== "Moon") {
+        if (planet !== "Sun") {
             scale *= Math.pow(10, 0.4 * Math.log10(Sit.planetScale));
         }
 
         sprite.scale.set(scale, scale, 1);
 
-        // Set renderOrder so moon always renders in front of sun
         if (planet === "Sun") {
             sprite.renderOrder = 1;
-        } else if (planet === "Moon") {
-            sprite.renderOrder = 2;
         }
 
-        // Update day sky sprite if provided
         if (daySkySprite) {
             daySkySprite.position.set(equatorial.x, equatorial.y, equatorial.z);
             daySkySprite.scale.set(scale, scale, 1);
             if (planet === "Sun") {
                 daySkySprite.renderOrder = 1;
-            } else if (planet === "Moon") {
-                daySkySprite.renderOrder = 2;
             }
         }
 
-        // Store or update planet sprite data
         if (!this.planetSprites[planet]) {
             this.planetSprites[planet] = {
                 ra: ra,
@@ -233,7 +371,6 @@ export class CPlanets {
                 daySkySprite: daySkySprite,
             };
         } else {
-            // Update existing entry
             this.planetSprites[planet].ra = ra;
             this.planetSprites[planet].dec = dec;
             this.planetSprites[planet].mag = mag;
@@ -273,9 +410,9 @@ export class CPlanets {
     dispose() {
         this.removePlanets(null, null);
         
-        // Dispose textures
         if (this.textures.star) this.textures.star.dispose();
         if (this.textures.sun) this.textures.sun.dispose();
         if (this.textures.moon) this.textures.moon.dispose();
+        if (this.textures.moonSurface) this.textures.moonSurface.dispose();
     }
 }
