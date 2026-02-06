@@ -480,7 +480,7 @@ const materialTypes = {
             color: ["white", "Base Color"],
             emissive: ["black", "Emissive color - i.e. the self illuminated color"],
             emissiveIntensity: [[1,0,1,0.01],"Intensity of self-illuminated color"],
-            specularcolor: ["white", "Base Color"],
+            specular: ["white", "Specular Color"],
             shininess: [[30,0,100,0.1], "Shininess of the specular highlight"],
             flatShading: [false, "Enable flat shading - i.e. no smooth shading"],
             fog: [true, "Enable Fog"],
@@ -495,7 +495,7 @@ const materialTypes = {
             clearcoatRoughness: [[0, 0, 1, 0.01], "Clearcoat roughness"],
             emissive: ["black", "Emissive color - i.e. the self illuminated color"],
             emissiveIntensity: [[1, 0, 1, 0.01], "Intensity of self-illuminated color"],
-            specularcolor: ["white", "Specular Color"],
+            specularColor: ["white", "Specular Color"],
             specularIntensity: [[1,0,1,0.01], "Intensity of the specular highlight"],
             sheen: [[0, 0, 1, 0.01], "Sheen intensity"],
             sheenRoughness: [[0.5, 0, 1, 0.01], "Sheen roughness"],
@@ -1266,6 +1266,17 @@ export class CNode3DObject extends CNode3DGroup {
         }
         for (const key in v.materialParams) {
             this.materialParams[key] = v.materialParams[key];
+        }
+
+        // Migrate old 'specularcolor' to correct Three.js property names (Feb 2026)
+        if (this.materialParams.specularcolor !== undefined) {
+            const materialType = this.common.material;
+            if (materialType === 'phong') {
+                this.materialParams.specular = this.materialParams.specularcolor;
+            } else {
+                this.materialParams.specularColor = this.materialParams.specularcolor;
+            }
+            delete this.materialParams.specularcolor;
         }
 
         // might need a modelParams
