@@ -1379,6 +1379,8 @@ export class CNodeView3D extends CNodeViewCanvas {
                 skyColor = sunNode.calculateSkyColor(this.camera.position);
                 skyBrightness = sunNode.calculateSkyBrightness(this.camera.position);
                 skyOpacity = sunNode.calculateSkyOpacity(this.camera.position);
+                
+                nightSkyNode.planets.updateMoonSkyUniforms(skyColor, skyBrightness);
             }
 
 

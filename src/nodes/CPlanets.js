@@ -88,11 +88,13 @@ export class CPlanets {
         this.textures.moonSurface = textureLoader.load(SITREC_APP + 'data/images/nightsky/lroc_color_1k.jpg');
     }
     
-    _createMoonMaterial() {
+    _createMoonMaterial(isDay = false) {
         return new ShaderMaterial({
             uniforms: {
                 moonTexture: { value: this.textures.moonSurface },
                 sunDirection: { value: new Vector3(1, 0, 0) },
+                skyColor: { value: new Vector3(0, 0, 0) },
+                skyBrightness: { value: 0.0 },
             },
             vertexShader: `
                 varying vec3 vNormal;
@@ -106,6 +108,8 @@ export class CPlanets {
             fragmentShader: `
                 uniform sampler2D moonTexture;
                 uniform vec3 sunDirection;
+                uniform vec3 skyColor;
+                uniform float skyBrightness;
                 varying vec3 vNormal;
                 varying vec2 vUv;
                 
@@ -120,7 +124,10 @@ export class CPlanets {
                     vec4 dayColor = textureColor;
                     vec4 nightColor = textureColor * 0.02;
                     
-                    gl_FragColor = mix(nightColor, dayColor, blendFactor);
+                    vec4 moonColor = mix(nightColor, dayColor, blendFactor);
+                    float moonAtten = 1.0 - 0.7 * skyBrightness;
+                    vec3 finalColor = moonColor.rgb * moonAtten + skyColor;
+                    gl_FragColor = vec4(finalColor, 1.0);
                 }
             `,
             depthWrite: true,
@@ -309,6 +316,13 @@ export class CPlanets {
             this.planetSprites["Moon"].ra = ra;
             this.planetSprites["Moon"].dec = dec;
             this.planetSprites["Moon"].equatorial = equatorial;
+        }
+    }
+
+    updateMoonSkyUniforms(skyColor, skyBrightness) {
+        if (this.moonDayMaterial) {
+            this.moonDayMaterial.uniforms.skyColor.value.set(skyColor.r, skyColor.g, skyColor.b);
+            this.moonDayMaterial.uniforms.skyBrightness.value = skyBrightness;
         }
     }
 
