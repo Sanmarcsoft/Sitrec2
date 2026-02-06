@@ -2,7 +2,7 @@
 // base on an input camera node
 
 import {CNodeViewUI} from "./CNodeViewUI";
-import {getCompassHeading} from "../SphericalMath";
+import {getAzElFromPositionAndForward, getCompassHeading} from "../SphericalMath";
 import {MV3} from "../threeUtils";
 import {getPointBelow} from "../threeExt";
 import {EUSToLLA, haversineDistanceKM} from "../LLA-ECEF-ENU";
@@ -436,7 +436,7 @@ export class   CNodeMQ9UI extends CNodeViewUI {
 
 
         // draw the letter N in the center
-        c.fillStyle = '#FF00FF';
+        c.fillStyle = '#FFFFFF';
         c.font = this.px(1.5)+'px Arial';
         c.textAlign = 'center';
         c.textBaseline = 'middle';
@@ -448,7 +448,7 @@ export class   CNodeMQ9UI extends CNodeViewUI {
 
 
         const crosshairWidth = 1
-        const crosshairColor = '#FF00FF'
+        const crosshairColor = '#FFFFFF'
         const crosshairGap = 2
         const crosshairLength = 6
 
@@ -566,6 +566,74 @@ export class   CNodeMQ9UI extends CNodeViewUI {
         c.font = `${fontSize}px monospace`;
         c.textAlign = 'center';
         c.fillText(`${Math.round(relativeAzimuth)}`, caretX, caretY + caretSize + charHeight * 0.6);
+
+        // Elevation scale on the left side
+        // Get camera elevation angle
+        const azel = getAzElFromPositionAndForward(camera.position, forward);
+        const elevation = azel[1];
+
+        // Scale dimensions
+        const elevScaleX = gridX + charWidth * 4;
+        const elevScaleTop = gridY + gridH * 0.4;
+        const elevScaleBottom = gridY + gridH * 0.6;
+        const elevScaleHeight = elevScaleBottom - elevScaleTop;
+        const elevTickLength = charWidth * 0.8;
+        const elevMinorTickLength = charWidth * 0.4;
+
+        // Scale range: -120 to 60 degrees
+        const elevMin = -120;
+        const elevMax = 60;
+        const elevRange = elevMax - elevMin;
+
+        // Draw the vertical scale line
+        c.strokeStyle = '#FFFFFF';
+        c.lineWidth = 1;
+        c.beginPath();
+        c.moveTo(elevScaleX, elevScaleTop);
+        c.lineTo(elevScaleX, elevScaleBottom);
+        c.stroke();
+
+        // Draw ticks and labels
+        const majorElevTicks = [60, 0, -60, -120];
+        const minorElevTicks = [30, -30, -90];
+
+        c.font = `${fontSize}px monospace`;
+        c.fillStyle = '#FFFFFF';
+        c.textAlign = 'right';
+        c.textBaseline = 'middle';
+
+        for (const deg of majorElevTicks) {
+            const y = elevScaleTop + ((elevMax - deg) / elevRange) * elevScaleHeight;
+            c.beginPath();
+            c.moveTo(elevScaleX, y);
+            c.lineTo(elevScaleX - elevTickLength, y);
+            c.stroke();
+            c.fillText(`${deg}`, elevScaleX - elevTickLength - charWidth * 0.3, y);
+        }
+
+        for (const deg of minorElevTicks) {
+            const y = elevScaleTop + ((elevMax - deg) / elevRange) * elevScaleHeight;
+            c.beginPath();
+            c.moveTo(elevScaleX, y);
+            c.lineTo(elevScaleX - elevMinorTickLength, y);
+            c.stroke();
+        }
+
+        // Draw elevation indicator (arrow with value)
+        const clampedElev = Math.max(elevMin, Math.min(elevMax, elevation));
+        const elevIndicatorY = elevScaleTop + ((elevMax - clampedElev) / elevRange) * elevScaleHeight;
+        const arrowSize = charHeight * 0.4;
+
+        // Draw arrow pointing left
+        c.beginPath();
+        c.moveTo(elevScaleX + arrowSize, elevIndicatorY - arrowSize / 2);
+        c.lineTo(elevScaleX, elevIndicatorY);
+        c.lineTo(elevScaleX + arrowSize, elevIndicatorY + arrowSize / 2);
+        c.stroke();
+
+        // Draw elevation value to the right of arrow
+        c.textAlign = 'left';
+        c.fillText(`${Math.round(elevation)}`, elevScaleX + arrowSize + charWidth * 0.3, elevIndicatorY);
 
     }
 
