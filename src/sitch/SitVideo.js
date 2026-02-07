@@ -125,7 +125,7 @@ export const SitVideo = {
         if (!videoInfo) return;
 
         videoInfo.setupMenu(guiMenus.view);
-    }
+    },
 }
 
 

@@ -204,3 +204,372 @@ export async function getBestFormatForResolution(preferredFormat, width, height)
     
     return { formatId: null, fallback: false, reason: `No codec supports ${width}x${height}` };
 }
+
+export class VideoExportManager {
+    constructor() {
+        this.videoExportView = "lookView";
+        this.retinaExport = false;
+        this.exportAudio = true;
+        this.videoFormat = null;
+        this.renderVideoFolder = null;
+    }
+
+    async setupMenu(parentFolder, options = {}) {
+        const { ViewMan } = await import("./CViewManager");
+        const { setupPanoramaExport } = await import("./PanoramaExporter");
+
+        const getExportableViews = () => {
+            const views = [];
+            ViewMan.iterate((id, view) => {
+                if (!view.overlayView && view.exportVideo) {
+                    views.push(id);
+                }
+            });
+            return views;
+        };
+
+        const exportableViews = getExportableViews();
+
+        if (exportableViews.length > 0 && !exportableViews.includes(this.videoExportView)) {
+            this.videoExportView = exportableViews[0];
+        }
+
+        const encodingSupport = await checkVideoEncodingSupport();
+        if (!encodingSupport.supported) {
+            parentFolder.add({ label: "Video Export Not Available" }, "label")
+                .name("Video Export Not Available")
+                .disable()
+                .tooltip(encodingSupport.reason || "Video encoding is not supported in this browser");
+            return;
+        }
+
+        this.videoFormat = getDefaultVideoFormat(encodingSupport);
+        const formatOptions = getFilteredVideoFormatOptions(encodingSupport);
+
+        this.renderVideoFolder = parentFolder.addFolder("Video Render & Export").close()
+            .tooltip("Options for rendering and exporting video files from Sitrec views or full viewport");
+
+        if (exportableViews.length > 0) {
+            this.renderVideoFolder.add(this, "videoExportView", exportableViews)
+                .name("Render Video View")
+                .tooltip("Select which view to export as video");
+
+            this.renderVideoFolder.add({
+                exportVideo: () => {
+                    const view = ViewMan.get(this.videoExportView, false);
+                    if (view && view.exportVideo) {
+                        view.exportVideo(this.videoFormat, this.exportAudio);
+                    }
+                }
+            }, "exportVideo").name("Render Single View Video")
+                .tooltip("Export the selected view as a video file with all frames");
+        }
+
+        if (Object.keys(formatOptions).length > 1) {
+            this.renderVideoFolder.add(this, "videoFormat", formatOptions)
+                .name("Video Format")
+                .tooltip("Select the output video format");
+        }
+
+        this.renderVideoFolder.add({
+            exportViewport: () => this.exportViewportVideo()
+        }, "exportViewport").name("Render Viewport Video")
+            .tooltip("Export the entire viewport as a video file with all frames");
+
+        this.renderVideoFolder.add({
+            exportFullscreenViewport: () => this.exportFullscreenViewportVideo()
+        }, "exportFullscreenViewport").name("Render Fullscreen Video")
+            .tooltip("Export the entire viewport in fullscreen mode as a video file with all frames");
+
+        this.renderVideoFolder.add(this, "retinaExport")
+            .name("Use HD/Retina Export")
+            .tooltip("Export at retina/HiDPI resolution (2x on most displays)");
+
+        this.renderVideoFolder.add(this, "exportAudio")
+            .name("Include Audio")
+            .tooltip("Include audio track from source video if available");
+
+        if (!options.skipPanorama) {
+            setupPanoramaExport(this.renderVideoFolder);
+        }
+
+        return this.renderVideoFolder;
+    }
+
+    async exportViewportVideo() {
+        const { ViewMan } = await import("./CViewManager");
+        const { GlobalDateTimeNode, NodeMan, Sit, Globals, setRenderOne } = await import("./Globals");
+        const { par } = await import("./par");
+        const { GlobalScene, LocalFrame } = await import("./LocalFrame");
+        const { Frame2Az, Frame2El, UpdatePRFromEA } = await import("./JetStuff");
+        const { ExportProgressWidget, drawVideoWatermark } = await import("./utils");
+        const { getMotionAnalysisOverlays } = await import("./CMotionAnalysis");
+        const { CNodeView3D } = await import("./nodes/CNodeView3D");
+
+        const startFrame = Sit.aFrame;
+        const endFrame = Sit.bFrame;
+        const totalFrames = endFrame - startFrame + 1;
+        const scale = this.retinaExport ? (window.devicePixelRatio || 1) : 1;
+        const width = Math.round(ViewMan.widthPx * scale);
+        const height = Math.round(ViewMan.heightPx * scale);
+        const fps = Sit.fps;
+
+        const bestFormat = await getBestFormatForResolution(this.videoFormat, width, height);
+        if (!bestFormat.formatId) {
+            alert(`Video export failed: ${bestFormat.reason}`);
+            return;
+        }
+        if (bestFormat.fallback) {
+            console.log(`${bestFormat.reason}, falling back to ${bestFormat.formatId}`);
+        }
+
+        const formatId = bestFormat.formatId;
+        const extension = getVideoExtension(formatId);
+
+        console.log(`Starting viewport video export (${formatId}): ${totalFrames} frames (${startFrame}-${endFrame}) at ${fps} fps, ${width}x${height} (scale: ${scale}x)`);
+
+        const savedFrame = par.frame;
+        const savedPaused = par.paused;
+        par.paused = true;
+
+        const progress = new ExportProgressWidget('Exporting viewport video...', totalFrames);
+
+        const compositeCanvas = document.createElement('canvas');
+        compositeCanvas.width = width;
+        compositeCanvas.height = height;
+        const compositeCtx = compositeCanvas.getContext('2d');
+
+        const videoStartDate = GlobalDateTimeNode ? GlobalDateTimeNode.frameToDate(startFrame) : null;
+
+        let audioBuffer = null;
+        let audioStartTime = 0;
+        let audioDuration = null;
+        let originalFps = fps;
+
+        if (this.exportAudio) {
+            for (const entry of Object.values(NodeMan.list)) {
+                const node = entry.data;
+                if (node.videoData && node.videoData.audioHandler &&
+                    node.videoData.audioHandler.decodingComplete) {
+                    const exportAudioBuffer = node.videoData.audioHandler.getAudioBufferForExport();
+                    if (exportAudioBuffer) {
+                        audioBuffer = exportAudioBuffer;
+                        originalFps = node.videoData.audioHandler.originalFps || fps;
+                        audioStartTime = startFrame / originalFps;
+                        audioDuration = totalFrames / fps;
+                        console.log(`Found audio: ${audioBuffer.duration.toFixed(2)}s, using ${audioDuration.toFixed(2)}s from ${audioStartTime.toFixed(2)}s`);
+                        break;
+                    }
+                }
+            }
+        }
+
+        try {
+            const exporter = await createVideoExporter(formatId, {
+                width,
+                height,
+                fps,
+                bitrate: 8_000_000 * scale * scale,
+                keyFrameInterval: 30,
+                videoStartDate,
+                audioBuffer,
+                audioStartTime,
+                audioDuration,
+                originalFps,
+                hardwareAcceleration: bestFormat.hardwareAcceleration,
+            });
+
+            await exporter.initialize();
+
+            for (let i = 0; i < totalFrames; i++) {
+                if (progress.shouldStop()) break;
+
+                const frame = startFrame + i;
+                par.frame = frame;
+                GlobalDateTimeNode.update(frame);
+
+                if (Sit.azSlider) {
+                    par.az = Frame2Az(par.frame);
+                    par.el = Frame2El(par.frame);
+                    UpdatePRFromEA();
+                }
+
+                for (const entry of Object.values(NodeMan.list)) {
+                    const node = entry.data;
+                    if (node.update !== undefined) {
+                        node.update(frame);
+                    }
+                    if (node.videoData && node.videoData.waitForFrame) {
+                        await node.videoData.waitForFrame(frame);
+                    }
+                }
+
+                GlobalScene.updateMatrixWorld(true);
+                if (LocalFrame) LocalFrame.updateMatrixWorld(true);
+
+                compositeCtx.fillStyle = '#000000';
+                compositeCtx.fillRect(0, 0, width, height);
+
+                const nonOverlays = [];
+                const overlays = [];
+
+                ViewMan.iterate((id, view) => {
+                    if (view.overlayView && !view.separateVisibility) {
+                        view.setVisible(view.overlayView.visible);
+                    }
+
+                    let visible = view.visible;
+                    if (view.overlayView && !view.separateVisibility) {
+                        visible = view.overlayView.visible;
+                    }
+                    if (view.relativeTo) {
+                        visible = view.relativeTo.visible;
+                    }
+
+                    if (visible) {
+                        if (view.overlayView) {
+                            overlays.push(view);
+                        } else {
+                            nonOverlays.push(view);
+                        }
+                    }
+                });
+
+                for (const view of nonOverlays) {
+                    if (view.camera && view instanceof CNodeView3D) {
+                        view.camera.updateMatrix();
+                        view.camera.updateMatrixWorld();
+                        for (const entry of Object.values(NodeMan.list)) {
+                            const node = entry.data;
+                            if (node.preRender !== undefined) {
+                                node.preRender(view);
+                            }
+                        }
+                    }
+                    view.renderCanvas(frame);
+                    if (view.renderer) {
+                        view.renderer.getContext().finish();
+                    }
+                    if (view.canvas) {
+                        const x = view.leftPx * scale;
+                        const y = (view.topPx - ViewMan.topPx) * scale;
+                        compositeCtx.drawImage(view.canvas, x, y, view.widthPx * scale, view.heightPx * scale);
+                    }
+                }
+
+                for (const view of overlays) {
+                    const alpha = view.transparency !== undefined ? view.transparency : 1;
+                    if (alpha <= 0) continue;
+
+                    if (view.canvas) {
+                        const ctx = view.canvas.getContext('2d');
+                        ctx.clearRect(0, 0, view.canvas.width, view.canvas.height);
+                    }
+                    if (view.camera && view instanceof CNodeView3D) {
+                        view.camera.updateMatrix();
+                        view.camera.updateMatrixWorld();
+                        for (const entry of Object.values(NodeMan.list)) {
+                            const node = entry.data;
+                            if (node.preRender !== undefined) {
+                                node.preRender(view);
+                            }
+                        }
+                    }
+                    view.renderCanvas(frame);
+                    if (view.canvas) {
+                        const parentView = view.overlayView;
+                        const x = parentView.leftPx * scale;
+                        const y = (parentView.topPx - ViewMan.topPx) * scale;
+                        compositeCtx.globalAlpha = alpha;
+                        compositeCtx.drawImage(view.canvas, x, y, parentView.widthPx * scale, parentView.heightPx * scale);
+                        compositeCtx.globalAlpha = 1;
+                    }
+                }
+
+                const motionOverlays = getMotionAnalysisOverlays();
+                if (motionOverlays && motionOverlays.videoView) {
+                    const vv = motionOverlays.videoView;
+                    const x = vv.leftPx * scale;
+                    const y = (vv.topPx - ViewMan.topPx) * scale;
+                    if (motionOverlays.overlay) {
+                        compositeCtx.drawImage(motionOverlays.overlay, x, y, vv.widthPx * scale, vv.heightPx * scale);
+                    }
+                    if (motionOverlays.graphCanvas) {
+                        const gw = 200 * scale;
+                        const gh = 80 * scale;
+                        const gx = x + vv.widthPx * scale - gw - 10 * scale;
+                        const gy = y + vv.heightPx * scale - gh - 10 * scale;
+                        compositeCtx.drawImage(motionOverlays.graphCanvas, gx, gy, gw, gh);
+                    }
+                }
+
+                drawVideoWatermark(compositeCtx, width);
+
+                await exporter.addFrame(compositeCanvas, frame);
+
+                if (i % 10 === 0) {
+                    progress.update(i + 1);
+                    await new Promise(r => setTimeout(r, 0));
+                }
+            }
+
+            if (progress.shouldSave()) {
+                const blob = await exporter.finalize(
+                    (current, total) => progress.setFinalizeProgress(current, total),
+                    (status) => progress.setStatus(status)
+                );
+
+                const filename = `viewport_${Sit.name || 'export'}_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.${extension}`;
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(url);
+
+                console.log(`Viewport video export complete: ${filename}`);
+            } else {
+                console.log('Viewport video export aborted by user');
+            }
+
+        } catch (e) {
+            console.error('Export failed:', e);
+            alert('Viewport video export failed: ' + e.message);
+        } finally {
+            progress.remove();
+            par.frame = savedFrame;
+            par.paused = savedPaused;
+            setRenderOne(true);
+        }
+    }
+
+    async exportFullscreenViewportVideo() {
+        const { Globals } = await import("./Globals");
+        const { openFullscreen, closeFullscreen } = await import("./utils");
+        const { updateSize } = await import("./JetStuff");
+
+        const uiWasVisible = !Globals.menuBar._hidden;
+        try {
+            if (uiWasVisible) {
+                Globals.menuBar.toggleVisiblity();
+            }
+            openFullscreen();
+            await new Promise(resolve => {
+                const handler = () => {
+                    document.removeEventListener('fullscreenchange', handler);
+                    document.removeEventListener('webkitfullscreenchange', handler);
+                    updateSize(true);
+                    setTimeout(resolve, 100);
+                };
+                document.addEventListener('fullscreenchange', handler);
+                document.addEventListener('webkitfullscreenchange', handler);
+            });
+            await this.exportViewportVideo();
+        } finally {
+            closeFullscreen();
+            if (uiWasVisible) {
+                Globals.menuBar.toggleVisiblity();
+            }
+        }
+    }
+}

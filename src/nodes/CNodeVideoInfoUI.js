@@ -2,6 +2,9 @@ import {CNodeViewUI} from "./CNodeViewUI";
 import {GlobalDateTimeNode, Sit} from "../Globals";
 import {par} from "../par";
 
+const DEFAULT_X = 50;
+const DEFAULT_Y = 8;
+
 export class CNodeVideoInfoUI extends CNodeViewUI {
 
     constructor(v) {
@@ -9,7 +12,7 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
 
         this.doubleClickFullScreen = false;
 
-        this.showInfo = v.showInfo ?? false;
+        this.showInfo = v.showInfo ?? true;
         this.showFrameCounter = v.showFrameCounter ?? false;
         this.showTimecode = v.showTimecode ?? false;
         this.showTimestamp = v.showTimestamp ?? false;
@@ -21,24 +24,24 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
         this.showDateTimeUTC = v.showDateTimeUTC ?? false;
         this.fontSize = v.fontSize ?? 30;
 
-        this.frameCounterX = v.frameCounterX ?? 50;
-        this.frameCounterY = v.frameCounterY ?? 8;
-        this.timecodeX = v.timecodeX ?? 50;
-        this.timecodeY = v.timecodeY ?? 8;
-        this.timestampX = v.timestampX ?? 50;
-        this.timestampY = v.timestampY ?? 8;
-        this.dateLocalX = v.dateLocalX ?? 50;
-        this.dateLocalY = v.dateLocalY ?? 8;
-        this.timeLocalX = v.timeLocalX ?? 50;
-        this.timeLocalY = v.timeLocalY ?? 8;
-        this.dateTimeLocalX = v.dateTimeLocalX ?? 50;
-        this.dateTimeLocalY = v.dateTimeLocalY ?? 8;
-        this.dateUTCX = v.dateUTCX ?? 50;
-        this.dateUTCY = v.dateUTCY ?? 8;
-        this.timeUTCX = v.timeUTCX ?? 50;
-        this.timeUTCY = v.timeUTCY ?? 8;
-        this.dateTimeUTCX = v.dateTimeUTCX ?? 50;
-        this.dateTimeUTCY = v.dateTimeUTCY ?? 8;
+        this.frameCounterX = v.frameCounterX ?? DEFAULT_X;
+        this.frameCounterY = v.frameCounterY ?? DEFAULT_Y;
+        this.timecodeX = v.timecodeX ?? DEFAULT_X;
+        this.timecodeY = v.timecodeY ?? DEFAULT_Y;
+        this.timestampX = v.timestampX ?? DEFAULT_X;
+        this.timestampY = v.timestampY ?? DEFAULT_Y;
+        this.dateLocalX = v.dateLocalX ?? DEFAULT_X;
+        this.dateLocalY = v.dateLocalY ?? DEFAULT_Y;
+        this.timeLocalX = v.timeLocalX ?? DEFAULT_X;
+        this.timeLocalY = v.timeLocalY ?? DEFAULT_Y;
+        this.dateTimeLocalX = v.dateTimeLocalX ?? DEFAULT_X;
+        this.dateTimeLocalY = v.dateTimeLocalY ?? DEFAULT_Y;
+        this.dateUTCX = v.dateUTCX ?? DEFAULT_X;
+        this.dateUTCY = v.dateUTCY ?? DEFAULT_Y;
+        this.timeUTCX = v.timeUTCX ?? DEFAULT_X;
+        this.timeUTCY = v.timeUTCY ?? DEFAULT_Y;
+        this.dateTimeUTCX = v.dateTimeUTCX ?? DEFAULT_X;
+        this.dateTimeUTCY = v.dateTimeUTCY ?? DEFAULT_Y;
 
         this.addSimpleSerial("showInfo");
         this.addSimpleSerial("showFrameCounter");
@@ -84,7 +87,115 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
         document.addEventListener('mouseup', this.boundHandleMouseUp);
         this.canvas.addEventListener('mousedown', this.boundHandleMouseDown);
 
-        this.show(this.showInfo);
+        this.updateVisibility();
+    }
+
+    hasAnyInfoItem() {
+        return this.showFrameCounter || this.showTimecode || this.showTimestamp ||
+            this.showDateLocal || this.showTimeLocal || this.showDateTimeLocal ||
+            this.showDateUTC || this.showTimeUTC || this.showDateTimeUTC;
+    }
+
+    shouldBeVisible() {
+        return this.showInfo || this.hasAnyInfoItem();
+    }
+
+    updateVisibility() {
+        this.show(this.shouldBeVisible());
+    }
+
+    isVideoReady() {
+        const videoView = this.in.relativeTo;
+        if (!videoView) return true;
+        return videoView.videoWidth > 0 && videoView.videoHeight > 0 &&
+            videoView.positioned && this.widthPx > 0 && this.heightPx > 0;
+    }
+
+    getAllItemIds() {
+        return ['frameCounter', 'timecode', 'timestamp', 'dateLocal', 'timeLocal',
+            'dateTimeLocal', 'dateUTC', 'timeUTC', 'dateTimeUTC'];
+    }
+
+    getShowProp(id) {
+        const map = {
+            frameCounter: 'showFrameCounter',
+            timecode: 'showTimecode',
+            timestamp: 'showTimestamp',
+            dateLocal: 'showDateLocal',
+            timeLocal: 'showTimeLocal',
+            dateTimeLocal: 'showDateTimeLocal',
+            dateUTC: 'showDateUTC',
+            timeUTC: 'showTimeUTC',
+            dateTimeUTC: 'showDateTimeUTC',
+        };
+        return map[id];
+    }
+
+    isItemMoved(id) {
+        const pos = this.getElementPos(id);
+        if (!pos) return false;
+        return this[pos[0]] !== DEFAULT_X || this[pos[1]] !== DEFAULT_Y;
+    }
+
+    isItemVisibleOrMoved(id) {
+        const showProp = this.getShowProp(id);
+        return this[showProp] || this.isItemMoved(id);
+    }
+
+    estimateItemHeight() {
+        const rect = this.getVideoRect();
+        const referenceHeight = 1080;
+        const scaledFontSize = Math.round(this.fontSize * rect.h / referenceHeight);
+        const padding = Math.round(6 * rect.h / referenceHeight);
+        return (scaledFontSize + padding * 2) / rect.h * 100;
+    }
+
+    getItemYPosition(id) {
+        const pos = this.getElementPos(id);
+        return pos ? this[pos[1]] : DEFAULT_Y;
+    }
+
+    setItemYPosition(id, y) {
+        const pos = this.getElementPos(id);
+        if (pos) this[pos[1]] = y;
+    }
+
+    positionItemToAvoidOverlaps(id) {
+        const pos = this.getElementPos(id);
+        if (!pos) return;
+        this[pos[0]] = DEFAULT_X;
+        this[pos[1]] = DEFAULT_Y;
+
+        const itemHeight = this.estimateItemHeight();
+        const margin = itemHeight * 0.2;
+
+        const occupiedYRanges = [];
+        for (const otherId of this.getAllItemIds()) {
+            if (otherId === id) continue;
+            if (this.isItemVisibleOrMoved(otherId)) {
+                const otherY = this.getItemYPosition(otherId);
+                occupiedYRanges.push({ start: otherY, end: otherY + itemHeight });
+            }
+        }
+
+        let currentY = DEFAULT_Y;
+        let foundPosition = false;
+        while (!foundPosition && currentY < 90) {
+            const newEnd = currentY + itemHeight;
+            let hasOverlap = false;
+            for (const range of occupiedYRanges) {
+                if (!(newEnd + margin <= range.start || currentY >= range.end + margin)) {
+                    hasOverlap = true;
+                    currentY = range.end + margin;
+                    break;
+                }
+            }
+            if (!hasOverlap) {
+                foundPosition = true;
+            }
+        }
+
+        this[pos[1]] = Math.min(currentY, 90);
     }
 
     getElementBounds() {
@@ -142,7 +253,7 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
     }
 
     handleMouseDown(e) {
-        if (!this.showInfo) return;
+        if (!this.isVideoReady() || !this.shouldBeVisible()) return;
 
         const canvasRect = this.canvas.getBoundingClientRect();
         const x = e.clientX - canvasRect.left;
@@ -164,6 +275,8 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
     }
 
     handleMouseMove(e) {
+        if (!this.isVideoReady()) return;
+
         const canvasRect = this.canvas.getBoundingClientRect();
         const x = e.clientX - canvasRect.left;
         const y = e.clientY - canvasRect.top;
@@ -186,7 +299,7 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
 
         if (x >= 0 && x <= canvasRect.width && y >= 0 && y <= canvasRect.height) {
             const element = this.getElementAtPosition(x, y);
-            if (element && this.showInfo) {
+            if (element && this.shouldBeVisible()) {
                 this.canvas.style.pointerEvents = 'auto';
                 this.canvas.style.cursor = 'move';
             } else {
@@ -243,12 +356,16 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
     getVideoRect() {
         let vx = 0, vy = 0, vw = this.widthPx, vh = this.heightPx;
         const videoView = this.in.relativeTo;
-        if (videoView && videoView.getSourceAndDestCoords) {
+        if (videoView && videoView.getSourceAndDestCoords &&
+            videoView.videoWidth > 0 && videoView.videoHeight > 0) {
             videoView.getSourceAndDestCoords();
-            vx = videoView.dx;
-            vy = videoView.dy;
-            vw = videoView.dWidth;
-            vh = videoView.dHeight;
+            if (!isNaN(videoView.dWidth) && !isNaN(videoView.dHeight) &&
+                videoView.dWidth > 0 && videoView.dHeight > 0) {
+                vx = videoView.dx;
+                vy = videoView.dy;
+                vw = videoView.dWidth;
+                vh = videoView.dHeight;
+            }
         }
         return { x: vx, y: vy, w: vw, h: vh };
     }
@@ -262,9 +379,13 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
     }
 
     renderCanvas(frame) {
+        if (!this.isVideoReady()) return;
         if (this.overlayView && !this.overlayView.visible) return;
         if (this.in.relativeTo && !this.in.relativeTo.visible) return;
-        if (!this.showInfo) return;
+        if (!this.shouldBeVisible()) return;
+
+        const rect = this.getVideoRect();
+        if (!rect.w || !rect.h) return;
 
         super.renderCanvas(frame);
 
@@ -272,8 +393,6 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
         const fps = Sit.fps || 30;
         const totalSeconds = (Sit.frames || 1) / fps;
         const showHours = totalSeconds >= 3600;
-
-        const rect = this.getVideoRect();
         const referenceHeight = 1080;
         const scaledFontSize = Math.round(this.fontSize * rect.h / referenceHeight);
         c.font = `${scaledFontSize}px monospace`;
@@ -449,43 +568,52 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
         folder.add(this, "showInfo").name("Show Video Info")
             .tooltip("Master toggle - enable or disable all video info displays")
             .listen()
-            .onChange(value => this.show(value));
+            .onChange(() => this.updateVisibility());
 
         folder.add(this, "showFrameCounter").name("Frame Counter")
             .tooltip("Show the current frame number")
-            .listen();
+            .listen()
+            .onChange(v => { if (v) this.positionItemToAvoidOverlaps('frameCounter'); this.updateVisibility(); });
 
         folder.add(this, "showTimecode").name("Timecode")
             .tooltip("Show timecode in HH:MM:SS:FF format")
-            .listen();
+            .listen()
+            .onChange(v => { if (v) this.positionItemToAvoidOverlaps('timecode'); this.updateVisibility(); });
 
         folder.add(this, "showTimestamp").name("Timestamp")
             .tooltip("Show timestamp in HH:MM:SS.SS format")
-            .listen();
+            .listen()
+            .onChange(v => { if (v) this.positionItemToAvoidOverlaps('timestamp'); this.updateVisibility(); });
 
         folder.add(this, "showDateLocal").name("Date (Local)")
             .tooltip("Show current date in selected timezone")
-            .listen();
+            .listen()
+            .onChange(v => { if (v) this.positionItemToAvoidOverlaps('dateLocal'); this.updateVisibility(); });
 
         folder.add(this, "showTimeLocal").name("Time (Local)")
             .tooltip("Show current time in selected timezone")
-            .listen();
+            .listen()
+            .onChange(v => { if (v) this.positionItemToAvoidOverlaps('timeLocal'); this.updateVisibility(); });
 
         folder.add(this, "showDateTimeLocal").name("DateTime (Local)")
             .tooltip("Show full date and time in selected timezone")
-            .listen();
+            .listen()
+            .onChange(v => { if (v) this.positionItemToAvoidOverlaps('dateTimeLocal'); this.updateVisibility(); });
 
         folder.add(this, "showDateUTC").name("Date (UTC)")
             .tooltip("Show current date in UTC")
-            .listen();
+            .listen()
+            .onChange(v => { if (v) this.positionItemToAvoidOverlaps('dateUTC'); this.updateVisibility(); });
 
         folder.add(this, "showTimeUTC").name("Time (UTC)")
             .tooltip("Show current time in UTC")
-            .listen();
+            .listen()
+            .onChange(v => { if (v) this.positionItemToAvoidOverlaps('timeUTC'); this.updateVisibility(); });
 
         folder.add(this, "showDateTimeUTC").name("DateTime (UTC)")
             .tooltip("Show full date and time in UTC")
-            .listen();
+            .listen()
+            .onChange(v => { if (v) this.positionItemToAvoidOverlaps('dateTimeUTC'); this.updateVisibility(); });
 
         folder.add(this, "fontSize", 10, 80, 1).name("Font Size")
             .tooltip("Adjust the font size of the info text")

@@ -1073,6 +1073,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
             this.sHeight = sourceH;
             this.dx = this.widthPx * (0.5 + this.posLeft);
             this.dy = this.heightPx * 0.5 + this.widthPx * this.posTop;
+            assert(this.posRight !== undefined, "posRight is undefined in getSourceAndDestCoords, this=" + this.id);
             this.dWidth = this.widthPx * (this.posRight - this.posLeft);
             this.dHeight = this.widthPx * (this.posBot - this.posTop);
             this.fovCoverage = this.dHeight / this.heightPx;
