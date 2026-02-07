@@ -1,6 +1,7 @@
 import {GlobalURLParams, gui, guiMenus, Sit} from "../Globals";
 import {setURLParameters} from "../utils";
 import {CNodeVideoWebCodecView} from "../nodes/CNodeVideoWebCodecView";
+import {CNodeVideoInfoUI} from "../nodes/CNodeVideoInfoUI";
 import {DragDropHandler} from "../DragDropHandler";
 
 export const SitVideo = {
@@ -15,6 +16,7 @@ export const SitVideo = {
     frames: 0,
     aFrame: 0,
 //    bFrame: 0,
+
 
 
     setup: function() {
@@ -82,6 +84,14 @@ export const SitVideo = {
 
         DragDropHandler.addDropArea();
 
+        this.videoInfoNode = new CNodeVideoInfoUI({
+            id: "videoInfo",
+            relativeTo: "video",
+            visible: true,
+            passThrough: true,
+        });
+        this.setupVideoInfoMenu();
+
      //   guiMenus.view?.hide();
         guiMenus.objects?.hide();
         guiMenus.physics?.hide();
@@ -108,6 +118,13 @@ export const SitVideo = {
             setURLParameters("&video="+this.file)
 
         }).name("Preset Video")
+    },
+
+    setupVideoInfoMenu: function() {
+        const videoInfo = this.videoInfoNode;
+        if (!videoInfo) return;
+
+        videoInfo.setupMenu(guiMenus.view);
     }
 }
 

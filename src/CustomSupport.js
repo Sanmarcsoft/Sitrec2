@@ -71,6 +71,7 @@ import {setupPanoramaExport} from "./PanoramaExporter";
 import {getCursorPositionFromTopView} from "./mouseMoveView";
 import {addMenuToLeftSidebar, addMenuToRightSidebar, isInLeftSidebar, isInRightSidebar} from "./PageStructure";
 import {CNodeControllerCelestial} from "./nodes/CNodeControllerVarious";
+import {CNodeVideoInfoUI} from "./nodes/CNodeVideoInfoUI";
 
 export class CCustomManager {
     constructor() {
@@ -723,56 +724,19 @@ export class CCustomManager {
     } // end of setup()
 
     setupVideoInfoMenu() {
+        if (!NodeMan.exists("videoInfo") && NodeMan.exists("video")) {
+            new CNodeVideoInfoUI({
+                id: "videoInfo",
+                relativeTo: "video",
+                visible: true,
+                passThrough: true,
+            });
+        }
+
         const videoInfo = NodeMan.get("videoInfo", false);
         if (!videoInfo) return;
 
-        const folder = guiMenus.view.addFolder("Video Info Display").close()
-            .tooltip("Video info display controls for frame counter, timecode, and timestamp");
-
-        folder.add(videoInfo, "showInfo").name("Show Video Info")
-            .tooltip("Master toggle - enable or disable all video info displays")
-            .listen()
-            .onChange(value => videoInfo.show(value));
-
-        folder.add(videoInfo, "showFrameCounter").name("Frame Counter")
-            .tooltip("Show the current frame number")
-            .listen();
-
-        folder.add(videoInfo, "showTimecode").name("Timecode")
-            .tooltip("Show timecode in HH:MM:SS:FF format")
-            .listen();
-
-        folder.add(videoInfo, "showTimestamp").name("Timestamp")
-            .tooltip("Show timestamp in HH:MM:SS.SS format")
-            .listen();
-
-        folder.add(videoInfo, "showDateLocal").name("Date (Local)")
-            .tooltip("Show current date in selected timezone")
-            .listen();
-
-        folder.add(videoInfo, "showTimeLocal").name("Time (Local)")
-            .tooltip("Show current time in selected timezone")
-            .listen();
-
-        folder.add(videoInfo, "showDateTimeLocal").name("DateTime (Local)")
-            .tooltip("Show full date and time in selected timezone")
-            .listen();
-
-        folder.add(videoInfo, "showDateUTC").name("Date (UTC)")
-            .tooltip("Show current date in UTC")
-            .listen();
-
-        folder.add(videoInfo, "showTimeUTC").name("Time (UTC)")
-            .tooltip("Show current time in UTC")
-            .listen();
-
-        folder.add(videoInfo, "showDateTimeUTC").name("DateTime (UTC)")
-            .tooltip("Show full date and time in UTC")
-            .listen();
-
-        folder.add(videoInfo, "fontSize", 10, 80, 1).name("Font Size")
-            .tooltip("Adjust the font size of the info text")
-            .listen();
+        videoInfo.setupMenu(guiMenus.view);
     }
 
     setupSubSitches() {

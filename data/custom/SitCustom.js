@@ -953,9 +953,6 @@ sitch = {
       //  left: 0.0, top: 0.0, width: 1, height: 1,
         visible: false, passThrough: true},
 
-    videoInfo: {kind: "VideoInfoUI", relativeTo: "video",
-        visible: true, passThrough: true, force:true},
-
     // labelView defaults to adding an overlay to lookView, and adds the time and date
     // this is patched in SituationSetuo.js in the "labelView" case
     labelView: {dateTimeY:93},
