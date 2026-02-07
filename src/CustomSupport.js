@@ -726,7 +726,7 @@ export class CCustomManager {
         const videoInfo = NodeMan.get("videoInfo", false);
         if (!videoInfo) return;
 
-        const folder = guiMenus.view.addFolder("Video Info").close()
+        const folder = guiMenus.view.addFolder("Video Info Display").close()
             .tooltip("Video info display controls for frame counter, timecode, and timestamp");
 
         folder.add(videoInfo, "showInfo").name("Show Video Info")
@@ -744,6 +744,30 @@ export class CCustomManager {
 
         folder.add(videoInfo, "showTimestamp").name("Timestamp")
             .tooltip("Show timestamp in HH:MM:SS.SS format")
+            .listen();
+
+        folder.add(videoInfo, "showDateLocal").name("Date (Local)")
+            .tooltip("Show current date in selected timezone")
+            .listen();
+
+        folder.add(videoInfo, "showTimeLocal").name("Time (Local)")
+            .tooltip("Show current time in selected timezone")
+            .listen();
+
+        folder.add(videoInfo, "showDateTimeLocal").name("DateTime (Local)")
+            .tooltip("Show full date and time in selected timezone")
+            .listen();
+
+        folder.add(videoInfo, "showDateUTC").name("Date (UTC)")
+            .tooltip("Show current date in UTC")
+            .listen();
+
+        folder.add(videoInfo, "showTimeUTC").name("Time (UTC)")
+            .tooltip("Show current time in UTC")
+            .listen();
+
+        folder.add(videoInfo, "showDateTimeUTC").name("DateTime (UTC)")
+            .tooltip("Show full date and time in UTC")
             .listen();
 
         folder.add(videoInfo, "fontSize", 10, 80, 1).name("Font Size")

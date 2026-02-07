@@ -1,5 +1,5 @@
 import {CNodeViewUI} from "./CNodeViewUI";
-import {Sit} from "../Globals";
+import {GlobalDateTimeNode, Sit} from "../Globals";
 import {par} from "../par";
 
 export class CNodeVideoInfoUI extends CNodeViewUI {
@@ -13,6 +13,12 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
         this.showFrameCounter = v.showFrameCounter ?? false;
         this.showTimecode = v.showTimecode ?? false;
         this.showTimestamp = v.showTimestamp ?? false;
+        this.showDateLocal = v.showDateLocal ?? false;
+        this.showTimeLocal = v.showTimeLocal ?? false;
+        this.showDateTimeLocal = v.showDateTimeLocal ?? false;
+        this.showDateUTC = v.showDateUTC ?? false;
+        this.showTimeUTC = v.showTimeUTC ?? false;
+        this.showDateTimeUTC = v.showDateTimeUTC ?? false;
         this.fontSize = v.fontSize ?? 30;
 
         this.frameCounterX = v.frameCounterX ?? 50;
@@ -21,11 +27,29 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
         this.timecodeY = v.timecodeY ?? 8;
         this.timestampX = v.timestampX ?? 50;
         this.timestampY = v.timestampY ?? 8;
+        this.dateLocalX = v.dateLocalX ?? 50;
+        this.dateLocalY = v.dateLocalY ?? 8;
+        this.timeLocalX = v.timeLocalX ?? 50;
+        this.timeLocalY = v.timeLocalY ?? 8;
+        this.dateTimeLocalX = v.dateTimeLocalX ?? 50;
+        this.dateTimeLocalY = v.dateTimeLocalY ?? 8;
+        this.dateUTCX = v.dateUTCX ?? 50;
+        this.dateUTCY = v.dateUTCY ?? 8;
+        this.timeUTCX = v.timeUTCX ?? 50;
+        this.timeUTCY = v.timeUTCY ?? 8;
+        this.dateTimeUTCX = v.dateTimeUTCX ?? 50;
+        this.dateTimeUTCY = v.dateTimeUTCY ?? 8;
 
         this.addSimpleSerial("showInfo");
         this.addSimpleSerial("showFrameCounter");
         this.addSimpleSerial("showTimecode");
         this.addSimpleSerial("showTimestamp");
+        this.addSimpleSerial("showDateLocal");
+        this.addSimpleSerial("showTimeLocal");
+        this.addSimpleSerial("showDateTimeLocal");
+        this.addSimpleSerial("showDateUTC");
+        this.addSimpleSerial("showTimeUTC");
+        this.addSimpleSerial("showDateTimeUTC");
         this.addSimpleSerial("fontSize");
         this.addSimpleSerial("frameCounterX");
         this.addSimpleSerial("frameCounterY");
@@ -33,6 +57,18 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
         this.addSimpleSerial("timecodeY");
         this.addSimpleSerial("timestampX");
         this.addSimpleSerial("timestampY");
+        this.addSimpleSerial("dateLocalX");
+        this.addSimpleSerial("dateLocalY");
+        this.addSimpleSerial("timeLocalX");
+        this.addSimpleSerial("timeLocalY");
+        this.addSimpleSerial("dateTimeLocalX");
+        this.addSimpleSerial("dateTimeLocalY");
+        this.addSimpleSerial("dateUTCX");
+        this.addSimpleSerial("dateUTCY");
+        this.addSimpleSerial("timeUTCX");
+        this.addSimpleSerial("timeUTCY");
+        this.addSimpleSerial("dateTimeUTCX");
+        this.addSimpleSerial("dateTimeUTCY");
 
         this.canvas.style.pointerEvents = 'none';
 
@@ -54,37 +90,29 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
     getElementBounds() {
         const bounds = [];
         const padding = 6;
-        const fps = Sit.fps || 30;
-        const totalSeconds = (Sit.frames || 1) / fps;
-        const showHours = totalSeconds >= 3600;
 
-        if (this.showFrameCounter && this._frameCounterBbox) {
-            bounds.push({
-                id: 'frameCounter',
-                x: this._frameCounterBbox.x - padding,
-                y: this._frameCounterBbox.y - padding,
-                w: this._frameCounterBbox.w + padding * 2,
-                h: this._frameCounterBbox.h + padding * 2
-            });
-        }
-        if (this.showTimecode && this._timecodeBbox) {
-            bounds.push({
-                id: 'timecode',
-                x: this._timecodeBbox.x - padding,
-                y: this._timecodeBbox.y - padding,
-                w: this._timecodeBbox.w + padding * 2,
-                h: this._timecodeBbox.h + padding * 2
-            });
-        }
-        if (this.showTimestamp && this._timestampBbox) {
-            bounds.push({
-                id: 'timestamp',
-                x: this._timestampBbox.x - padding,
-                y: this._timestampBbox.y - padding,
-                w: this._timestampBbox.w + padding * 2,
-                h: this._timestampBbox.h + padding * 2
-            });
-        }
+        const addBbox = (id, show, bbox) => {
+            if (show && bbox) {
+                bounds.push({
+                    id,
+                    x: bbox.x - padding,
+                    y: bbox.y - padding,
+                    w: bbox.w + padding * 2,
+                    h: bbox.h + padding * 2
+                });
+            }
+        };
+
+        addBbox('frameCounter', this.showFrameCounter, this._frameCounterBbox);
+        addBbox('timecode', this.showTimecode, this._timecodeBbox);
+        addBbox('timestamp', this.showTimestamp, this._timestampBbox);
+        addBbox('dateLocal', this.showDateLocal, this._dateLocalBbox);
+        addBbox('timeLocal', this.showTimeLocal, this._timeLocalBbox);
+        addBbox('dateTimeLocal', this.showDateTimeLocal, this._dateTimeLocalBbox);
+        addBbox('dateUTC', this.showDateUTC, this._dateUTCBbox);
+        addBbox('timeUTC', this.showTimeUTC, this._timeUTCBbox);
+        addBbox('dateTimeUTC', this.showDateTimeUTC, this._dateTimeUTCBbox);
+
         return bounds;
     }
 
@@ -98,6 +126,21 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
         return null;
     }
 
+    getElementPos(id) {
+        const map = {
+            frameCounter: ['frameCounterX', 'frameCounterY'],
+            timecode: ['timecodeX', 'timecodeY'],
+            timestamp: ['timestampX', 'timestampY'],
+            dateLocal: ['dateLocalX', 'dateLocalY'],
+            timeLocal: ['timeLocalX', 'timeLocalY'],
+            dateTimeLocal: ['dateTimeLocalX', 'dateTimeLocalY'],
+            dateUTC: ['dateUTCX', 'dateUTCY'],
+            timeUTC: ['timeUTCX', 'timeUTCY'],
+            dateTimeUTC: ['dateTimeUTCX', 'dateTimeUTCY'],
+        };
+        return map[id];
+    }
+
     handleMouseDown(e) {
         if (!this.showInfo) return;
 
@@ -109,15 +152,10 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
         if (element) {
             this.dragging = element;
             const videoRect = this.getVideoRect();
-            if (element === 'frameCounter') {
-                this.dragOffsetX = x - this.videoPx(this.frameCounterX, videoRect);
-                this.dragOffsetY = y - this.videoPy(this.frameCounterY, videoRect);
-            } else if (element === 'timecode') {
-                this.dragOffsetX = x - this.videoPx(this.timecodeX, videoRect);
-                this.dragOffsetY = y - this.videoPy(this.timecodeY, videoRect);
-            } else if (element === 'timestamp') {
-                this.dragOffsetX = x - this.videoPx(this.timestampX, videoRect);
-                this.dragOffsetY = y - this.videoPy(this.timestampY, videoRect);
+            const pos = this.getElementPos(element);
+            if (pos) {
+                this.dragOffsetX = x - this.videoPx(this[pos[0]], videoRect);
+                this.dragOffsetY = y - this.videoPy(this[pos[1]], videoRect);
             }
             this.canvas.style.pointerEvents = 'auto';
             e.stopPropagation();
@@ -138,15 +176,10 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
             const clampedX = Math.max(5, Math.min(95, newPctX));
             const clampedY = Math.max(5, Math.min(95, newPctY));
 
-            if (this.dragging === 'frameCounter') {
-                this.frameCounterX = clampedX;
-                this.frameCounterY = clampedY;
-            } else if (this.dragging === 'timecode') {
-                this.timecodeX = clampedX;
-                this.timecodeY = clampedY;
-            } else if (this.dragging === 'timestamp') {
-                this.timestampX = clampedX;
-                this.timestampY = clampedY;
+            const pos = this.getElementPos(this.dragging);
+            if (pos) {
+                this[pos[0]] = clampedX;
+                this[pos[1]] = clampedY;
             }
             return;
         }
@@ -305,6 +338,95 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
 
             this._timestampBbox = { x: bgX, y: bgY, w: bgW, h: bgH };
         }
+
+        const nowDate = GlobalDateTimeNode?.dateNow;
+        if (nowDate) {
+            if (this.showDateLocal) {
+                const text = this.formatDateLocal(nowDate);
+                this._dateLocalBbox = this.renderInfoElement(c, text, this.dateLocalX, this.dateLocalY, rect, scaledFontSize, padding);
+            }
+
+            if (this.showTimeLocal) {
+                const text = this.formatTimeLocal(nowDate);
+                this._timeLocalBbox = this.renderInfoElement(c, text, this.timeLocalX, this.timeLocalY, rect, scaledFontSize, padding);
+            }
+
+            if (this.showDateTimeLocal) {
+                const text = this.formatDateTimeLocal(nowDate);
+                this._dateTimeLocalBbox = this.renderInfoElement(c, text, this.dateTimeLocalX, this.dateTimeLocalY, rect, scaledFontSize, padding);
+            }
+
+            if (this.showDateUTC) {
+                const text = this.formatDateUTC(nowDate);
+                this._dateUTCBbox = this.renderInfoElement(c, text, this.dateUTCX, this.dateUTCY, rect, scaledFontSize, padding);
+            }
+
+            if (this.showTimeUTC) {
+                const text = this.formatTimeUTC(nowDate);
+                this._timeUTCBbox = this.renderInfoElement(c, text, this.timeUTCX, this.timeUTCY, rect, scaledFontSize, padding);
+            }
+
+            if (this.showDateTimeUTC) {
+                const text = this.formatDateTimeUTC(nowDate);
+                this._dateTimeUTCBbox = this.renderInfoElement(c, text, this.dateTimeUTCX, this.dateTimeUTCY, rect, scaledFontSize, padding);
+            }
+        }
+    }
+
+    renderInfoElement(c, text, pctX, pctY, rect, fontSize, padding) {
+        const x = this.videoPx(pctX, rect);
+        const y = this.videoPy(pctY, rect);
+        const metrics = c.measureText(text);
+        const bgX = x - metrics.width / 2 - padding;
+        const bgY = y - padding;
+        const bgW = metrics.width + padding * 2;
+        const bgH = fontSize + padding * 2;
+
+        c.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        c.fillRect(bgX, bgY, bgW, bgH);
+        c.fillStyle = '#FFFFFF';
+        c.fillText(text, x, y);
+
+        return { x: bgX, y: bgY, w: bgW, h: bgH };
+    }
+
+    getLocalDate(date) {
+        const offsetHours = GlobalDateTimeNode?.getTimeZoneOffset() || 0;
+        const offsetMs = offsetHours * 60 * 60 * 1000;
+        const localOffset = date.getTimezoneOffset() * 60000;
+        const utc = date.getTime() + localOffset;
+        return new Date(utc + offsetMs);
+    }
+
+    formatDateLocal(date) {
+        const d = this.getLocalDate(date);
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
+
+    formatTimeLocal(date) {
+        const d = this.getLocalDate(date);
+        const pad = n => String(n).padStart(2, '0');
+        return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+
+    formatDateTimeLocal(date) {
+        const tzName = GlobalDateTimeNode?.getTimeZoneName() || '';
+        return `${this.formatDateLocal(date)} ${this.formatTimeLocal(date)} ${tzName}`;
+    }
+
+    formatDateUTC(date) {
+        const pad = n => String(n).padStart(2, '0');
+        return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
+    }
+
+    formatTimeUTC(date) {
+        const pad = n => String(n).padStart(2, '0');
+        return `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
+    }
+
+    formatDateTimeUTC(date) {
+        return `${this.formatDateUTC(date)} ${this.formatTimeUTC(date)} UTC`;
     }
 
     dispose() {
