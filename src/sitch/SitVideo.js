@@ -82,7 +82,7 @@ export const SitVideo = {
 
         DragDropHandler.addDropArea();
 
-        guiMenus.view?.hide();
+     //   guiMenus.view?.hide();
         guiMenus.objects?.hide();
         guiMenus.physics?.hide();
         guiMenus.showhide?.hide();
