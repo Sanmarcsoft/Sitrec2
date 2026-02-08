@@ -66,6 +66,7 @@ const parDefaults = {
     showLookCam: true,
     //  lookFOV:0.35,
     mainFOV: 30,
+    trackToTrackStopAt: 0,
     jetHeading: 0,
     effects: true,
     negateEl: false,

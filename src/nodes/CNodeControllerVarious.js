@@ -2,7 +2,7 @@ import {atan, degrees, radians, tan} from "../utils";
 import {par} from "../par";
 import {ECEFToLLAVD_Sphere, EUSToECEF, LLAToEUS, wgs84} from "../LLA-ECEF-ENU";
 import {isKeyHeld} from "../KeyBoardHandler";
-import {GlobalDateTimeNode, gui, guiPhysics, NodeMan, setRenderOne, Sit, UndoManager} from "../Globals";
+import {GlobalDateTimeNode, gui, guiMenus, guiPhysics, NodeMan, setRenderOne, Sit, UndoManager} from "../Globals";
 import {getLocalEastVector, getLocalNorthVector, getLocalUpVector} from "../SphericalMath";
 import {adjustHeightAboveGround, clampAboveGround, DebugArrow} from "../threeExt";
 import {CNodeController} from "./CNodeController";
@@ -26,9 +26,34 @@ export class CNodeControllerTrackToTrack extends CNodeController {
     }
 
     apply(f, objectNode) {
+
+        // create "Stop At" menu item (also called a controller)
+        // this lets us specify a frame to stop the camera movement,
+        if (guiMenus.target) {
+            let stopAtController = guiMenus.target.controllers.find(c => c.property === 'trackToTrackStopAt');
+            if (!stopAtController) {
+                stopAtController = guiMenus.target.add(par, 'trackToTrackStopAt', 0, 1000, 1)
+                    .name("Stop At")
+                    .listen()
+                    .onChange(() => setRenderOne(true))
+                    .tooltip("Stop the camera target movement at this frame, even if the target track continue. This is useful for simulating the loss of lock on a moving target. Set to 0 to disable.");
+            }
+
+            if (stopAtController._max !== Sit.frames - 1) {
+                stopAtController._max = Sit.frames - 1;
+                stopAtController.updateDisplay();
+            }
+
+        }
+
+
+        let targetFrame = f;
+        if (par.trackToTrackStopAt > 0 && f > par.trackToTrackStopAt) {
+            targetFrame = par.trackToTrackStopAt;
+        }
         const camera = objectNode.camera
         var camPos = this.in.sourceTrack.p(f)
-        var targetPos = this.in.targetTrack.p(f)
+        var targetPos = this.in.targetTrack.p(targetFrame)
         camera.up = objectNode.getUpVector(camera.position)
         camera.position.copy(camPos);
         camera.lookAt(targetPos)
