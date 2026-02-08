@@ -586,10 +586,22 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
         } catch (error) {
             // Some videos give a lot of these errors,
             // and have jerky playback. e.g. '/Users/mick/Dropbox/Investigating/Rainmaking (1968).mp4'
-            showErrorOnce("GROUPDECODEERROR", "Error during group decode:", error);
             group.pending = 0;
             group.loaded = false;
             this.groupsPending--;
+            
+            // If the error is about a key frame mismatch after flush, reconfigure the decoder
+            // This resets the decoder state so it doesn't require a real key frame
+            if (error.message && error.message.includes("key") && this.config) {
+                try {
+                    this.decoder.reset();
+                    this.decoder.configure(this.config);
+                } catch (resetError) {
+                    console.warn("Failed to reset decoder after key frame error:", resetError);
+                }
+            } else {
+                showErrorOnce("GROUPDECODEERROR", "Error during group decode:", error);
+            }
         }
     }
 

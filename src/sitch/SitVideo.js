@@ -31,7 +31,8 @@ export const SitVideo = {
         }
 
         // the first one to load
-        this.file ="Aguadilla"
+//        this.file ="Aguadilla"
+        this.file =""
 
         // patch in any modded video, to avaoid loading twice.
         if (Sit.Sit !== undefined && Sit.Sit.file !== undefined) {
@@ -57,7 +58,9 @@ export const SitVideo = {
                 }
             }
         } else {
-            setURLParameters("&video="+this.file)
+            if (this.file !== "") {
+                setURLParameters("&video=" + this.file)
+            }
         }
 
 

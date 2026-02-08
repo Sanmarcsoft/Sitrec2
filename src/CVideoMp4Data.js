@@ -291,7 +291,7 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
                     },
                     (track_id, samples) => {
                         // Audio samples callback
-                        console.log("Audio samples callback received with", samples.length, "samples");
+//                        console.log("Audio samples callback received with", samples.length, "samples");
                         if (this.audioHandler) {
                             this.audioHandler.decodeAudioSamples(samples, demuxer);
                         }

@@ -256,7 +256,7 @@ export class MP4Source {
     } else if (track_id === this.audioTrackId) {
       this._receivedAudioSamples += samples.length;
       if (this._onAudioSamples) {
-        console.log("MP4Source.onSamples: routing", samples.length, "audio samples to callback (total:", this._receivedAudioSamples, "/", this._expectedAudioSamples, ")");
+//        console.log("MP4Source.onSamples: routing", samples.length, "audio samples to callback (total:", this._receivedAudioSamples, "/", this._expectedAudioSamples, ")");
         this._onAudioSamples(track_id, samples);
       } else {
         console.warn("MP4Source.onSamples: audio track_id=", track_id, "but no _onAudioSamples callback");

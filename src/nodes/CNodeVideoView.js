@@ -883,7 +883,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
             }
             // positions are a PERCENTAGE OF THE WIDTH
 
-            if (quickToggle("Smooth", false, guiTweaks) === false)
+            if (quickToggle("Smooth", false, guiVideoEffectsFolder) === false)
                 ctx.imageSmoothingEnabled = false;
 
             var filter = ''
