@@ -118,6 +118,10 @@ export class   CNodeMQ9UI extends CNodeViewUI {
         // Handle clicks when pointer-events is enabled (i.e., when over text)
         this.boundHandleMouseDown = (e) => this.handleMouseDown(e);
         this.canvas.addEventListener('mousedown', this.boundHandleMouseDown);
+
+        // Prevent double-click from propagating through to 3D view
+        this.boundHandleDblClick = (e) => this.handleDblClick(e);
+        this.canvas.addEventListener('dblclick', this.boundHandleDblClick);
     }
 
     addGridText(col, row, text, color = '#FFFFFF', align = 'left', clickGroup = null) {
@@ -180,6 +184,12 @@ export class   CNodeMQ9UI extends CNodeViewUI {
             e.stopPropagation();
             e.preventDefault();
         }
+    }
+
+    handleDblClick(e) {
+        // Prevent double-click from propagating through to the 3D view
+        e.stopPropagation();
+        e.preventDefault();
     }
 
     cycleDisplayMode(group) {
