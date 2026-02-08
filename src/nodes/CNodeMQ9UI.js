@@ -4,7 +4,9 @@
 import {CNodeViewUI} from "./CNodeViewUI";
 import {getAzElFromPositionAndForward, getCompassHeading} from "../SphericalMath";
 import {MV3} from "../threeUtils";
-import {getPointBelow} from "../threeExt";
+import {Raycaster} from "three";
+import * as LAYER from "../LayerMasks";
+import {getPointBelow, intersectMSL} from "../threeExt";
 import {EUSToLLA, haversineDistanceKM} from "../LLA-ECEF-ENU";
 import {forward as mgrsForward} from "mgrs";
 import {degrees} from "../utils";
@@ -38,6 +40,8 @@ export class   CNodeMQ9UI extends CNodeViewUI {
         this.grnMode = v.grnMode ?? 0;
         // IR mode (0 = IR WHT, 1 = IR BLK, 2 = WHT, 3 = BLK, 4 = EO)
         this.irMode = v.irMode ?? 0;
+        // Target mode (0 = TARGET, 1 = GROUND)
+        this.targetMode = v.targetMode ?? 0;
 
         this.addSimpleSerial("acftPosMode");
         this.addSimpleSerial("targetPosMode");
@@ -46,6 +50,7 @@ export class   CNodeMQ9UI extends CNodeViewUI {
         this.addSimpleSerial("slrMode");
         this.addSimpleSerial("grnMode");
         this.addSimpleSerial("irMode");
+        this.addSimpleSerial("targetMode");
 
         const grey = '#888888';
 
@@ -73,6 +78,8 @@ export class   CNodeMQ9UI extends CNodeViewUI {
         this.addGridText(60, 14, "1111", grey, 'right');
 
         // Right side bottom - target position (dynamic, right aligned)
+        // Target mode - clickable to toggle TARGET/GROUND
+        this.targetModeText = this.addGridText(60, 20, "TARGET", '#FFFFFF', 'right', 'targetMode');
         // Target position rows - clickable to cycle MGRS/LatLon/DMS
         this.targetZone = this.addGridText(60, 21, "38S KC", '#FFFFFF', 'right', 'targetPos');
         this.targetEasting = this.addGridText(60, 22, "00000 00000", '#FFFFFF', 'right', 'targetPos');
@@ -199,6 +206,10 @@ export class   CNodeMQ9UI extends CNodeViewUI {
                 // Cycle: 0=IR WHT, 1=IR BLK, 2=WHT, 3=BLK, 4=EO
                 this.irMode = (this.irMode + 1) % 5;
                 break;
+            case 'targetMode':
+                // Cycle: 0=TARGET, 1=GROUND
+                this.targetMode = (this.targetMode + 1) % 2;
+                break;
         }
     }
 
@@ -314,14 +325,40 @@ export class   CNodeMQ9UI extends CNodeViewUI {
             this.acftAlt.text = `${hatFeet.toLocaleString()} HAT`;
         }
 
-        // Update target position if available
-        if (!this.in.target) {
-            if (NodeMan.exists("targetTrackSwitchSmooth")) {
-                this.addInput("target", "targetTrackSwitchSmooth");
+        // Update target mode text
+        const targetModeLabels = ['TARGET', 'GROUND'];
+        this.targetModeText.text = targetModeLabels[this.targetMode];
+
+        // Get target position based on mode
+        let targetPos = null;
+        if (this.targetMode === 0) {
+            // TARGET mode - use target track
+            if (!this.in.target) {
+                if (NodeMan.exists("targetTrackSwitchSmooth")) {
+                    this.addInput("target", "targetTrackSwitchSmooth");
+                }
+            }
+            if (this.in.target) {
+                targetPos = this.in.target.p(frame);
+            }
+        } else {
+            // GROUND mode - ray through center of camera, try terrain first
+            const terrainNode = NodeMan.get("TerrainModel", false);
+            if (terrainNode) {
+                const ray = new Raycaster(camera.position, forward.clone().normalize());
+                ray.layers.mask |= LAYER.MASK_MAIN | LAYER.MASK_LOOK;
+                const intersection = terrainNode.getClosestIntersect(ray);
+                if (intersection) {
+                    targetPos = intersection.point.clone();
+                }
+            }
+            // Fall back to MSL sphere if no terrain hit
+            if (!targetPos) {
+                targetPos = intersectMSL(camera.position, forward);
             }
         }
-        if (this.in.target) {
-            const targetPos = this.in.target.p(frame);
+
+        if (targetPos) {
             const targetLLA = EUSToLLA(targetPos);
 
             // Format target position based on display mode
@@ -365,6 +402,12 @@ export class   CNodeMQ9UI extends CNodeViewUI {
             const groundRangeKM = haversineDistanceKM(camGroundLLA.x, camGroundLLA.y, targetGroundLLA.x, targetGroundLLA.y);
             const groundRange = groundRangeKM * 1000;
             this.targetGRNVal.text = this.formatDistance(groundRange, this.grnMode);
+        } else {
+            // No target (GROUND mode misses earth)
+            this.targetZone.text = "-";
+            this.targetEasting.text = "-";
+            this.targetSLRVal.text = "-";
+            this.targetGRNVal.text = "-";
         }
 
         // after updating any text (none yet), render the text
