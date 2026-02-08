@@ -1196,7 +1196,7 @@ export function addFiltersToVideoNode(videoNode) {
     if (!NodeMan.exists("videoBrightness")) {
         brightness = new CNodeGUIValue({ id: "videoBrightness", value: 1, start: 0, end: 5, step: 0.01, desc: "Brightness" }, guiVideoEffectsFolder),
             contrast = new CNodeGUIValue({ id: "videoContrast", value: 1, start: 0, end: 5, step: 0.01, desc: "Contrast" }, guiVideoEffectsFolder),
-            blur = new CNodeGUIValue({ id: "videoBlur", value: 0, start: 0, end: 20, step: 1, desc: "Blur Px" }, guiVideoEffectsFolder),
+            blur = new CNodeGUIValue({ id: "videoBlur", value: 0, start: 0, end: 200, step: 1, desc: "Blur Px" }, guiVideoEffectsFolder),
             greyscale = new CNodeGUIValue({ id: "videoGreyscale", value: 0, start: 0, end: 1, step: 0.01, desc: "Greyscale" }, guiVideoEffectsFolder),
             hue = new CNodeGUIValue({ id: "videoHue", value: 0, start: 0, end: 360, step: 1, desc: "Hue Rotate" }, guiVideoEffectsFolder),
             invert = new CNodeGUIValue({ id: "videoInvert", value: 0, start: 0, end: 1, step: 0.01, desc: "Invert" }, guiVideoEffectsFolder),
