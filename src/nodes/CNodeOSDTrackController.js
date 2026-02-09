@@ -316,6 +316,11 @@ export class CNodeOSDTrackController extends CNode {
             return;
         }
         
+        if (e.key === 'Tab') {
+            this.cycleEditingTrack();
+            return;
+        }
+        
         if (e.key === 'Escape') {
             this.stopEditing();
             return;
