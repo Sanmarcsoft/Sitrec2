@@ -1,5 +1,5 @@
 import {CNodeViewUI} from "./CNodeViewUI";
-import {GlobalDateTimeNode, NodeMan, Sit} from "../Globals";
+import {CustomManager, GlobalDateTimeNode, Globals, NodeMan, Sit} from "../Globals";
 import {par} from "../par";
 
 const DEFAULT_X = 50;
@@ -92,6 +92,9 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
 
         this.boundHandleDblClick = (e) => this.handleDblClick(e);
         this.canvas.addEventListener('dblclick', this.boundHandleDblClick);
+
+        this.boundHandleContextMenu = (e) => this.handleContextMenu(e);
+        this.canvas.addEventListener('contextmenu', this.boundHandleContextMenu);
         
         this._osdTrackBboxes = {};
 
@@ -295,22 +298,31 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
         const y = e.clientY - canvasRect.top;
 
         const element = this.getElementAtPosition(x, y);
-        if (element) {
-            this.dragging = element;
-            const pos = this.getElementPos(element);
-            if (pos) {
-                if (pos.track) {
-                    this.dragOffsetX = x - this.videoPx(pos.track.x);
-                    this.dragOffsetY = y - this.videoPy(pos.track.y);
-                } else {
-                    this.dragOffsetX = x - this.videoPx(this[pos[0]]);
-                    this.dragOffsetY = y - this.videoPy(this[pos[1]]);
-                }
-            }
-            this.canvas.style.pointerEvents = 'auto';
+        if (!element) return;
+
+        if (e.button === 2 && this.isOSDTrackElement(element)) {
             e.stopPropagation();
             e.preventDefault();
+            this.showOSDTrackContextMenu(element, e.clientX, e.clientY);
+            return;
         }
+
+        if (e.button !== 0) return;
+
+        this.dragging = element;
+        const pos = this.getElementPos(element);
+        if (pos) {
+            if (pos.track) {
+                this.dragOffsetX = x - this.videoPx(pos.track.x);
+                this.dragOffsetY = y - this.videoPy(pos.track.y);
+            } else {
+                this.dragOffsetX = x - this.videoPx(this[pos[0]]);
+                this.dragOffsetY = y - this.videoPy(this[pos[1]]);
+            }
+        }
+        this.canvas.style.pointerEvents = 'auto';
+        e.stopPropagation();
+        e.preventDefault();
     }
     
     handleClick(e) {
@@ -345,6 +357,47 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
         if (element && this.isOSDTrackElement(element)) {
             e.stopPropagation();
             e.preventDefault();
+        }
+    }
+
+    handleContextMenu(e) {
+        if (!this.isVideoReady()) return;
+
+        const canvasRect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - canvasRect.left;
+        const y = e.clientY - canvasRect.top;
+
+        const element = this.getElementAtPosition(x, y);
+        if (element && this.isOSDTrackElement(element)) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    }
+
+    showOSDTrackContextMenu(element, clientX, clientY) {
+        const track = this.getOSDTrack(element);
+        if (track && track.guiFolder) {
+            const standaloneMenu = Globals.menuBar.createStandaloneMenu(
+                track.name, clientX, clientY, true
+            );
+            if (!standaloneMenu) return;
+
+            CustomManager.setupDynamicMirroring(track.guiFolder, standaloneMenu);
+            standaloneMenu.refreshMirror = () => {
+                CustomManager.updateMirror(standaloneMenu);
+            };
+            standaloneMenu.open();
+
+            for (const ctrl of standaloneMenu.controllers) {
+                if (ctrl.property === "show") {
+                    const existingOnChange = ctrl._onChange;
+                    ctrl.onChange((value) => {
+                        if (existingOnChange) existingOnChange(value);
+                        if (!value) standaloneMenu.destroy();
+                    });
+                    break;
+                }
+            }
         }
     }
 
