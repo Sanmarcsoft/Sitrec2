@@ -89,6 +89,9 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
         
         this.boundHandleClick = (e) => this.handleClick(e);
         this.canvas.addEventListener('click', this.boundHandleClick);
+
+        this.boundHandleDblClick = (e) => this.handleDblClick(e);
+        this.canvas.addEventListener('dblclick', this.boundHandleDblClick);
         
         this._osdTrackBboxes = {};
 
@@ -331,6 +334,20 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
         }
     }
 
+    handleDblClick(e) {
+        if (!this.isVideoReady()) return;
+
+        const canvasRect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - canvasRect.left;
+        const y = e.clientY - canvasRect.top;
+
+        const element = this.getElementAtPosition(x, y);
+        if (element && this.isOSDTrackElement(element)) {
+            e.stopPropagation();
+            e.preventDefault();
+        }
+    }
+
     handleMouseMove(e) {
         if (!this.isVideoReady()) return;
 
@@ -373,7 +390,15 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
     handleMouseUp(e) {
         if (this.dragging) {
             this.dragging = null;
-            this.canvas.style.pointerEvents = 'none';
+
+            const canvasRect = this.canvas.getBoundingClientRect();
+            const x = e.clientX - canvasRect.left;
+            const y = e.clientY - canvasRect.top;
+            const element = this.getElementAtPosition(x, y);
+            if (!element || !this.shouldBeVisible()) {
+                this.canvas.style.pointerEvents = 'none';
+                this.canvas.style.cursor = '';
+            }
         }
     }
 
