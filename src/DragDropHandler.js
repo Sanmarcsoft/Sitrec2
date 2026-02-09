@@ -269,6 +269,13 @@ class CDragDropHandler {
 
         // Check if it's an image file - ask user how to use it
         if (this.isImageFile(file.name)) {
+            // If video node exists and has alwaysReplace, skip dialog and load as video
+            if (NodeMan.exists("video") && NodeMan.get("video").alwaysReplace) {
+                console.log("Loading image as video source (alwaysReplace): " + file.name);
+                await this.loadImageAsVideoSource(file);
+                return;
+            }
+
             try {
                 const choice = await this.showImageChoiceDialog(file.name);
 
@@ -341,9 +348,13 @@ class CDragDropHandler {
         const hasExistingVideo = videoNode.videoData !== null && videoNode.videoData !== undefined;
         
         if (hasExistingVideo) {
-            const action = await videoNode.promptAddOrReplace();
-            if (action === "replace") {
+            if (videoNode.alwaysReplace) {
                 videoNode.disposeAllVideos();
+            } else {
+                const action = await videoNode.promptAddOrReplace();
+                if (action === "replace") {
+                    videoNode.disposeAllVideos();
+                }
             }
         }
 
