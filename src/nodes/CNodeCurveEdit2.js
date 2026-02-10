@@ -886,6 +886,9 @@ export class CNodeOSDGraphView extends CNodeCurveEditorView2 {
         v.menuName = v.menuName ?? "OSD Graph";
         super(v);
         this.series = [];
+        this.hasY2 = false;
+        this.minY2 = 0;
+        this.maxY2 = 1;
     }
 
     setupMouseHandlers() {
@@ -909,27 +912,53 @@ export class CNodeOSDGraphView extends CNodeCurveEditorView2 {
         if (this.series.length === 0) return;
 
         let allMinX = Infinity, allMaxX = -Infinity;
-        let allMinY = Infinity, allMaxY = -Infinity;
+        const yBounds = { 1: { min: Infinity, max: -Infinity }, 2: { min: Infinity, max: -Infinity } };
+
         for (const s of this.series) {
+            const axis = s.yAxis || 1;
             for (const pt of s.data) {
                 if (pt.x < allMinX) allMinX = pt.x;
                 if (pt.x > allMaxX) allMaxX = pt.x;
-                if (pt.y < allMinY) allMinY = pt.y;
-                if (pt.y > allMaxY) allMaxY = pt.y;
+                if (pt.y < yBounds[axis].min) yBounds[axis].min = pt.y;
+                if (pt.y > yBounds[axis].max) yBounds[axis].max = pt.y;
             }
         }
 
         if (!isFinite(allMinX)) { allMinX = 0; allMaxX = Sit.frames - 1; }
         if (allMinX === allMaxX) { allMinX -= 1; allMaxX += 1; }
-        if (!isFinite(allMinY)) { allMinY = 0; allMaxY = 1; }
-        if (allMinY === allMaxY) { allMinY -= 1; allMaxY += 1; }
 
         const xPadding = (allMaxX - allMinX) * 0.02;
         this.minX = allMinX - xPadding;
         this.maxX = allMaxX + xPadding;
-        const yPadding = (allMaxY - allMinY) * 0.05;
-        this.minY = allMinY - yPadding;
-        this.maxY = allMaxY + yPadding;
+
+        const padAxis = (b) => {
+            if (!isFinite(b.min)) { b.min = 0; b.max = 1; }
+            if (b.min === b.max) { b.min -= 1; b.max += 1; }
+            const p = (b.max - b.min) * 0.05;
+            return { min: b.min - p, max: b.max + p };
+        };
+
+        const hasY1 = this.series.some(s => (s.yAxis || 1) === 1);
+        const hasY2 = this.series.some(s => s.yAxis === 2);
+
+        const y1 = hasY1 ? padAxis(yBounds[1]) : { min: 0, max: 1 };
+        const y2 = hasY2 ? padAxis(yBounds[2]) : { min: 0, max: 1 };
+
+        this.minY = y1.min;
+        this.maxY = y1.max;
+        this.minY2 = y2.min;
+        this.maxY2 = y2.max;
+        this.hasY2 = hasY2;
+    }
+
+    graphToScreenAxis(graphX, graphY, minY, maxY) {
+        const margin = 60;
+        const rightMargin = this.hasY2 ? 60 : 60;
+        const graphWidth = this.widthPx - margin - rightMargin;
+        const graphHeight = this.heightPx - margin * 2;
+        const x = margin + (graphX - this.minX) / (this.maxX - this.minX) * graphWidth;
+        const y = margin + (maxY - graphY) / (maxY - minY) * graphHeight;
+        return { x, y };
     }
 
     renderCanvas(frame) {
@@ -946,12 +975,13 @@ export class CNodeOSDGraphView extends CNodeCurveEditorView2 {
 
         const ctx = this.ctx;
         const margin = 60;
+        const rightMargin = this.hasY2 ? 60 : 60;
 
         CNodeTabbedCanvasView.prototype.renderCanvas.call(this, frame);
 
         const width = this.widthPx;
         const height = this.heightPx;
-        const graphWidth = width - margin * 2;
+        const graphWidth = width - margin - rightMargin;
         const graphHeight = height - margin * 2;
 
         ctx.fillStyle = '#000';
@@ -967,21 +997,21 @@ export class CNodeOSDGraphView extends CNodeCurveEditorView2 {
         ctx.stroke();
 
         const xRange = this.maxX - this.minX;
-        const yRange = this.maxY - this.minY;
+        const y1Range = this.maxY - this.minY;
         const dynamicXStep = this.calculateStep(xRange, graphWidth);
-        const dynamicYStep = this.calculateStep(yRange, graphHeight);
+        const dynamicY1Step = this.calculateStep(y1Range, graphHeight);
 
         ctx.strokeStyle = '#333';
         ctx.lineWidth = 1;
         for (let x = Math.ceil(this.minX / dynamicXStep) * dynamicXStep; x <= this.maxX; x += dynamicXStep) {
-            const screen = this.graphToScreen(x, this.minY);
+            const screen = this.graphToScreenAxis(x, this.minY, this.minY, this.maxY);
             ctx.beginPath();
             ctx.moveTo(screen.x, margin);
             ctx.lineTo(screen.x, margin + graphHeight);
             ctx.stroke();
         }
-        for (let y = Math.ceil(this.minY / dynamicYStep) * dynamicYStep; y <= this.maxY; y += dynamicYStep) {
-            const screen = this.graphToScreen(this.minX, y);
+        for (let y = Math.ceil(this.minY / dynamicY1Step) * dynamicY1Step; y <= this.maxY; y += dynamicY1Step) {
+            const screen = this.graphToScreenAxis(this.minX, y, this.minY, this.maxY);
             ctx.beginPath();
             ctx.moveTo(margin, screen.y);
             ctx.lineTo(margin + graphWidth, screen.y);
@@ -991,49 +1021,79 @@ export class CNodeOSDGraphView extends CNodeCurveEditorView2 {
         ctx.fillStyle = '#ddd';
         ctx.textAlign = 'center';
         for (let x = Math.ceil(this.minX / dynamicXStep) * dynamicXStep; x <= this.maxX; x += dynamicXStep) {
-            const screen = this.graphToScreen(x, this.minY);
+            const screen = this.graphToScreenAxis(x, this.minY, this.minY, this.maxY);
             ctx.fillText(Math.round(x).toString(), screen.x, margin + graphHeight + 20);
         }
+
+        const SERIES_COLORS = ['#4af', '#f44', '#4f4', '#fa4', '#f4f', '#4ff'];
+        const y1Color = SERIES_COLORS[0];
+        const y2Color = SERIES_COLORS[1];
+
+        const formatLabel = (v) => Math.abs(v) < 1 ? v.toFixed(2) : Math.abs(v) < 10 ? v.toFixed(1) : Math.round(v).toString();
+
+        ctx.fillStyle = y1Color;
         ctx.textAlign = 'right';
-        for (let y = Math.ceil(this.minY / dynamicYStep) * dynamicYStep; y <= this.maxY; y += dynamicYStep) {
-            const screen = this.graphToScreen(this.minX, y);
-            const label = Math.abs(y) < 1 ? y.toFixed(2) : Math.abs(y) < 10 ? y.toFixed(1) : Math.round(y).toString();
-            ctx.fillText(label, margin - 5, screen.y + 4);
+        for (let y = Math.ceil(this.minY / dynamicY1Step) * dynamicY1Step; y <= this.maxY; y += dynamicY1Step) {
+            const screen = this.graphToScreenAxis(this.minX, y, this.minY, this.maxY);
+            ctx.fillText(formatLabel(y), margin - 5, screen.y + 4);
+        }
+
+        if (this.hasY2) {
+            const y2Range = this.maxY2 - this.minY2;
+            const dynamicY2Step = this.calculateStep(y2Range, graphHeight);
+            ctx.fillStyle = y2Color;
+            ctx.textAlign = 'left';
+            for (let y = Math.ceil(this.minY2 / dynamicY2Step) * dynamicY2Step; y <= this.maxY2; y += dynamicY2Step) {
+                const screen = this.graphToScreenAxis(this.maxX, y, this.minY2, this.maxY2);
+                ctx.fillText(formatLabel(y), margin + graphWidth + 5, screen.y + 4);
+            }
         }
         ctx.textAlign = 'left';
 
-        ctx.fillStyle = '#fff';
         ctx.font = '14px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(this.xLabel, width / 2, height - 10);
+        ctx.fillStyle = '#fff';
+        ctx.fillText(this.xLabel, margin + graphWidth / 2, height - 10);
+
+        const y1Labels = [];
+        const y2Labels = [];
+        for (const s of this.series) {
+            if (s.yAxis === 2) y2Labels.push(s.label);
+            else y1Labels.push(s.label);
+        }
+        if (y1Labels.length > 0) {
+            ctx.fillStyle = y1Color;
+            ctx.textAlign = 'left';
+            ctx.fillText(y1Labels.join(', '), 5, margin - 8);
+        }
+        if (y2Labels.length > 0) {
+            ctx.fillStyle = y2Color;
+            ctx.textAlign = 'right';
+            ctx.fillText(y2Labels.join(', '), width - 5, margin - 8);
+        }
         ctx.textAlign = 'left';
 
-        const SERIES_COLORS = ['#4af', '#f44', '#4f4', '#fa4', '#f4f', '#4ff'];
         for (let si = 0; si < this.series.length; si++) {
             const s = this.series[si];
             if (s.data.length === 0) continue;
-            ctx.strokeStyle = SERIES_COLORS[si % SERIES_COLORS.length];
+            const isY2 = s.yAxis === 2;
+            const sMinY = isY2 ? this.minY2 : this.minY;
+            const sMaxY = isY2 ? this.maxY2 : this.maxY;
+            const color = SERIES_COLORS[si % SERIES_COLORS.length];
+            ctx.strokeStyle = color;
             ctx.lineWidth = 2;
             ctx.beginPath();
             let started = false;
             for (const pt of s.data) {
-                const screen = this.graphToScreen(pt.x, pt.y);
+                const screen = this.graphToScreenAxis(pt.x, pt.y, sMinY, sMaxY);
                 if (!started) { ctx.moveTo(screen.x, screen.y); started = true; }
                 else ctx.lineTo(screen.x, screen.y);
             }
             ctx.stroke();
-
-            ctx.fillStyle = SERIES_COLORS[si % SERIES_COLORS.length];
-            ctx.font = '12px sans-serif';
-            if (s.data.length > 0) {
-                const last = s.data[s.data.length - 1];
-                const ls = this.graphToScreen(last.x, last.y);
-                ctx.fillText(s.label, ls.x + 5, ls.y + 4);
-            }
         }
 
         if (par.frame >= this.minX && par.frame <= this.maxX) {
-            const frameScreen = this.graphToScreen(par.frame, this.minY);
+            const frameScreen = this.graphToScreenAxis(par.frame, this.minY, this.minY, this.maxY);
             ctx.strokeStyle = '#ff0';
             ctx.lineWidth = 2;
             ctx.beginPath();

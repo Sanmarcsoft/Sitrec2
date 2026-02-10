@@ -290,7 +290,7 @@ export class CNodeOSDTrackController extends CNode {
         const xData = this.resolveAxisData(xStored, frameMin, frameMax);
         const series = [];
 
-        const buildSeries = (yStored, label) => {
+        const buildSeries = (yStored, label, yAxis) => {
             const yData = this.resolveAxisData(yStored, frameMin, frameMax);
             if (!yData || yData.length === 0) return;
 
@@ -309,7 +309,7 @@ export class CNodeOSDTrackController extends CNode {
                     points.push({ x: d.frame, y: d.value });
                 }
             }
-            series.push({ data: points, label: label });
+            series.push({ data: points, label: label, yAxis: yAxis });
         };
 
         const getLabel = (stored) => {
@@ -321,8 +321,8 @@ export class CNodeOSDTrackController extends CNode {
             return stored;
         };
 
-        if (y1Stored !== "None") buildSeries(y1Stored, getLabel(y1Stored));
-        if (y2Stored !== "None") buildSeries(y2Stored, getLabel(y2Stored));
+        if (y1Stored !== "None") buildSeries(y1Stored, getLabel(y1Stored), 1);
+        if (y2Stored !== "None") buildSeries(y2Stored, getLabel(y2Stored), 2);
 
         this.graphView.xLabel = xData ? getLabel(xStored) : "Frame";
         this.graphView.setSeries(series);
