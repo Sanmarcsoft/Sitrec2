@@ -16,6 +16,72 @@ export class CNodeOSDDataTrack extends CNodeTrack {
         this.recalculate();
     }
 
+    getKeyframeDigitLength(track) {
+        for (let f = 0; f < this.frames; f++) {
+            if (track.isKeyframe(f)) {
+                const val = track.frameData[f];
+                if (val && val !== "?????") return val.replace(/\s+/g, "").length;
+            }
+        }
+        return 5;
+    }
+
+    expandStepped(track) {
+        const arr = new Array(this.frames).fill(null);
+        let last = null;
+        for (let f = 0; f < this.frames; f++) {
+            if (track.isKeyframe(f)) last = track.frameData[f];
+            arr[f] = last;
+        }
+        if (arr[0] === null) {
+            const first = arr.find(v => v !== null);
+            if (first !== null && first !== undefined) {
+                for (let f = 0; f < this.frames; f++) {
+                    if (arr[f] !== null) break;
+                    arr[f] = first;
+                }
+            }
+        }
+        return arr;
+    }
+
+    expandLerp(track) {
+        const kfs = [];
+        for (let f = 0; f < this.frames; f++) {
+            if (track.isKeyframe(f)) {
+                const num = parseFloat(track.frameData[f]);
+                if (!isNaN(num)) kfs.push({frame: f, value: num});
+            }
+        }
+        const n = kfs.length;
+        if (n === 0) return new Array(this.frames).fill(null);
+        if (n === 1) return new Array(this.frames).fill(kfs[0].value);
+
+        const first = kfs[0], second = kfs[1];
+        const last = kfs[n - 1], prevLast = kfs[n - 2];
+        const slopeStart = (second.value - first.value) / (second.frame - first.frame);
+        const slopeEnd = (last.value - prevLast.value) / (last.frame - prevLast.frame);
+
+        const arr = new Array(this.frames);
+        for (let f = 0; f < this.frames; f++) {
+            if (f <= first.frame) {
+                arr[f] = first.value + slopeStart * (f - first.frame);
+            } else if (f >= last.frame) {
+                arr[f] = last.value + slopeEnd * (f - last.frame);
+            } else {
+                let lo = 0, hi = n - 1;
+                while (lo < hi - 1) {
+                    const mid = (lo + hi) >> 1;
+                    if (kfs[mid].frame <= f) lo = mid; else hi = mid;
+                }
+                const prev = kfs[lo], next = kfs[hi];
+                const t = (f - prev.frame) / (next.frame - prev.frame);
+                arr[f] = prev.value + t * (next.value - prev.value);
+            }
+        }
+        return arr;
+    }
+
     recalculate() {
         super.recalculate();
 
@@ -42,101 +108,65 @@ export class CNodeOSDDataTrack extends CNodeTrack {
 
         if (!hasMGRS && !hasLatLon) return;
 
-        const keyframes = [];
+        const latArr = new Array(this.frames).fill(null);
+        const lonArr = new Array(this.frames).fill(null);
 
-        for (let f = 0; f < this.frames; f++) {
-            let lat = null, lon = null, alt = 0;
+        if (hasMGRS) {
+            const zoneArr = this.expandStepped(byType["MGRS Zone"]);
+            const eastTrack = byType["MGRS East"];
+            const northTrack = byType["MGRS North"];
+            const eastArr = this.expandLerp(eastTrack);
+            const northArr = this.expandLerp(northTrack);
+            const eastDigits = this.getKeyframeDigitLength(eastTrack);
+            const northDigits = this.getKeyframeDigitLength(northTrack);
 
-            if (hasMGRS) {
-                const zone = byType["MGRS Zone"];
-                const east = byType["MGRS East"];
-                const north = byType["MGRS North"];
+            for (let f = 0; f < this.frames; f++) {
+                const zoneVal = zoneArr[f];
+                const eastVal = eastArr[f];
+                const northVal = northArr[f];
+                if (zoneVal === null || eastVal === null || northVal === null) continue;
+                if (zoneVal === "?????" || zoneVal === "") continue;
 
-                if (zone.isKeyframe(f) || east.isKeyframe(f) || north.isKeyframe(f)) {
-                    const zoneVal = zone.getValue(f);
-                    const eastVal = east.getValue(f);
-                    const northVal = north.getValue(f);
-
-                    if (zoneVal && zoneVal !== "?????" && eastVal && eastVal !== "?????" && northVal && northVal !== "?????") {
-                        const mgrsStr = zoneVal.replace(/\s+/g, "") + eastVal.replace(/\s+/g, "") + northVal.replace(/\s+/g, "");
-                        try {
-                            const [lonR, latR] = mgrsToPoint(mgrsStr);
-                            lat = latR;
-                            lon = lonR;
-                        } catch (e) {
-                        }
-                    }
-                }
-            } else if (hasLatLon) {
-                const latTrack = byType["Latitude"];
-                const lonTrack = byType["Longitude"];
-
-                if (latTrack.isKeyframe(f) || lonTrack.isKeyframe(f)) {
-                    const latVal = latTrack.getValue(f);
-                    const lonVal = lonTrack.getValue(f);
-
-                    if (latVal && latVal !== "?????" && lonVal && lonVal !== "?????") {
-                        const parsedLat = parseSingleCoordinate(latVal);
-                        const parsedLon = parseSingleCoordinate(lonVal);
-                        if (parsedLat !== null && parsedLon !== null) {
-                            lat = parsedLat;
-                            lon = parsedLon;
-                        }
-                    }
+                const eastStr = Math.round(eastVal).toString().padStart(eastDigits, '0');
+                const northStr = Math.round(northVal).toString().padStart(northDigits, '0');
+                const mgrsStr = zoneVal.replace(/\s+/g, "") + eastStr + northStr;
+                try {
+                    const [lon, lat] = mgrsToPoint(mgrsStr);
+                    latArr[f] = lat;
+                    lonArr[f] = lon;
+                } catch (e) {
                 }
             }
+        } else if (hasLatLon) {
+            const latExpanded = this.expandStepped(byType["Latitude"]);
+            const lonExpanded = this.expandStepped(byType["Longitude"]);
 
-            if (lat !== null) {
-                const altTrackM = byType["Altitude (m)"];
-                const altTrackFt = byType["Altitude (ft)"];
-                const altTrack = altTrackM || altTrackFt;
-                if (altTrack) {
-                    const altVal = altTrack.getValue(f);
-                    if (altVal && altVal !== "?????") {
-                        const parsed = parseFloat(altVal);
-                        if (!isNaN(parsed)) {
-                            alt = altTrackFt ? f2m(parsed) : parsed;
-                        }
-                    }
+            for (let f = 0; f < this.frames; f++) {
+                const latVal = latExpanded[f];
+                const lonVal = lonExpanded[f];
+                if (!latVal || latVal === "?????" || !lonVal || lonVal === "?????") continue;
+                const parsedLat = parseSingleCoordinate(latVal);
+                const parsedLon = parseSingleCoordinate(lonVal);
+                if (parsedLat !== null && parsedLon !== null) {
+                    latArr[f] = parsedLat;
+                    lonArr[f] = parsedLon;
                 }
-            }
-
-            if (lat !== null && lon !== null) {
-                keyframes.push({frame: f, lat, lon, alt});
             }
         }
 
-        if (keyframes.length === 0) return;
-
-        const hasAltitude = !!(byType["Altitude (m)"] || byType["Altitude (ft)"]);
-        const keyframeSet = new Set(keyframes.map(kf => kf.frame));
-
-        for (const kf of keyframes) {
-            this.array[kf.frame] = {position: LLAToEUS(kf.lat, kf.lon, kf.alt)};
-        }
+        const altTrackM = byType["Altitude (m)"];
+        const altTrackFt = byType["Altitude (ft)"];
+        const altTrack = altTrackM || altTrackFt;
+        const altArr = altTrack ? this.expandLerp(altTrack) : null;
+        const hasAltitude = !!altTrack;
 
         for (let f = 0; f < this.frames; f++) {
-            if (keyframeSet.has(f)) continue;
-
-            let prev = null, next = null;
-            for (let i = keyframes.length - 1; i >= 0; i--) {
-                if (keyframes[i].frame <= f) { prev = keyframes[i]; break; }
+            if (latArr[f] === null || lonArr[f] === null) continue;
+            let alt = 0;
+            if (altArr && altArr[f] !== null) {
+                alt = altTrackFt ? f2m(altArr[f]) : altArr[f];
             }
-            for (let i = 0; i < keyframes.length; i++) {
-                if (keyframes[i].frame >= f) { next = keyframes[i]; break; }
-            }
-
-            if (prev && next && prev !== next) {
-                const t = (f - prev.frame) / (next.frame - prev.frame);
-                const lat = prev.lat + t * (next.lat - prev.lat);
-                const lon = prev.lon + t * (next.lon - prev.lon);
-                const alt = prev.alt + t * (next.alt - prev.alt);
-                this.array[f] = {position: LLAToEUS(lat, lon, alt)};
-            } else if (prev) {
-                this.array[f] = {position: LLAToEUS(prev.lat, prev.lon, prev.alt)};
-            } else if (next) {
-                this.array[f] = {position: LLAToEUS(next.lat, next.lon, next.alt)};
-            }
+            this.array[f] = {position: LLAToEUS(latArr[f], lonArr[f], alt)};
         }
 
         if (!hasAltitude) {
