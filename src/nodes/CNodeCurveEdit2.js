@@ -875,6 +875,160 @@ export class CNodeCurveEditorView2 extends CNodeTabbedCanvasView {
     }
 }
 
+export class CNodeOSDGraphView extends CNodeCurveEditorView2 {
+    constructor(v) {
+        v.editorConfig = {
+            minX: 0, maxX: Sit.frames - 1,
+            minY: 0, maxY: 1,
+            xLabel: "Frame", yLabel: "",
+            xStep: 10, yStep: 1,
+        };
+        v.menuName = v.menuName ?? "OSD Graph";
+        super(v);
+        this.series = [];
+    }
+
+    setupMouseHandlers() {
+        this.canvas.addEventListener('pointerdown', (e) => this.onMouseDown(e));
+        this.canvas.addEventListener('pointermove', (e) => this.onMouseMove(e));
+        this.canvas.addEventListener('pointerup', (e) => this.onMouseUp(e));
+        this.documentMoveHandler = (e) => this.onMouseMove(e);
+        this.documentUpHandler = (e) => this.onMouseUp(e);
+    }
+
+    addMenuItems() {
+    }
+
+    setSeries(series) {
+        this.series = series;
+        this.autoScale();
+        setRenderOne();
+    }
+
+    autoScale() {
+        if (this.series.length === 0) return;
+
+        let allMinY = Infinity, allMaxY = -Infinity;
+        for (const s of this.series) {
+            for (const pt of s.data) {
+                if (pt.y < allMinY) allMinY = pt.y;
+                if (pt.y > allMaxY) allMaxY = pt.y;
+            }
+        }
+
+        if (!isFinite(allMinY)) { allMinY = 0; allMaxY = 1; }
+        if (allMinY === allMaxY) { allMinY -= 1; allMaxY += 1; }
+
+        const padding = (allMaxY - allMinY) * 0.05;
+        this.minY = allMinY - padding;
+        this.maxY = allMaxY + padding;
+        this.minX = 0;
+        this.maxX = Sit.frames - 1;
+    }
+
+    renderCanvas(frame) {
+        if (!this.visible) return;
+
+        const ctx = this.ctx;
+        const margin = 60;
+
+        CNodeTabbedCanvasView.prototype.renderCanvas.call(this, frame);
+
+        const width = this.widthPx;
+        const height = this.heightPx;
+        const graphWidth = width - margin * 2;
+        const graphHeight = height - margin * 2;
+
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, width, height);
+
+        ctx.strokeStyle = '#444';
+        ctx.fillStyle = '#ddd';
+        ctx.lineWidth = 1;
+        ctx.font = '12px sans-serif';
+
+        ctx.beginPath();
+        ctx.rect(margin, margin, graphWidth, graphHeight);
+        ctx.stroke();
+
+        const xRange = this.maxX - this.minX;
+        const yRange = this.maxY - this.minY;
+        const dynamicXStep = this.calculateStep(xRange, graphWidth);
+        const dynamicYStep = this.calculateStep(yRange, graphHeight);
+
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+        for (let x = Math.ceil(this.minX / dynamicXStep) * dynamicXStep; x <= this.maxX; x += dynamicXStep) {
+            const screen = this.graphToScreen(x, this.minY);
+            ctx.beginPath();
+            ctx.moveTo(screen.x, margin);
+            ctx.lineTo(screen.x, margin + graphHeight);
+            ctx.stroke();
+        }
+        for (let y = Math.ceil(this.minY / dynamicYStep) * dynamicYStep; y <= this.maxY; y += dynamicYStep) {
+            const screen = this.graphToScreen(this.minX, y);
+            ctx.beginPath();
+            ctx.moveTo(margin, screen.y);
+            ctx.lineTo(margin + graphWidth, screen.y);
+            ctx.stroke();
+        }
+
+        ctx.fillStyle = '#ddd';
+        ctx.textAlign = 'center';
+        for (let x = Math.ceil(this.minX / dynamicXStep) * dynamicXStep; x <= this.maxX; x += dynamicXStep) {
+            const screen = this.graphToScreen(x, this.minY);
+            ctx.fillText(Math.round(x).toString(), screen.x, margin + graphHeight + 20);
+        }
+        ctx.textAlign = 'right';
+        for (let y = Math.ceil(this.minY / dynamicYStep) * dynamicYStep; y <= this.maxY; y += dynamicYStep) {
+            const screen = this.graphToScreen(this.minX, y);
+            const label = Math.abs(y) < 1 ? y.toFixed(2) : Math.abs(y) < 10 ? y.toFixed(1) : Math.round(y).toString();
+            ctx.fillText(label, margin - 5, screen.y + 4);
+        }
+        ctx.textAlign = 'left';
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.xLabel, width / 2, height - 10);
+        ctx.textAlign = 'left';
+
+        const SERIES_COLORS = ['#4af', '#f44', '#4f4', '#fa4', '#f4f', '#4ff'];
+        for (let si = 0; si < this.series.length; si++) {
+            const s = this.series[si];
+            if (s.data.length === 0) continue;
+            ctx.strokeStyle = SERIES_COLORS[si % SERIES_COLORS.length];
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            let started = false;
+            for (const pt of s.data) {
+                const screen = this.graphToScreen(pt.x, pt.y);
+                if (!started) { ctx.moveTo(screen.x, screen.y); started = true; }
+                else ctx.lineTo(screen.x, screen.y);
+            }
+            ctx.stroke();
+
+            ctx.fillStyle = SERIES_COLORS[si % SERIES_COLORS.length];
+            ctx.font = '12px sans-serif';
+            if (s.data.length > 0) {
+                const last = s.data[s.data.length - 1];
+                const ls = this.graphToScreen(last.x, last.y);
+                ctx.fillText(s.label, ls.x + 5, ls.y + 4);
+            }
+        }
+
+        if (par.frame >= this.minX && par.frame <= this.maxX) {
+            const frameScreen = this.graphToScreen(par.frame, this.minY);
+            ctx.strokeStyle = '#ff0';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(frameScreen.x, margin);
+            ctx.lineTo(frameScreen.x, height - margin);
+            ctx.stroke();
+        }
+    }
+}
+
 export class CNodeCurveEditor2 extends CNodeTrack {
     constructor(v) {
         super(v);
