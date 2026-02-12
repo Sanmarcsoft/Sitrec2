@@ -316,14 +316,17 @@ export class CNodeDisplayTrack extends CNode3DGroup {
 
     modSerialize() {
 
-        return {
+        const result = {
             ...super.modSerialize(),
             lineColor: hexColor(this.lineColor),
             polyColor: hexColor(this.polyColor),
             visible: this.visible,
             timeOffset: this.in.track.timeOffset,
-
+        };
+        if (this.in.dataTrack !== undefined) {
+            result.altitudeLockAGL = this.in.dataTrack.altitudeLockAGL;
         }
+        return result;
     }
 
     modDeserialize(v) {
@@ -371,6 +374,10 @@ export class CNodeDisplayTrack extends CNode3DGroup {
         // Restore time offset if it was saved
         if (v.timeOffset !== undefined) {
             this.in.track.timeOffset = v.timeOffset;
+        }
+
+        if (v.altitudeLockAGL !== undefined && this.in.dataTrack !== undefined) {
+            this.in.dataTrack.altitudeLockAGL = v.altitudeLockAGL;
         }
     }
 

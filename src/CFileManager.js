@@ -3,12 +3,14 @@ import {
     cleanCSVText,
     disableAllInput,
     enableAllInput,
+    ExpandKeyframes,
     getDateTimeFilename,
     getFileExtension,
     isHttpOrHttps,
     parseBoolean,
     versionString
 } from "./utils";
+import {CNodeArray} from "./nodes/CNodeArray";
 import {fileSystemFetch} from "./fileSystemFetch";
 import JSZip from "jszip";
 import {
@@ -1603,9 +1605,9 @@ export class CFileManager extends CManager {
                             // Create CNodeArray with filename as ID
                             const fovNodeId = fileManagerEntry.filename.replace(/\.[^/.]+$/, "") + "_" + columnName;
 
-                            // this will leave the old ref in fovSwitch
-                            // but we will immediately replace it with the new one (same id)
-                            NodeMan.unlinkDisposeRemove(fovNodeId);
+                            if (NodeMan.exists(fovNodeId)) {
+                                NodeMan.unlinkDisposeRemove(fovNodeId);
+                            }
 
                             const fovNode = new CNodeArray({id: fovNodeId, array: fovArray});
 
