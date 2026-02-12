@@ -14,6 +14,8 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
 
         this.showInfo = v.showInfo ?? true;
         this.showFrameCounter = v.showFrameCounter ?? false;
+        this.showOffsetFrame = v.showOffsetFrame ?? false;
+        this.offsetFrameValue = v.offsetFrameValue ?? 0;
         this.showTimecode = v.showTimecode ?? false;
         this.showTimestamp = v.showTimestamp ?? false;
         this.showDateLocal = v.showDateLocal ?? false;
@@ -26,6 +28,8 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
 
         this.frameCounterX = v.frameCounterX ?? DEFAULT_X;
         this.frameCounterY = v.frameCounterY ?? DEFAULT_Y;
+        this.offsetFrameX = v.offsetFrameX ?? DEFAULT_X;
+        this.offsetFrameY = v.offsetFrameY ?? DEFAULT_Y;
         this.timecodeX = v.timecodeX ?? DEFAULT_X;
         this.timecodeY = v.timecodeY ?? DEFAULT_Y;
         this.timestampX = v.timestampX ?? DEFAULT_X;
@@ -45,6 +49,8 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
 
         this.addSimpleSerial("showInfo");
         this.addSimpleSerial("showFrameCounter");
+        this.addSimpleSerial("showOffsetFrame");
+        this.addSimpleSerial("offsetFrameValue");
         this.addSimpleSerial("showTimecode");
         this.addSimpleSerial("showTimestamp");
         this.addSimpleSerial("showDateLocal");
@@ -56,6 +62,8 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
         this.addSimpleSerial("fontSize");
         this.addSimpleSerial("frameCounterX");
         this.addSimpleSerial("frameCounterY");
+        this.addSimpleSerial("offsetFrameX");
+        this.addSimpleSerial("offsetFrameY");
         this.addSimpleSerial("timecodeX");
         this.addSimpleSerial("timecodeY");
         this.addSimpleSerial("timestampX");
@@ -102,7 +110,7 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
     }
 
     hasAnyInfoItem() {
-        return this.showFrameCounter || this.showTimecode || this.showTimestamp ||
+        return this.showFrameCounter || this.showOffsetFrame || this.showTimecode || this.showTimestamp ||
             this.showDateLocal || this.showTimeLocal || this.showDateTimeLocal ||
             this.showDateUTC || this.showTimeUTC || this.showDateTimeUTC;
     }
@@ -123,13 +131,14 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
     }
 
     getAllItemIds() {
-        return ['frameCounter', 'timecode', 'timestamp', 'dateLocal', 'timeLocal',
+        return ['frameCounter', 'offsetFrame', 'timecode', 'timestamp', 'dateLocal', 'timeLocal',
             'dateTimeLocal', 'dateUTC', 'timeUTC', 'dateTimeUTC'];
     }
 
     getShowProp(id) {
         const map = {
             frameCounter: 'showFrameCounter',
+            offsetFrame: 'showOffsetFrame',
             timecode: 'showTimecode',
             timestamp: 'showTimestamp',
             dateLocal: 'showDateLocal',
@@ -226,6 +235,7 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
         };
 
         addBbox('frameCounter', this.showFrameCounter, this._frameCounterBbox);
+        addBbox('offsetFrame', this.showOffsetFrame, this._offsetFrameBbox);
         addBbox('timecode', this.showTimecode, this._timecodeBbox);
         addBbox('timestamp', this.showTimestamp, this._timestampBbox);
         addBbox('dateLocal', this.showDateLocal, this._dateLocalBbox);
@@ -255,6 +265,7 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
     getElementPos(id) {
         const map = {
             frameCounter: ['frameCounterX', 'frameCounterY'],
+            offsetFrame: ['offsetFrameX', 'offsetFrameY'],
             timecode: ['timecodeX', 'timecodeY'],
             timestamp: ['timestampX', 'timestampY'],
             dateLocal: ['dateLocalX', 'dateLocalY'],
@@ -582,6 +593,26 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
             this._frameCounterBbox = { x: bgX, y: bgY, w: bgW, h: bgH };
         }
 
+        if (this.showOffsetFrame) {
+            const text = `${Math.floor(par.frame) + this.offsetFrameValue}`;
+            const x = this.videoPx(this.offsetFrameX);
+            const y = this.videoPy(this.offsetFrameY);
+            const metrics = c.measureText(text);
+            const textHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+            const vPad = textHeight * 0.05;
+            const bgX = x - metrics.width / 2 - padding;
+            const bgY = y - metrics.actualBoundingBoxAscent - padding - vPad;
+            const bgW = metrics.width + padding * 2;
+            const bgH = textHeight + padding * 2 + vPad * 2;
+
+            c.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            c.fillRect(bgX, bgY, bgW, bgH);
+            c.fillStyle = '#FFFFFF';
+            c.fillText(text, x, y);
+
+            this._offsetFrameBbox = { x: bgX, y: bgY, w: bgW, h: bgH };
+        }
+
         if (this.showTimecode) {
             const text = this.formatTimecode(par.frame, fps, showHours);
             const x = this.videoPx(this.timecodeX);
@@ -860,6 +891,15 @@ export class CNodeVideoInfoUI extends CNodeViewUI {
             .tooltip("Show the current frame number")
             .listen()
             .onChange(v => { if (v) this.positionItemToAvoidOverlaps('frameCounter'); this.updateVisibility(); });
+
+        folder.add(this, "showOffsetFrame").name("Offset Frame")
+            .tooltip("Show the current frame number plus an offset value")
+            .listen()
+            .onChange(v => { if (v) this.positionItemToAvoidOverlaps('offsetFrame'); this.updateVisibility(); });
+
+        folder.add(this, "offsetFrameValue", -10000, 10000, 1).name("Offset Value")
+            .tooltip("Offset value added to the current frame number")
+            .listen();
 
         folder.add(this, "showTimecode").name("Timecode")
             .tooltip("Show timecode in HH:MM:SS:FF format")

@@ -240,6 +240,12 @@ export class CNodeOSDDataSeriesController extends CNode {
             if (data.key === '\\') {
                 this.cycleEditingTrack();
             }
+            if (data.keyCode === 'PageUp') {
+                this.advanceToAnyKeyframe(-1);
+            }
+            if (data.keyCode === 'PageDown') {
+                this.advanceToAnyKeyframe(1);
+            }
         });
 
         this.graphView = null;
@@ -678,6 +684,22 @@ export class CNodeOSDDataSeriesController extends CNode {
             return;
         }
         
+        if (e.key === 'PageUp') {
+            if (this.editingModified) {
+                this.activeTrack.setValue(frame, this.editingText);
+            }
+            this.advanceToAnyKeyframe(-1);
+            return;
+        }
+        
+        if (e.key === 'PageDown') {
+            if (this.editingModified) {
+                this.activeTrack.setValue(frame, this.editingText);
+            }
+            this.advanceToAnyKeyframe(1);
+            return;
+        }
+        
         if (e.key === 'Tab') {
             this.cycleEditingTrack();
             return;
@@ -768,6 +790,50 @@ export class CNodeOSDDataSeriesController extends CNode {
         }
         this.cursorPos = this.editingText.length;
         
+        setRenderOne();
+    }
+
+    advanceToAnyKeyframe(direction) {
+        const currentFrame = Math.floor(par.frame);
+        let targetFrame = -1;
+
+        if (direction < 0) {
+            for (let f = currentFrame - 1; f >= 0; f--) {
+                if (this.tracks.some(t => t.isKeyframe(f))) {
+                    targetFrame = f;
+                    break;
+                }
+            }
+        } else {
+            for (let f = currentFrame + 1; f < Sit.frames; f++) {
+                if (this.tracks.some(t => t.isKeyframe(f))) {
+                    targetFrame = f;
+                    break;
+                }
+            }
+        }
+
+        if (targetFrame < 0) return;
+
+        const frameSlider = NodeMan.get("frameSlider", false);
+        if (frameSlider) {
+            frameSlider.setFrame(targetFrame);
+        } else {
+            par.frame = targetFrame;
+        }
+
+        if (this.activeTrack) {
+            if (this.activeTrack.isKeyframe(targetFrame)) {
+                this.editingText = this.activeTrack.frameData[targetFrame];
+                this.editingModified = false;
+            } else {
+                const value = this.activeTrack.getValue(targetFrame);
+                this.editingText = (value === PLACEHOLDER_TEXT) ? "" : value;
+                this.editingModified = false;
+            }
+            this.cursorPos = this.editingText.length;
+        }
+
         setRenderOne();
     }
 
