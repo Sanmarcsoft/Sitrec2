@@ -2342,11 +2342,24 @@ function renderMain(elapsed) {
                 view.setVisible(view.overlayView.visible);
             }
 
+            if (view.in.relativeTo) {
+                if (!view.in.relativeTo.visible) {
+                    if (!view._hiddenByParent) {
+                        view._preParentHiddenVisible = view.visible;
+                        view._hiddenByParent = true;
+                    }
+                    view.setVisible(false);
+                } else if (view._hiddenByParent) {
+                    view._hiddenByParent = false;
+                    view.setVisible(view._preParentHiddenVisible ?? true);
+                }
+            }
+
             let visible = view.visible;
             if (view.overlayView && !view.separateVisibility)
                 visible = view.overlayView.visible;
-            if (view.relativeTo)
-                visible = view.relativeTo.visible;
+            if (view.in.relativeTo)
+                visible = view.in.relativeTo.visible;
 
             if (visible) {
                 if (globalProfiler) globalProfiler.push(getViewProfileColor(key), `${key}`);

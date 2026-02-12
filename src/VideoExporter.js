@@ -422,8 +422,8 @@ export class VideoExportManager {
                     if (view.overlayView && !view.separateVisibility) {
                         visible = view.overlayView.visible;
                     }
-                    if (view.relativeTo) {
-                        visible = view.relativeTo.visible;
+                    if (view.in.relativeTo) {
+                        visible = view.in.relativeTo.visible;
                     }
 
                     if (visible) {
