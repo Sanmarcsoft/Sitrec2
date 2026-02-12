@@ -6,13 +6,13 @@ import {clampAboveGround, DebugArrowAB, DebugSphere, getPointBelow, intersectMSL
 import {par} from "../par";
 import {ECEFToLLAVD_Sphere, EUSToECEF, wgs84} from "../LLA-ECEF-ENU";
 import {
-	altitudeAboveSphere,
-	getAzElFromPositionAndForward,
-	getLocalDownVector,
-	getLocalEastVector,
-	getLocalNorthVector,
-	getLocalUpVector,
-	pointOnSphereBelow,
+    altitudeAboveSphere,
+    getAzElFromPositionAndForward,
+    getLocalDownVector,
+    getLocalEastVector,
+    getLocalNorthVector,
+    getLocalUpVector,
+    pointOnSphereBelow,
 } from "../SphericalMath";
 import {NodeFactory, NodeMan, setRenderOne, Sit, UndoManager} from "../Globals";
 import {CNodeControllerPTZUI} from "../nodes/CNodeControllerPTZUI";
@@ -20,7 +20,7 @@ import {intersectSphere2, V3} from "../threeUtils";
 import {getCursorPositionFromTopView, getTopViewWithCursor, onDocumentMouseMove} from "../mouseMoveView";
 import {isKeyHeld} from "../KeyBoardHandler";
 import {isLocal} from "../configUtils.js"
-import {mouseInViewOnly, mouseToView} from "../ViewUtils";
+import {mouseInViewOnly, mouseToNDC, mouseToView} from "../ViewUtils";
 import {CNodeMeasureAB} from "../nodes/CNodeLabels3D";
 import {CNodePositionXYZ} from "../nodes/CNodePositionLLA";
 import {GlobalScene} from "../LocalFrame";
@@ -235,12 +235,6 @@ class CameraMapControls {
 
 	handleMouseWheel(event) {
 
-		// bit of patch, as we need to call the document mouse move
-		// if the window does not have focus, so we can update the cursor position
-		// even if the window does not have focus
-		// This is important for the 3D view, where the cursor position is used to
-		// calculate the ray from the camera to the mouse position
-		// which is used to determine what the mouse is pointing at, for zooming
 		if (window.document.hasFocus() === false) {
 			onDocumentMouseMove(event);
 		}
@@ -249,8 +243,50 @@ class CameraMapControls {
 
 		event.preventDefault();
 
+		const ptzControls = getPTZController(this.view.cameraNode);
+		if (ptzControls !== undefined) {
+			this.zoomBy(Math.sign(event.deltaY));
+			setRenderOne(true);
+			return;
+		}
+
+		const ndc = mouseToNDC(this.view, event.clientX, event.clientY);
+		const raycaster = new Raycaster();
+		raycaster.setFromCamera(ndc, this.camera);
+
+		const dragHeight = altitudeAboveSphere(this.target);
+		const groundSphere = new Sphere(new Vector3(0, -wgs84.RADIUS, 0), wgs84.RADIUS + dragHeight);
+		const hitBefore = new Vector3();
+		const hasHit = intersectSphere2(raycaster.ray, groundSphere, hitBefore);
+
 		this.zoomBy(Math.sign(event.deltaY));
 
+		if (hasHit) {
+			raycaster.setFromCamera(ndc, this.camera);
+			const hitAfter = new Vector3();
+			if (intersectSphere2(raycaster.ray, groundSphere, hitAfter)) {
+				const origin = V3(0, -wgs84.RADIUS, 0);
+				const originToBefore = hitBefore.clone().sub(origin);
+				const originToAfter = hitAfter.clone().sub(origin);
+				const rotationAxis = new Vector3().crossVectors(originToAfter, originToBefore).normalize();
+				const cosAngle = originToAfter.dot(originToBefore) / (originToAfter.length() * originToBefore.length());
+				const angle = Math.acos(Math.min(1, Math.max(-1, cosAngle)));
+
+				if (!isNaN(angle) && angle > 0) {
+					this.camera.position.sub(origin);
+					this.camera.rotateOnWorldAxis(rotationAxis, angle);
+					this.camera.position.applyAxisAngle(rotationAxis, angle);
+					this.camera.position.add(origin);
+					this.target.sub(origin);
+					this.target.applyAxisAngle(rotationAxis, angle);
+					this.target.add(origin);
+					this.camera.updateMatrix();
+					this.camera.updateMatrixWorld();
+					const localUp = getLocalUpVector(this.camera.position);
+					this.camera.up.copy(localUp);
+				}
+			}
+		}
 
 		setRenderOne(true);
 	}
