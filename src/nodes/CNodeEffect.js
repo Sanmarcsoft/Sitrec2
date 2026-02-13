@@ -74,6 +74,7 @@ export class CNodeEffect extends CNode {
         this.pass = new ShaderPass(this.effectLookup[this.effectName]);
 
         this.enabled = v.enabled ?? true;
+        this.addSimpleSerial("enabled");
         this.filter  = v.filter  ?? "Nearest"; // filter for the source RenderBuffer texture
 
         guiOnOffFolder.add(this, "enabled").name(this.id).listen().onChange((v)=>{
