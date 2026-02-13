@@ -44,7 +44,7 @@ import {
     WebGLCubeRenderTarget,
     WireframeGeometry
 } from "three";
-import {FileManager, Globals, guiMenus, mainLoopCount, NodeMan, setRenderOne, Sit} from "../Globals";
+import {FileManager, Globals, guiMenus, NodeMan, setRenderOne, Sit} from "../Globals";
 import {assert} from "../assert";
 import {disposeScene, propagateLayerMaskObject} from "../threeExt";
 import {loadGLTFModel} from "./CNode3DModel";
@@ -1913,7 +1913,6 @@ export class CNode3DObject extends CNode3DGroup {
         if (isEnvMap) {
             delete params.envMapResolution;
             this.setupCubeCamera();
-            params.envMap = this.cubeRenderTarget.texture;
         } else {
             this.disposeCubeCamera();
         }
@@ -1923,27 +1922,34 @@ export class CNode3DObject extends CNode3DGroup {
 
     setupCubeCamera() {
         const resolution = this.materialParams.envMapResolution ?? 256;
-        if (this.cubeRenderTarget && this.cubeRenderTargetResolution === resolution) {
-            this.material && (this.material.envMap = this.cubeRenderTarget.texture);
-            return;
-        }
+        if (this._envMapResolution === resolution && this._perViewEnvMaps) return;
         this.disposeCubeCamera();
-        this.cubeRenderTarget = new WebGLCubeRenderTarget(resolution, {
-            type: HalfFloatType,
-        });
-        this.cubeCamera = new CubeCamera(0.1, 100000, this.cubeRenderTarget);
-        this.cubeRenderTargetResolution = resolution;
-        this.envMapNeedsUpdate = true;
+        this._envMapResolution = resolution;
+        this._perViewEnvMaps = new Map();
+    }
+
+    getOrCreateEnvMap(renderer) {
+        const key = renderer.domElement;
+        let entry = this._perViewEnvMaps.get(key);
+        if (!entry) {
+            const rt = new WebGLCubeRenderTarget(this._envMapResolution, {
+                type: HalfFloatType,
+            });
+            const cam = new CubeCamera(0.1, 100000, rt);
+            entry = {renderTarget: rt, cubeCamera: cam};
+            this._perViewEnvMaps.set(key, entry);
+        }
+        return entry;
     }
 
     disposeCubeCamera() {
-        if (this.cubeRenderTarget) {
-            this.cubeRenderTarget.dispose();
-            this.cubeRenderTarget = null;
+        if (this._perViewEnvMaps) {
+            for (const entry of this._perViewEnvMaps.values()) {
+                entry.renderTarget.dispose();
+            }
+            this._perViewEnvMaps = null;
         }
-        this.cubeCamera = null;
-        this.cubeRenderTargetResolution = null;
-        this.envMapNeedsUpdate = false;
+        this._envMapResolution = null;
     }
 
     applyMaterialToModel() {
@@ -2059,41 +2065,51 @@ export class CNode3DObject extends CNode3DGroup {
     }
 
     updateEnvMap(view) {
-        if (!this.cubeCamera || !view.renderer) return;
+        if (!this._perViewEnvMaps || !view.renderer) return;
 
-        if (!this._envMapRenderedRenderers) this._envMapRenderedRenderers = new Set();
-        const rendererId = view.renderer.domElement;
-        if (this._envMapLastFrame === mainLoopCount && this._envMapRenderedRenderers.has(rendererId)) return;
-        if (this._envMapLastFrame !== mainLoopCount) {
-            this._envMapLastFrame = mainLoopCount;
-            this._envMapRenderedRenderers.clear();
-        }
-        this._envMapRenderedRenderers.add(rendererId);
+        const {renderTarget, cubeCamera} = this.getOrCreateEnvMap(view.renderer);
+
+        this.material.envMap = renderTarget.texture;
+        this.applyEnvMapToModel(renderTarget.texture);
 
         this.group.visible = false;
 
-        this.cubeCamera.position.setFromMatrixPosition(this.group.matrixWorld);
+        cubeCamera.position.setFromMatrixPosition(this.group.matrixWorld);
 
-        for (const child of this.cubeCamera.children) {
+        for (const child of cubeCamera.children) {
             if (child.isCamera) {
                 child.layers.mask = LAYER.MASK_LOOKRENDER;
             }
         }
 
         const savedBackground = GlobalScene.background;
-        const sunNode = NodeMan.get("theSun", true);
-        if (sunNode) {
-            GlobalScene.background = sunNode.calculateSkyColor(this.cubeCamera.position);
+        if (view.isIR) {
+            GlobalScene.background = new Color(0xFFFFFF);
+        } else {
+            const sunNode = NodeMan.get("theSun", true);
+            if (sunNode) {
+                GlobalScene.background = sunNode.calculateSkyColor(cubeCamera.position);
+            }
         }
 
         const savedRenderTarget = view.renderer.getRenderTarget();
 
-        this.cubeCamera.update(view.renderer, GlobalScene);
+        cubeCamera.update(view.renderer, GlobalScene);
 
         view.renderer.setRenderTarget(savedRenderTarget);
         GlobalScene.background = savedBackground;
 
         this.group.visible = true;
+    }
+
+    applyEnvMapToModel(texture) {
+        if (!this.model) return;
+        this.model.traverse((child) => {
+            if (child.isMesh && child.material) {
+                child.material.envMap = texture;
+                child.material.needsUpdate = true;
+            }
+        });
     }
     
     postRender(view) {

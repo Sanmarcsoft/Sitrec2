@@ -2372,8 +2372,8 @@ function renderMain(elapsed) {
                 if (view.camera && ( view instanceof CNodeView3D ) ) {
                     view.camera.updateMatrix();
                     view.camera.updateMatrixWorld();
-                    // Label3DMan.updateScale(view.camera)
-                    // some nodes need code running on a per-viewport basis - like textSprites
+
+                    if (view.updateIsIR) view.updateIsIR();
 
                     for (const entry of Object.values(NodeMan.list)) {
                         const node = entry.data;

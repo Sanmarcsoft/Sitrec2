@@ -1374,8 +1374,14 @@ export class CNodeView3D extends CNodeViewCanvas {
 
             const sunNode = NodeMan.get("theSun", true);
             if (sunNode !== undefined) {
-//                    this.renderer.setClearColor(sunNode.calculateSkyColor(this.camera.position))
                 this.renderer.setClearColor("black")
+
+                if (this.isIR) {
+                    this.renderer.setClearColor("white");
+                    this.renderer.clear(true, true, true);
+                    return;
+                }
+
                 skyColor = sunNode.calculateSkyColor(this.camera.position);
                 skyBrightness = sunNode.calculateSkyBrightness(this.camera.position);
                 skyOpacity = sunNode.calculateSkyOpacity(this.camera.position);
@@ -1659,15 +1665,20 @@ export class CNodeView3D extends CNodeViewCanvas {
         return this.cameraNode.camera;
     }
 
+    updateIsIR() {
+        this.isIR = false;
+        for (const key in this.effectPasses) {
+            const ep = this.effectPasses[key];
+            if (ep.effectName === "FLIRShader" && ep.enabled) {
+                this.isIR = true;
+                break;
+            }
+        }
+    }
+
     renderCanvas(frame) {
-        // Parent class (CNodeViewCanvas) handles canvas sizing via adjustSize() + applyPendingResize()
-        // WebGL renderer resize is deferred via 100ms debounce in changedSize() -> deferredResizeWebGL()
-        // Render targets are resized in renderTargetAndEffects() based on current widthPx/heightPx
+        this.updateIsIR();
 
-
-        // Focal length is now calculated in renderTargetAndEffects() after the actual
-        // render target dimensions are known, ensuring it matches the render target being used
-        
         super.renderCanvas(frame)
 
         // Profile: Update Effects
