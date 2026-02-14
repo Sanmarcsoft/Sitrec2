@@ -1077,7 +1077,29 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         if (this.altitude > 0) return;
         const terrainMap = this.getTerrainMap();
         if (!terrainMap || tile.map !== terrainMap) return;
-        this.syncOverlayTiles();
+
+        const mapProjection = terrainMap.options?.mapProjection;
+        if (!mapProjection) return;
+
+        const tileKey = tile.key();
+        const isDesired = tile.mesh && tile.mesh.geometry && tile.loaded
+            && newMask !== 0
+            && this.tileOverlapsOverlay(tile, mapProjection);
+
+        const existing = this.overlayTileMeshes.get(tileKey);
+
+        if (isDesired) {
+            if (existing) {
+                if (existing.mesh) existing.mesh.layers.mask = newMask;
+                if (existing.skirtMesh) existing.skirtMesh.layers.mask = newMask;
+            } else {
+                this.createOverlayTileFromTerrainTile(tile, mapProjection, newMask);
+            }
+        } else if (existing) {
+            this.disposeTileMesh(tileKey);
+        }
+
+        setRenderOne(true);
     }
     
     onTileChanged(tile) {
@@ -1087,8 +1109,17 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         const mapProjection = terrainMap.options?.mapProjection;
         if (!mapProjection) return;
         if (!this.tileOverlapsOverlay(tile, mapProjection)) return;
+
         this.disposeTileMesh(tile.key());
-        this.syncOverlayTiles();
+
+        if (tile.mesh && tile.mesh.geometry && tile.loaded) {
+            const layerMask = tile.mesh.layers.mask;
+            if (layerMask !== 0) {
+                this.createOverlayTileFromTerrainTile(tile, mapProjection, layerMask);
+            }
+        }
+
+        setRenderOne(true);
     }
     
     onPointerDown(event) {
