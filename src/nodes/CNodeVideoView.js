@@ -867,6 +867,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         this.syncAudioWithVideo(frame);
 
         this.videoData.update()
+        this.updateCacheOverlay();
         const image = this.videoData.getImage(frame);
         if (this.videos.length > 1 && this._lastSwitchDebug) {
             const cachedCount = this.videoData?.imageCache?.filter(x => x && x.width > 0).length || 0;
@@ -905,6 +906,13 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
                 };
                 sourceImage = applyConvolutionToImage(image, filterType, params, this);
             }
+
+            const wantEchoMin = this.in.echoMin?.value ?? false;
+            const wantEchoMax = this.in.echoMax?.value ?? false;
+            if (effectsEnabled && (wantEchoMin || wantEchoMax)) {
+                sourceImage = applyEchoEffect(this, sourceImage, frame, wantEchoMin, wantEchoMax);
+            }
+
             if (effectsEnabled) {
                 if (this.in.contrast && this.in.contrast.v0 !== 1) {
                     filter += "contrast(" + this.in.contrast.v0 + ") "
@@ -1154,6 +1162,39 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         return this.videoToCanvasCoords(displayX, displayY);
     }
 
+    updateCacheOverlay() {
+        const frameSlider = NodeMan.get("FrameSlider", false);
+        if (!frameSlider) return;
+
+        const showingCache = this.in.showCache?.value ?? false;
+        if (!showingCache) {
+            if (frameSlider.statusOverlay) {
+                frameSlider.statusOverlay = null;
+                frameSlider.needsCanvasRedraw = true;
+            }
+            return;
+        }
+
+        const cache = this.videoData?.imageCache;
+        if (!cache) return;
+
+        const totalFrames = Sit.frames;
+        if (!frameSlider.statusOverlay || frameSlider.statusOverlay.length !== totalFrames) {
+            frameSlider.statusOverlay = new Uint8Array(totalFrames);
+        }
+
+        let changed = false;
+        for (let i = 0; i < totalFrames; i++) {
+            const loaded = (cache[i] && cache[i].width > 0) ? 1 : 0;
+            if (frameSlider.statusOverlay[i] !== loaded) {
+                frameSlider.statusOverlay[i] = loaded;
+                changed = true;
+            }
+        }
+        if (changed) {
+            frameSlider.needsCanvasRedraw = true;
+        }
+    }
 
 }
 
@@ -1167,6 +1208,8 @@ export function addFiltersToVideoNode(videoNode) {
 
     let brightness, contrast, blur, greyscale, hue, invert, saturate, enableVideoEffects, convolutionFilter;
     let sharpenAmount, edgeDetectThreshold, embossDepth;
+    let echoMin, echoMax, echoFrames;
+    let showCache;
     let convolutionFilterDropdown, sharpenAmountControl, edgeDetectThresholdControl, embossDepthControl;
 
     const filterOptions = {
@@ -1196,6 +1239,10 @@ export function addFiltersToVideoNode(videoNode) {
             if (videoNode.inputs.sharpenAmount) videoNode.inputs.sharpenAmount.value = 1;
             if (videoNode.inputs.edgeDetectThreshold) videoNode.inputs.edgeDetectThreshold.value = 0;
             if (videoNode.inputs.embossDepth) videoNode.inputs.embossDepth.value = 1;
+            if (videoNode.inputs.echoMin) videoNode.inputs.echoMin.value = false;
+            if (videoNode.inputs.echoMax) videoNode.inputs.echoMax.value = false;
+            if (videoNode.inputs.echoFrames) videoNode.inputs.echoFrames.value = 10;
+            if (videoNode.inputs.showCache) videoNode.inputs.showCache.value = false;
             updateConvolutionControlVisibility();
             setRenderOne(true);
         }
@@ -1213,6 +1260,10 @@ export function addFiltersToVideoNode(videoNode) {
             sharpenAmount = new CNodeGUIValue({ id: "videoSharpenAmount", value: 1, start: 0, end: 5, step: 0.1, desc: "Sharpen Amount" }, guiVideoEffectsFolder),
             edgeDetectThreshold = new CNodeGUIValue({ id: "videoEdgeDetectThreshold", value: 0, start: 0, end: 255, step: 1, desc: "Edge Threshold" }, guiVideoEffectsFolder),
             embossDepth = new CNodeGUIValue({ id: "videoEmbossDepth", value: 1, start: 0, end: 3, step: 0.1, desc: "Emboss Depth" }, guiVideoEffectsFolder),
+            echoMin = new CNodeGUIFlag({ id: "videoEchoMin", value: false, desc: "Echo Min" }, guiVideoEffectsFolder),
+            echoMax = new CNodeGUIFlag({ id: "videoEchoMax", value: false, desc: "Echo Max" }, guiVideoEffectsFolder),
+            echoFrames = new CNodeGUIValue({ id: "videoEchoFrames", value: 10, start: 2, end: 100, step: 1, desc: "Echo Frames" }, guiVideoEffectsFolder),
+            showCache = new CNodeGUIFlag({ id: "videoShowCache", value: false, desc: "Show Cache" }, guiVideoEffectsFolder),
             convolutionFilter = new CNodeConstant({ id: "videoConvolutionFilter", value: 'none' }),
             convolutionFilterDropdown = guiVideoEffectsFolder.add(filterOptions, "convolutionFilterValue", ['none', 'sharpen', 'edgeDetect', 'emboss']).name("Convolution Filter").onChange(value => {
                 convolutionFilter.value = value;
@@ -1236,6 +1287,10 @@ export function addFiltersToVideoNode(videoNode) {
         sharpenAmount = NodeMan.get("videoSharpenAmount");
         edgeDetectThreshold = NodeMan.get("videoEdgeDetectThreshold");
         embossDepth = NodeMan.get("videoEmbossDepth");
+        echoMin = NodeMan.get("videoEchoMin");
+        echoMax = NodeMan.get("videoEchoMax");
+        echoFrames = NodeMan.get("videoEchoFrames");
+        showCache = NodeMan.get("videoShowCache");
         convolutionFilter = NodeMan.get("videoConvolutionFilter");
         if (convolutionFilter) {
             filterOptions.convolutionFilterValue = convolutionFilter.value;
@@ -1259,7 +1314,11 @@ export function addFiltersToVideoNode(videoNode) {
         convolutionFilter: convolutionFilter,
         sharpenAmount: sharpenAmount,
         edgeDetectThreshold: edgeDetectThreshold,
-        embossDepth: embossDepth
+        embossDepth: embossDepth,
+        echoMin: echoMin,
+        echoMax: echoMax,
+        echoFrames: echoFrames,
+        showCache: showCache
     });
 
 
@@ -1365,6 +1424,92 @@ export function applyConvolution(ctx, width, height, kernelName, params = {}) {
     }
 
     ctx.putImageData(imageData, 0, 0);
+}
+
+function applyEchoEffect(videoView, currentImage, currentFrame, wantMin, wantMax) {
+    const numEchoFrames = Math.round(videoView.in.echoFrames?.v0 ?? 10);
+    const startFrame = Math.max(0, currentFrame - numEchoFrames + 1);
+    const width = currentImage.width;
+    const height = currentImage.height;
+
+    if (!videoView._echoCanvas || videoView._echoCanvas.width !== width || videoView._echoCanvas.height !== height) {
+        videoView._echoCanvas = document.createElement('canvas');
+        videoView._echoCanvas.width = width;
+        videoView._echoCanvas.height = height;
+        videoView._echoCtx = videoView._echoCanvas.getContext('2d', { willReadFrequently: true });
+        videoView._echoTmpCanvas = document.createElement('canvas');
+        videoView._echoTmpCanvas.width = width;
+        videoView._echoTmpCanvas.height = height;
+        videoView._echoTmpCtx = videoView._echoTmpCanvas.getContext('2d', { willReadFrequently: true });
+    }
+
+    const echoCtx = videoView._echoCtx;
+    const tmpCtx = videoView._echoTmpCtx;
+
+    const pixelCount = width * height * 4;
+    const minPixels = wantMin ? new Uint8ClampedArray(pixelCount) : null;
+    const maxPixels = wantMax ? new Uint8ClampedArray(pixelCount) : null;
+    const sumPixels = (wantMin && wantMax) ? new Float32Array(pixelCount) : null;
+    let frameCount = 0;
+    let initialized = false;
+
+    for (let f = startFrame; f <= currentFrame; f++) {
+        let frameImage;
+        if (f === currentFrame) {
+            frameImage = currentImage;
+        } else {
+            frameImage = videoView.videoData.getImage(f);
+        }
+        if (!frameImage || frameImage.width === 0) continue;
+
+        tmpCtx.drawImage(frameImage, 0, 0, width, height);
+        const frameData = tmpCtx.getImageData(0, 0, width, height).data;
+
+        if (!initialized) {
+            if (minPixels) minPixels.set(frameData);
+            if (maxPixels) maxPixels.set(frameData);
+            if (sumPixels) { for (let i = 0; i < pixelCount; i++) sumPixels[i] = frameData[i]; }
+            initialized = true;
+        } else {
+            for (let i = 0; i < pixelCount; i += 4) {
+                for (let c = 0; c < 3; c++) {
+                    const idx = i + c;
+                    const val = frameData[idx];
+                    if (minPixels && val < minPixels[idx]) minPixels[idx] = val;
+                    if (maxPixels && val > maxPixels[idx]) maxPixels[idx] = val;
+                    if (sumPixels) sumPixels[idx] += val;
+                }
+                if (minPixels) minPixels[i + 3] = 255;
+                if (maxPixels) maxPixels[i + 3] = 255;
+            }
+        }
+        frameCount++;
+    }
+
+    if (!initialized) return currentImage;
+
+    let resultPixels;
+    if (wantMin && wantMax) {
+        resultPixels = new Uint8ClampedArray(pixelCount);
+        for (let i = 0; i < pixelCount; i += 4) {
+            for (let c = 0; c < 3; c++) {
+                const idx = i + c;
+                const avg = sumPixels[idx] / frameCount;
+                const minDev = Math.abs(minPixels[idx] - avg);
+                const maxDev = Math.abs(maxPixels[idx] - avg);
+                resultPixels[idx] = (maxDev >= minDev) ? maxPixels[idx] : minPixels[idx];
+            }
+            resultPixels[i + 3] = 255;
+        }
+    } else if (wantMin) {
+        resultPixels = minPixels;
+    } else {
+        resultPixels = maxPixels;
+    }
+
+    const outputData = new ImageData(resultPixels, width, height);
+    echoCtx.putImageData(outputData, 0, 0);
+    return videoView._echoCanvas;
 }
 
 function applyConvolutionToImage(image, kernelName, params, videoView) {
