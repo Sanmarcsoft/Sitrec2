@@ -145,9 +145,9 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
      * @param {MP4Demuxer} demuxer - The MP4 demuxer instance
      */
     startWithDemuxer(demuxer) {
-        // Reset common variables (base class handles initialization)
         this.initializeCommonVariables();
         this.nextRequest = null;
+        this.rawChunkData = [];
 
         this.decoder = this.createDecoder();
 
@@ -171,15 +171,14 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
             this.config = config;
             this.decoder.configure(config);
 
-            // Get rotation from video matrix metadata (e.g., from phone videos)
-            // This sets metadataRotation which combines with userRotation via effectiveRotation getter
             this.metadataRotation = getRotationAngleFromVideoMatrix(demuxer.videoTrack.matrix);
 
-            // Swap dimensions if metadata rotation is 90 or 270 degrees
             if (this.metadataRotation === 90 || this.metadataRotation === 270) {
                 [this.videoWidth, this.videoHeight] = [this.videoHeight, this.videoWidth];
                 console.log("🍿Swapped dimensions for metadata rotation: ", this.videoWidth, "x", this.videoHeight);
             }
+
+            this.configureWorker(config);
 
             // Store the original fps from the video (will be needed for audio sync)
             this.originalFps = demuxer.source.fps;
@@ -261,18 +260,19 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
                 // Now start extraction with both video and audio callbacks
                 demuxer.start(
                     (chunk) => {
-                        // The demuxer will call this for each chunk it demuxes
-                        // essentiall it's iterating through the frames
-                        // each chunk is either a key frame or a delta frame
                         chunk.frameNumber = this.demuxFrame++
                         this.chunks.push(chunk)
 
+                        const rawBuf = new ArrayBuffer(chunk.byteLength);
+                        chunk.copyTo(rawBuf);
+                        this.rawChunkData.push(rawBuf);
+
                         if (chunk.type === "key") {
                             this.groups.push({
-                                    frame: this.chunks.length - 1,  // first frame of this group
-                                    length: 1,                      // for now, increase with each delta demuxed
-                                    pending: 0,                     // how many frames requested and pending
-                                    loaded: false,                  // set when all the frames in the group are loaded
+                                    frame: this.chunks.length - 1,
+                                    length: 1,
+                                    pending: 0,
+                                    loaded: false,
                                     timestamp: chunk.timestamp,
                                 }
                             )
@@ -280,9 +280,6 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
                             const lastGroup = this.groups[this.groups.length - 1]
                             lastGroup.length++;
                         }
-
-                        // console.log(this.chunks.length - 1 + ": Demuxer got a " + chunk.type + " chunk, timestamp=" + chunk.timestamp +
-                        //      ", duration = " + chunk.duration + ", byteLength = " + chunk.byteLength)
 
                         this.frames++;
                         Sit.videoFrames = this.frames * this.videoSpeed;
@@ -304,10 +301,13 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
             }).catch(e => {
                 console.warn(`[CVideoMp4Data] Audio initialization failed:`, e);
                 console.log(`[CVideoMp4Data] Proceeding with video-only extraction...`);
-                // Still start video extraction if audio fails
                 demuxer.start((chunk) => {
                     chunk.frameNumber = this.demuxFrame++
                     this.chunks.push(chunk)
+
+                    const rawBuf = new ArrayBuffer(chunk.byteLength);
+                    chunk.copyTo(rawBuf);
+                    this.rawChunkData.push(rawBuf);
 
                     if (chunk.type === "key") {
                         this.groups.push({

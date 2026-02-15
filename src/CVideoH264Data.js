@@ -399,20 +399,17 @@ export class CVideoH264Data extends CVideoWebCodecBase {
 
             this.config = config;
 
-            // Configure decoder and wait for it to be ready
             try {
                 await this.decoder.configure(config);
                 console.log("VideoDecoder configured successfully, state:", this.decoder.state);
 
-                // Reset recreation attempts on successful configuration
                 this.recreationAttempts = 0;
 
-                // Verify decoder is in configured state
                 if (this.decoder.state !== 'configured') {
                     throw new Error(`Decoder configuration failed, state: ${this.decoder.state}`);
                 }
 
-
+                this.configureWorker(config);
 
             } catch (configError) {
                 showError("Decoder configuration failed:", configError);

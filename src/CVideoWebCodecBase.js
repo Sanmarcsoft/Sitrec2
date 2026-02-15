@@ -5,6 +5,7 @@ import {CVideoAndAudio} from "./CVideoAndAudio";
 import {par} from "./par";
 import {isLocal} from "./configUtils";
 import {showError, showErrorOnce} from "./showError";
+import {VideoDecodeWorkerManager} from "./CVideoDecodeWorker";
 
 /**
  * Base class for WebCodec-based video data handlers
@@ -75,26 +76,130 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
     initializeCommonVariables() {
         this.frames = 0;
         this.lastGetImageFrame = 0;
-        this.chunks = []; // per frame chunks
-        this.groups = []; // groups for frames+delta
-        this.imageCache = []; // decoded frame images
-        this.imageDataCache = []; // image data for pixel access
-        this.frameCache = []; // raw video frames
+        this.chunks = [];
+        this.rawChunkData = [];
+        this.groups = [];
+        this.imageCache = [];
+        this.imageDataCache = [];
+        this.frameCache = [];
         this.groupsPending = 0;
         this.nextRequest = null;
         this.requestQueue = [];
         this.incomingFrame = 0;
         this.lastTimeStamp = -1;
         this.lastDecodeInfo = "";
-        this.blankFrame = null; // Will be created once we know video dimensions
-        this.blankFrameCanvas = null; // Temporary canvas for blank frame creation
-        this.blankFramePending = false; // Flag indicating blank frame creation is in progress
-        this.lastGoodFrame = null; // Last successfully decoded frame to avoid black frames
-        this.lastGoodFrameIndex = -1; // Cache index of lastGoodFrame for O(1) orphan detection
-        this.decodeFrameIndex = 0; // Simple counter for decode order
+        this.blankFrame = null;
+        this.blankFrameCanvas = null;
+        this.blankFramePending = false;
+        this.lastGoodFrame = null;
+        this.lastGoodFrameIndex = -1;
+        this.decodeFrameIndex = 0;
         this.flushing = false;
-        this.c_tmp = null; // Temporary canvas (if used)
-        this.ctx_tmp = null; // Temporary canvas context (if used)
+        this.c_tmp = null;
+        this.ctx_tmp = null;
+        this._groupIdCounter = 0;
+        this._activeGroupMap = new Map();
+    }
+
+    initWorker() {
+        if (this._workerManager) return;
+        this._workerManager = new VideoDecodeWorkerManager(
+            (groupId, frameNumber, bitmap, width, height) => this._onWorkerFrame(groupId, frameNumber, bitmap, width, height),
+            (groupId) => this._onWorkerGroupFlushed(groupId),
+            (message, groupId) => this._onWorkerError(message, groupId),
+        );
+        this._workerManager.init();
+    }
+
+    configureWorker(config) {
+        if (!this._workerManager) this.initWorker();
+        this._workerConfig = config;
+        this._workerManager.configure(config, this.effectiveRotation, Globals.settings?.videoMaxSize);
+    }
+
+    _onWorkerFrame(groupId, frameNumber, bitmap, width, height) {
+        if (!this.imageCache) return;
+        const group = this._activeGroupMap.get(groupId);
+        if (!group) {
+            if (bitmap) bitmap.close();
+            return;
+        }
+
+        if (!bitmap) {
+            if (group.pending > 0) {
+                group.pending--;
+                if (group.pending === 0) {
+                    group.loaded = true;
+                    this.groupsPending--;
+                    this.handleGroupComplete();
+                }
+            }
+            return;
+        }
+
+        const existingFrame = this.imageCache[frameNumber];
+        if (existingFrame && existingFrame !== this.lastGoodFrame && typeof existingFrame.close === 'function') {
+            try { existingFrame.close(); } catch (e) {}
+        }
+
+        this.imageCache[frameNumber] = bitmap;
+        if (this.videoWidth !== width || this.videoHeight !== height) {
+            this.videoWidth = width;
+            this.videoHeight = height;
+        }
+
+        if (this.c_tmp === undefined || this.c_tmp === null) {
+            this.c_tmp = document.createElement("canvas");
+            this.c_tmp.setAttribute("width", this.videoWidth);
+            this.c_tmp.setAttribute("height", this.videoHeight);
+            this.ctx_tmp = this.c_tmp.getContext("2d");
+        }
+
+        if (frameNumber === this.lastGetImageFrame) {
+            setRenderOne(true);
+        }
+
+        if (!group.decodeOrder) group.decodeOrder = [];
+        group.decodeOrder.push(frameNumber);
+
+        if (group.pending <= 0) return;
+        group.pending--;
+        if (group.pending === 0) {
+            group.loaded = true;
+            this.groupsPending--;
+            this.handleGroupComplete();
+        }
+    }
+
+    _onWorkerGroupFlushed(groupId) {
+        const group = this._activeGroupMap.get(groupId);
+        if (!group) return;
+        this.flushing = false;
+        const droppedFrames = group._expectedLength - (group.decodeOrder ? group.decodeOrder.length : 0);
+        if (droppedFrames > 0 && group.pending > 0) {
+            group.pending = Math.max(0, group.pending - droppedFrames);
+            if (group.pending === 0 && !group.loaded) {
+                group.loaded = true;
+                this.groupsPending--;
+            }
+        }
+        this._activeGroupMap.delete(groupId);
+        this.handleGroupComplete();
+    }
+
+    _onWorkerError(message, groupId) {
+        this.flushing = false;
+        if (groupId !== undefined) {
+            const group = this._activeGroupMap.get(groupId);
+            if (group) {
+                group.pending = 0;
+                group.loaded = false;
+                this.groupsPending = Math.max(0, this.groupsPending - 1);
+                this._activeGroupMap.delete(groupId);
+            }
+        }
+        showErrorOnce("WORKER_DECODE_ERR", "Worker decode error: " + message);
+        this.handleGroupComplete();
     }
 
     /**
@@ -150,7 +255,6 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
      */
     onRotationChanged() {
         super.onRotationChanged();
-        // Reset decoder groups so frames are re-decoded with new rotation
         if (this.groups) {
             for (let group of this.groups) {
                 group.loaded = false;
@@ -163,12 +267,16 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
         if (this.requestQueue) {
             this.requestQueue = [];
         }
+        this._activeGroupMap?.clear();
 
-        // Recalculate dimensions based on effective rotation
         if (this.originalVideoWidth && this.originalVideoHeight) {
             const swap = (this.effectiveRotation === 90 || this.effectiveRotation === 270);
             this.videoWidth = swap ? this.originalVideoHeight : this.originalVideoWidth;
             this.videoHeight = swap ? this.originalVideoWidth : this.originalVideoHeight;
+        }
+
+        if (this._workerManager) {
+            this._workerManager.updateTransforms(this.effectiveRotation, Globals.settings?.videoMaxSize);
         }
     }
 
@@ -483,11 +591,19 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
         }
     }
 
-    processChunksIntoGroups(encodedChunks) {
+    processChunksIntoGroups(encodedChunks, rawDataArray) {
         for (let i = 0; i < encodedChunks.length; i++) {
             const chunk = encodedChunks[i];
             chunk.frameNumber = this.frames++;
             this.chunks.push(chunk);
+
+            if (rawDataArray && rawDataArray[i]) {
+                this.rawChunkData.push(rawDataArray[i]);
+            } else {
+                const buf = new ArrayBuffer(chunk.byteLength);
+                chunk.copyTo(buf);
+                this.rawChunkData.push(buf);
+            }
 
             if (chunk.type === "key") {
                 this.groups.push({
@@ -557,33 +673,89 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
         this.requestGroup(group);
     }
 
-    /**
-     * Request decoding of a specific frame group
-     * Checks decoder availability and queues if busy
-     * @param {Object} group - Group object containing frame range and state
-     */
     requestGroup(group) {
         if (!group || typeof group !== "object") {
             console.warn("requestGroup: invalid group", group);
             return;
         }
 
-        if (!this.decoder || !this.chunks) {
-            return; // Not initialized yet
-        }
+        if (!this.chunks) return;
 
-        if (group.loaded || group.pending > 0) {
+        if (group.loaded || group.pending > 0) return;
+
+        if (this._workerManager && this._workerManager.configured) {
+            this._requestGroupViaWorker(group);
+        } else if (this.decoder) {
+            this._requestGroupMainThread(group);
+        }
+    }
+
+    _requestGroupViaWorker(group) {
+        if (this.isAudioActive() && !this.isAudioReady()) {
+            this.handleBusyDecoder(group);
             return;
         }
 
-        // Check if audio is playing and not muted - if so, defer video decoding
-        if (this.isAudioActive()) {
-            // Check if audio buffer is ready
-            if (!this.isAudioReady()) {
-                // Audio is still being prepared, defer video decoding
-                this.handleBusyDecoder(group);
-                return;
+        if (this.flushing || this._workerManager.busy) {
+            this.handleBusyDecoder(group);
+            return;
+        }
+
+        const extraChunks = group.openGopExtra || 0;
+        group.pending = group.length;
+        group.decodePending = 0;
+        group.loaded = false;
+        group.decodeOrder = [];
+        group._expectedLength = group.length;
+        this.groupsPending++;
+
+        const groupId = this._groupIdCounter++;
+        this._activeGroupMap.set(groupId, group);
+
+        const decodeEnd = group.frame + group.length + (extraChunks > 0 ? extraChunks + 1 : 0);
+        const chunksToSend = [];
+        const rawDataToSend = [];
+        const timestampMap = [];
+
+        for (let i = group.frame; i < decodeEnd && i < this.chunks.length; i++) {
+            chunksToSend.push(this.chunks[i]);
+            rawDataToSend.push(this.rawChunkData[i]);
+        }
+
+        for (let i = group.frame; i < group.frame + group.length; i++) {
+            if (i < this.chunks.length) {
+                const frameNumber = this.timestampToChunkIndex?.get(this.chunks[i].timestamp);
+                if (frameNumber !== undefined) {
+                    timestampMap.push({ timestamp: this.chunks[i].timestamp, frameNumber: frameNumber });
+                }
             }
+        }
+
+        if (extraChunks > 0) {
+            for (let i = group.frame + group.length; i < decodeEnd && i < this.chunks.length; i++) {
+                const frameNumber = this.timestampToChunkIndex?.get(this.chunks[i].timestamp);
+                if (frameNumber !== undefined) {
+                    timestampMap.push({ timestamp: this.chunks[i].timestamp, frameNumber: frameNumber });
+                }
+            }
+        }
+
+        this.flushing = true;
+        const sent = this._workerManager.decodeGroup(groupId, chunksToSend, rawDataToSend, timestampMap);
+        if (!sent) {
+            this.flushing = false;
+            group.pending = 0;
+            group.loaded = false;
+            this.groupsPending--;
+            this._activeGroupMap.delete(groupId);
+            this.handleBusyDecoder(group);
+        }
+    }
+
+    _requestGroupMainThread(group) {
+        if (this.isAudioActive() && !this.isAudioReady()) {
+            this.handleBusyDecoder(group);
+            return;
         }
 
         if (this.flushing || this.decoder.decodeQueueSize > 0) {
@@ -622,14 +794,9 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
                 this.flushing = false;
             });
         } catch (error) {
-            // Some videos give a lot of these errors,
-            // and have jerky playback. e.g. '/Users/mick/Dropbox/Investigating/Rainmaking (1968).mp4'
             group.pending = 0;
             group.loaded = false;
             this.groupsPending--;
-            
-            // If the error is about a key frame mismatch after flush, reconfigure the decoder
-            // This resets the decoder state so it doesn't require a real key frame
             if (error.message && error.message.includes("key") && this.config) {
                 try {
                     this.decoder.reset();
@@ -1240,8 +1407,8 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
         this.groupsPending = 0;
         this.nextRequest = null;
         this.requestQueue = [];
+        this._activeGroupMap?.clear();
         
-        // Reset decode frame index
         this.decodeFrameIndex = 0;
     }
 
@@ -1274,35 +1441,33 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
      * Critical for preventing decoder operations after disposal
      */
     dispose() {
-        // Clear callbacks to prevent them from firing after disposal
         this.loadedCallback = null;
         this.errorCallback = null;
         
-        // Stop any pending operations
         this.groupsPending = 0;
         this.nextRequest = null;
         this.requestQueue = [];
+        this._activeGroupMap?.clear();
+
+        if (this._workerManager) {
+            this._workerManager.dispose();
+            this._workerManager = null;
+        }
         
-        // Close decoder immediately
         if (this.decoder) {
             const decoder = this.decoder;
-            this.decoder = null; // Clear reference immediately
+            this.decoder = null;
             
-            // Try to close immediately if possible
             if (decoder.state !== 'closed') {
                 try {
-                    // Reset the decoder to cancel all pending operations
                     decoder.reset();
-                    // Then close it
                     decoder.close();
-                    console.log("VideoDecoder closed successfully");
                 } catch (e) {
                     console.warn("Error closing decoder:", e);
                 }
             }
         }
         
-        // Flush all caches before calling parent dispose
         this.flushEntireCache();
         
         super.dispose();
