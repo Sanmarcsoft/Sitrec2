@@ -660,7 +660,7 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
     purgeGroupsExcept(keep) {
         for (let g in this.groups) {
             const group = this.groups[g];
-            if (!keep.has(group) && group.loaded) {
+            if (!keep.has(group) && group.loaded && group.pending <= 0) {
                 assert(this.imageCache, "imageCache is undefined when purging groups but groups.length = " + this.groups.length);
 
                 for (let i = group.frame; i < group.frame + group.length; i++) {
@@ -748,46 +748,53 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
         let cacheWindow = 30; // how much we seek ahead (and keep behind)
         const mem = navigator.deviceMemory;
         if (mem !== undefined && mem >= 8) {
-            // 8GB or more, then we can afford to cache more
             cacheWindow = 100;
 
-            // PATCH - if we are local, or Mick, then we can afford to cache even more
-            // TODO - allow the user to select this window size in some per-user setting
             if (isLocal || Globals.userID === 1) {
          //       cacheWindow = 300;
             }
         }
 
-        this.requestFrame(frame); // request this frame
+        const echoNeeded = this.echoFramesNeeded || 0;
+        const backwardKeep = Math.max(cacheWindow, echoNeeded);
+
         this.lastGetImageFrame = frame;
 
-        // we purge everything except the proximate groups and any groups that are being decoded
-        const groupsToKeep = new Set(); // Use Set to avoid duplicates
+        const groupsToKeep = new Set();
+        const groupsToRequest = new Set();
+        const currentGroup = this.getGroup(frame);
 
-        // iterate through the groups and keep the ones that overlap the range
-        // frame to frame + cacheWindow (So we get the next group if we are going forward)
         for (let g in this.groups) {
             const group = this.groups[g];
-            if (group.frame + group.length > frame && group.frame < frame + cacheWindow) {
+            const groupEnd = group.frame + group.length;
+            if (groupEnd > frame - backwardKeep && group.frame <= frame + cacheWindow) {
                 groupsToKeep.add(group);
             }
         }
 
-        // then frame - cacheWindow to frame, and iterate g backwards so we get the closest first
-        for (let g = this.groups.length - 1; g >= 0; g--) {
-            const group = this.groups[g];
-            if (group.frame + group.length > frame - cacheWindow && group.frame < frame) {
-                groupsToKeep.add(group);
+        if (currentGroup) groupsToRequest.add(currentGroup);
+        if (echoNeeded > 0) {
+            const echoStart = Math.max(0, frame - echoNeeded);
+            for (const group of groupsToKeep) {
+                const groupEnd = group.frame + group.length;
+                if (groupEnd > echoStart && group.frame <= frame) {
+                    groupsToRequest.add(group);
+                }
             }
         }
+        const lookaheadGroup = this.getGroup(Math.min(frame + cacheWindow, this.chunks.length - 1));
+        if (lookaheadGroup) groupsToRequest.add(lookaheadGroup);
 
-        // request them all, will ignore if already loaded or pending
-        for (const group of groupsToKeep) {
-            this.requestGroup(group);
-        }
-
-        // purge all the other groups
         this.purgeGroupsExcept(groupsToKeep);
+
+        for (const group of groupsToRequest) {
+            if (group !== currentGroup) {
+                this.requestGroup(group);
+            }
+        }
+        if (currentGroup) {
+            this.requestGroup(currentGroup);
+        }
 
         assert(this.imageCache, "imageCache is " + this.imageCache + " for frame " + frame + " but groups.length = " + this.groups.length);
 
@@ -835,6 +842,13 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
 
         // Only return blank frame as last resort
         return this.createBlankFrame();
+    }
+
+    getCachedImage(frame) {
+        frame = Math.floor(frame / this.videoSpeed);
+        if (!this.imageCache || frame < 0 || frame >= this.imageCache.length) return null;
+        const img = this.imageCache[frame];
+        return (img && img.width > 0) ? img : null;
     }
 
     /**

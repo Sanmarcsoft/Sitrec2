@@ -467,6 +467,13 @@ export class CVideoWebCodecData extends CVideoData {
         infoDiv.innerHTML = d;
     }
 
+    getCachedImage(frame) {
+        frame = Math.floor(frame / this.videoSpeed);
+        if (!this.imageCache || frame < 0 || frame >= this.imageCache.length) return null;
+        const img = this.imageCache[frame];
+        return (img && img.width !== 0) ? img : null;
+    }
+
     isFrameLoaded(frame) {
         frame = Math.floor(frame / this.videoSpeed);
         return this.imageCache[frame] !== undefined && this.imageCache[frame].width !== 0;
@@ -554,32 +561,50 @@ export class CVideoWebCodecData extends CVideoData {
             if (this.groups.length === 0)
                 return null;
 
-            const cacheWindow = 30; // how much we seek ahead (and keep behind)
-
-            this.requestFrame(frame) // request this frame, of course, probable already have it though.
-
-            if (frame >= this.lastGetImageFrame) {
-                // going forward
-                if (frame + cacheWindow < this.chunks.length)
-                    this.requestFrame(frame + cacheWindow)
-            } else {
-                // going backward
-                if (frame > cacheWindow)
-                    this.requestFrame(frame - cacheWindow)
-            }
+            const cacheWindow = 30;
+            const echoNeeded = this.echoFramesNeeded || 0;
+            const backwardKeep = Math.max(cacheWindow, echoNeeded);
 
             this.lastGetImageFrame = frame
 
-            // we purge everything except the three proximate groups and any groups that are being decoded
-            // in theory this should be no more that four
-            // purge before a new request
             const groupsToKeep = [];
-            if (frame > cacheWindow)
-                groupsToKeep.push(this.getGroup(frame - cacheWindow))
-            groupsToKeep.push(this.getGroup(frame))
-            if (frame < this.chunks.length - cacheWindow)
-                groupsToKeep.push(this.getGroup(frame + cacheWindow))
+            const groupsToRequest = [];
+
+            const currentGroup = this.getGroup(frame);
+            if (currentGroup) {
+                groupsToKeep.push(currentGroup);
+                groupsToRequest.push(currentGroup);
+            }
+
+            for (const group of this.groups) {
+                const groupEnd = group.frame + group.length;
+                if (groupEnd > frame - backwardKeep && group.frame <= frame + cacheWindow) {
+                    if (!groupsToKeep.includes(group)) groupsToKeep.push(group);
+                }
+            }
+
+            if (echoNeeded > 0) {
+                const echoStart = Math.max(0, frame - echoNeeded);
+                for (const group of groupsToKeep) {
+                    const groupEnd = group.frame + group.length;
+                    if (groupEnd > echoStart && group.frame <= frame && !groupsToRequest.includes(group)) {
+                        groupsToRequest.push(group);
+                    }
+                }
+            }
+
+            const lookaheadFrame = Math.min(frame + cacheWindow, this.chunks.length - 1);
+            const lookaheadGroup = this.getGroup(lookaheadFrame);
+            if (lookaheadGroup && !groupsToRequest.includes(lookaheadGroup)) {
+                groupsToRequest.push(lookaheadGroup);
+            }
+
             this.purgeGroupsExcept(groupsToKeep)
+
+            for (const group of groupsToRequest) {
+                if (group !== currentGroup) this.requestFrame(group.frame);
+            }
+            this.requestFrame(frame)
 
             // return the closest frame that has been loaded
             // usually this just mean it returns the one indicated by "frame"

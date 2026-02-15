@@ -866,6 +866,10 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
         this.syncAudioWithVideo(frame);
 
+        const wantEcho = (this.in.echoMin?.value || this.in.echoMax?.value) &&
+            (this.in.enableVideoEffects ? this.in.enableVideoEffects.v0 : true);
+        this.videoData.echoFramesNeeded = wantEcho ? Math.round(this.in.echoFrames?.v0 ?? 10) : 0;
+
         this.videoData.update()
         this.updateCacheOverlay();
         const image = this.videoData.getImage(frame);
@@ -1168,14 +1172,16 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
         const showingCache = this.in.showCache?.value ?? false;
         if (!showingCache) {
-            if (frameSlider.statusOverlay) {
+            if (frameSlider.statusOverlay || frameSlider.groupOverlay) {
                 frameSlider.statusOverlay = null;
+                frameSlider.groupOverlay = null;
                 frameSlider.needsCanvasRedraw = true;
             }
             return;
         }
 
-        const cache = this.videoData?.imageCache;
+        const vd = this.videoData;
+        const cache = vd?.imageCache;
         if (!cache) return;
 
         const totalFrames = Sit.frames;
@@ -1191,6 +1197,38 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
                 changed = true;
             }
         }
+
+        if (vd.groups && vd.groups.length > 0) {
+            const newGroupOverlay = [];
+            for (const group of vd.groups) {
+                let status;
+                if (group.pending > 0) {
+                    status = 'requested';
+                } else if (group.loaded) {
+                    let allCached = true;
+                    for (let i = group.frame; i < group.frame + group.length; i++) {
+                        if (!cache[i] || !cache[i].width) { allCached = false; break; }
+                    }
+                    status = allCached ? 'cached' : 'partial';
+                } else {
+                    let anyCached = false;
+                    for (let i = group.frame; i < group.frame + group.length; i++) {
+                        if (cache[i] && cache[i].width > 0) { anyCached = true; break; }
+                    }
+                    status = anyCached ? 'partial' : null;
+                }
+                if (status) {
+                    newGroupOverlay.push({ start: group.frame, end: group.frame + group.length, status });
+                }
+            }
+            const newJSON = JSON.stringify(newGroupOverlay);
+            if (newJSON !== this._lastGroupOverlayJSON) {
+                frameSlider.groupOverlay = newGroupOverlay;
+                this._lastGroupOverlayJSON = newJSON;
+                changed = true;
+            }
+        }
+
         if (changed) {
             frameSlider.needsCanvasRedraw = true;
         }
@@ -1458,7 +1496,7 @@ function applyEchoEffect(videoView, currentImage, currentFrame, wantMin, wantMax
         if (f === currentFrame) {
             frameImage = currentImage;
         } else {
-            frameImage = videoView.videoData.getImage(f);
+            frameImage = videoView.videoData.getCachedImage(f);
         }
         if (!frameImage || frameImage.width === 0) continue;
 

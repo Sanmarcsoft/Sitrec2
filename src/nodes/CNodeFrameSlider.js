@@ -50,10 +50,10 @@ export class CNodeFrameSlider extends CNode {
         this.lastDraggingBLimit = false;
         this.needsCanvasRedraw = true;
 
-        // Status overlay: array of per-frame status (0=uncached, 1=cached)
         this.statusOverlay = null;
-        this.statusOverlayOffset = 2; // vertical offset from top
+        this.statusOverlayOffset = 2;
         this.lastStatusOverlay = null;
+        this.groupOverlay = null;
 
         this.setupFrameSlider();
     }
@@ -998,6 +998,28 @@ export class CNodeFrameSlider extends CNode {
             if (inSegment) {
                 const lastX = padding + drawableWidth;
                 ctx.lineTo(Math.max(lastX, segmentStartX + 1), this.statusOverlayOffset);
+                ctx.stroke();
+            }
+        }
+
+        if (this.groupOverlay && this.groupOverlay.length > 0) {
+            const groupY = this.statusOverlayOffset + 4;
+            ctx.lineWidth = 3;
+            for (const entry of this.groupOverlay) {
+                const x0 = padding + (drawableWidth * entry.start / Sit.frames);
+                const x1 = padding + (drawableWidth * entry.end / Sit.frames);
+                if (entry.status === 'cached') {
+                    ctx.strokeStyle = '#0088ff';
+                } else if (entry.status === 'partial') {
+                    ctx.strokeStyle = '#ffcc00';
+                } else if (entry.status === 'requested') {
+                    ctx.strokeStyle = '#ff0000';
+                } else {
+                    continue;
+                }
+                ctx.beginPath();
+                ctx.moveTo(x0, groupY);
+                ctx.lineTo(Math.max(x1, x0 + 1), groupY);
                 ctx.stroke();
             }
         }
