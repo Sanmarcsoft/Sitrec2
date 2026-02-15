@@ -149,27 +149,18 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
         this.nextRequest = null;
         this.rawChunkData = [];
 
-        this.decoder = this.createDecoder();
-
         this.demuxFrame = 0;
 
         const configPromise = demuxer.getConfig().then((config) => {
-//            offscreen.height = config.codedHeight;
-//            offscreen.width = config.codedWidth;
-
-            // video width and height are needed for things like the video tracking overlay
-            // it's set for the Image objects created below, but at the start we use the config
             this.videoWidth = config.codedWidth;
             this.videoHeight = config.codedHeight;
             
-            // Store original dimensions (never changed, used for tracking/analysis)
             this.originalVideoWidth = config.codedWidth;
             this.originalVideoHeight = config.codedHeight;
 
             console.log("🍿Setting Video width and height to ", config.codedWidth, "x", config.codedHeight )
 
             this.config = config;
-            this.decoder.configure(config);
 
             this.metadataRotation = getRotationAngleFromVideoMatrix(demuxer.videoTrack.matrix);
 

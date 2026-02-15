@@ -303,10 +303,6 @@ export class CVideoH264Data extends CVideoWebCodecBase {
 
 
 
-            // Create decoder using base class method
-            this.decoder = this.createDecoder();
-
-            // Configure decoder
             let spsData = analysis.spsData;
             let ppsData = analysis.ppsData;
 
@@ -398,23 +394,9 @@ export class CVideoH264Data extends CVideoWebCodecBase {
             }
 
             this.config = config;
+            this.recreationAttempts = 0;
 
-            try {
-                await this.decoder.configure(config);
-                console.log("VideoDecoder configured successfully, state:", this.decoder.state);
-
-                this.recreationAttempts = 0;
-
-                if (this.decoder.state !== 'configured') {
-                    throw new Error(`Decoder configuration failed, state: ${this.decoder.state}`);
-                }
-
-                this.configureWorker(config);
-
-            } catch (configError) {
-                showError("Decoder configuration failed:", configError);
-                throw new Error(`Failed to configure VideoDecoder: ${configError.message}`);
-            }
+            this.configureWorker(config);
 
             console.log(`H.264 initialization complete: ${this.frames} frames`);
             console.log(`📊 Using decode order as frame sequence - frames will be numbered 0, 1, 2, 3... as decoded`);

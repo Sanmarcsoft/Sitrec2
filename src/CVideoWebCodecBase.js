@@ -202,14 +202,24 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
         this.handleGroupComplete();
     }
 
-    /**
-     * Create decoder with common output/error handling
-     * Subclasses can override createDecoderCallbacks() to customize behavior
-     */
     createDecoder() {
         const callbacks = this.createDecoderCallbacks();
         this.decoder = new VideoDecoder(callbacks);
         return this.decoder;
+    }
+
+    ensureMainThreadDecoder() {
+        if (this.decoder) return true;
+        if (!this.config) return false;
+        this.createDecoder();
+        try {
+            this.decoder.configure(this.config);
+            return true;
+        } catch (e) {
+            console.warn("Failed to configure fallback main-thread decoder:", e);
+            this.decoder = null;
+            return false;
+        }
     }
 
     /**
@@ -685,7 +695,7 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
 
         if (this._workerManager && this._workerManager.configured) {
             this._requestGroupViaWorker(group);
-        } else if (this.decoder) {
+        } else if (this.ensureMainThreadDecoder()) {
             this._requestGroupMainThread(group);
         }
     }
@@ -1070,7 +1080,7 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
         const actualFrame = Math.floor(frame / this.videoSpeed);
         const startTime = Date.now();
         
-        while (!this.decoder || !this.chunks || !this.groups || this.groups.length === 0) {
+        while (!this.config || !this.chunks || !this.groups || this.groups.length === 0) {
             if (Date.now() - startTime > timeout) {
                 console.warn(`waitForFrame: timeout waiting for video initialization, frame ${frame}`);
                 return false;
@@ -1225,7 +1235,7 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
         // Start with filename
         d += "<strong>File: " + this.filename + "</strong><br>";
         
-        if (this.config !== undefined && this.decoder && this.groups) {
+        if (this.config !== undefined && this.groups) {
             // Get config info - allow subclasses to override
             const configInfo = this.getDebugConfigInfo();
             d += configInfo + "<br>";
@@ -1237,7 +1247,9 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
             d += "CVideoView: " + this.videoWidth + "x" + this.videoHeight + "<br>";
             d += "par.frame = " + par.frame + ", Sit.frames = " + Sit.frames + ", chunks = " + this.chunks.length + "<br>";
             d += this.lastDecodeInfo;
-            d += "Decode Queue Size = " + this.decoder.decodeQueueSize + " State = " + this.decoder.state + "<br>";
+            if (this.decoder) {
+                d += "Decode Queue Size = " + this.decoder.decodeQueueSize + " State = " + this.decoder.state + "<br>";
+            }
 
             // Add any additional debug info from subclasses
             const additionalInfo = this.getAdditionalDebugInfo();
