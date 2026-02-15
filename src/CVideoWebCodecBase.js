@@ -203,6 +203,7 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
     }
 
     createDecoder() {
+        assert(0, "Creating a main thread decoder");
         const callbacks = this.createDecoderCallbacks();
         this.decoder = new VideoDecoder(callbacks);
         return this.decoder;
@@ -695,6 +696,8 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
 
         if (this._workerManager && this._workerManager.configured) {
             this._requestGroupViaWorker(group);
+        } else if (this._workerManager && !this._workerManager.configFailed) {
+            this.handleBusyDecoder(group);
         } else if (this.ensureMainThreadDecoder()) {
             this._requestGroupMainThread(group);
         }

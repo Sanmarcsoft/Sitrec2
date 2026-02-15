@@ -128,11 +128,16 @@ self.onmessage = function(e) {
             if (msg.codedWidth) config.codedWidth = msg.codedWidth;
             if (msg.codedHeight) config.codedHeight = msg.codedHeight;
             lastConfig = config;
-            decoder.configure(config);
-            configured = true;
-            effectiveRotation = msg.effectiveRotation || 0;
-            videoMaxSize = msg.videoMaxSize || null;
-            self.postMessage({ type: 'configured' });
+            try {
+                decoder.configure(config);
+                configured = true;
+                effectiveRotation = msg.effectiveRotation || 0;
+                videoMaxSize = msg.videoMaxSize || null;
+                self.postMessage({ type: 'configured' });
+            } catch (configErr) {
+                configured = false;
+                self.postMessage({ type: 'configureError', message: configErr.message });
+            }
             break;
         }
         case 'decodeGroup': {
@@ -215,6 +220,7 @@ export class VideoDecodeWorkerManager {
         this.onError = onError;
         this.worker = null;
         this.configured = false;
+        this.configFailed = false;
         this.busy = false;
         this._disposed = false;
     }
@@ -249,8 +255,8 @@ export class VideoDecodeWorkerManager {
                 );
             }
         }
+        this.configFailed = false;
         this.worker.postMessage(msg, msg.description ? [msg.description] : []);
-        this.configured = true;
     }
 
     decodeGroup(groupId, chunks, rawChunkDataArray, timestampMap) {
@@ -307,6 +313,11 @@ export class VideoDecodeWorkerManager {
         switch (msg.type) {
             case 'configured':
                 this.configured = true;
+                break;
+            case 'configureError':
+                this.configured = false;
+                this.configFailed = true;
+                console.warn("Worker decoder configure failed:", msg.message);
                 break;
             case 'frame':
                 if (this.onFrame) {
