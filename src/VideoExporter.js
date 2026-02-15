@@ -294,11 +294,38 @@ export class VideoExportManager {
             .name("Include Audio")
             .tooltip("Include audio track from source video if available");
 
+        this.renderVideoFolder.add({
+            exportFrame: () => this.exportVideoFrame()
+        }, "exportFrame").name("Export Video Frame")
+            .tooltip("Export the current video frame as displayed (with effects) as a PNG file");
+
         if (!options.skipPanorama) {
             setupPanoramaExport(this.renderVideoFolder);
         }
 
         return this.renderVideoFolder;
+    }
+
+    async exportVideoFrame() {
+        const { NodeMan } = await import("./Globals");
+        const { par } = await import("./par");
+        const { saveAs } = await import("file-saver");
+        const { getExportPrefix } = await import("./utils");
+
+        const videoView = NodeMan.get("video", false);
+        if (!videoView || !videoView.canvas) {
+            alert("No video view available to export.");
+            return;
+        }
+
+        const frame = Math.floor(par.frame);
+        const fileName = `${getExportPrefix()}_frame_${String(frame).padStart(5, "0")}.png`;
+
+        videoView.canvas.toBlob((blob) => {
+            if (blob) {
+                saveAs(blob, fileName);
+            }
+        }, "image/png");
     }
 
     async exportViewportVideo() {
@@ -536,7 +563,8 @@ export class VideoExportManager {
                     (status) => progress.setStatus(status)
                 );
 
-                const filename = `viewport_${Sit.name || 'export'}_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.${extension}`;
+                const { getExportPrefix } = await import("./utils");
+                const filename = `${getExportPrefix()}_viewport_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.${extension}`;
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -760,7 +788,8 @@ export class VideoExportManager {
                     (status) => { document.title = status; }
                 );
 
-                const filename = `window_${Sit.name || 'export'}_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.${extension}`;
+                const { getExportPrefix } = await import("./utils");
+                const filename = `${getExportPrefix()}_window_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.${extension}`;
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
