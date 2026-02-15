@@ -9,6 +9,7 @@ let pendingFrames = new Map();
 let timestampToFrameNumber = new Map();
 let effectiveRotation = 0;
 let videoMaxSize = null;
+let lastConfig = null;
 
 const resolutionMap = {
     "1080P": 1920,
@@ -25,9 +26,21 @@ function createDecoder() {
         output: handleDecodedFrame,
         error: (e) => {
             self.postMessage({ type: 'error', message: e.message, name: e.name });
+            recoverDecoder();
         }
     });
     configured = false;
+}
+
+function recoverDecoder() {
+    if (!lastConfig) return;
+    try {
+        createDecoder();
+        decoder.configure(lastConfig);
+        configured = true;
+    } catch(e) {
+        configured = false;
+    }
 }
 
 function handleDecodedFrame(videoFrame) {
@@ -114,6 +127,7 @@ self.onmessage = function(e) {
             }
             if (msg.codedWidth) config.codedWidth = msg.codedWidth;
             if (msg.codedHeight) config.codedHeight = msg.codedHeight;
+            lastConfig = config;
             decoder.configure(config);
             configured = true;
             effectiveRotation = msg.effectiveRotation || 0;
@@ -122,9 +136,12 @@ self.onmessage = function(e) {
             break;
         }
         case 'decodeGroup': {
-            if (!decoder || !configured) {
-                self.postMessage({ type: 'groupError', groupId: msg.groupId, message: 'Decoder not configured' });
-                return;
+            if (!decoder || !configured || decoder.state === 'closed') {
+                recoverDecoder();
+                if (!decoder || !configured || decoder.state === 'closed') {
+                    self.postMessage({ type: 'groupError', groupId: msg.groupId, message: 'Decoder not configured' });
+                    return;
+                }
             }
             currentGroupId = msg.groupId;
             timestampToFrameNumber.clear();
@@ -297,7 +314,7 @@ export class VideoDecodeWorkerManager {
                 }
                 break;
             case 'frameError':
-                console.warn(`Worker frame decode error: group=${msg.groupId} frame=${msg.frameNumber}: ${msg.message}`);
+                console.debug(`Worker frame decode error: group=${msg.groupId} frame=${msg.frameNumber}: ${msg.message}`);
                 if (this.onFrame) {
                     this.onFrame(msg.groupId, msg.frameNumber, null, 0, 0);
                 }
@@ -310,13 +327,13 @@ export class VideoDecodeWorkerManager {
                 break;
             case 'groupError':
                 this.busy = false;
-                console.warn(`Worker group error: group=${msg.groupId}: ${msg.message}`);
+                console.debug(`Worker group error: group=${msg.groupId}: ${msg.message}`);
                 if (this.onError) {
                     this.onError(msg.message, msg.groupId);
                 }
                 break;
             case 'error':
-                console.warn(`Worker decoder error: ${msg.message}`);
+                console.debug(`Worker decoder error (recovered): ${msg.message}`);
                 if (this.onError) {
                     this.onError(msg.message);
                 }

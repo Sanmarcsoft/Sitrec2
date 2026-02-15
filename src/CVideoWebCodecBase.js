@@ -198,7 +198,7 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
                 this._activeGroupMap.delete(groupId);
             }
         }
-        showErrorOnce("WORKER_DECODE_ERR", "Worker decode error: " + message);
+        console.debug("Worker decode error (non-fatal): " + message);
         this.handleGroupComplete();
     }
 
