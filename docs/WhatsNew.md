@@ -45,6 +45,133 @@ Example entry format:
 
 ---
 
+## Version 2.28.0 (2026-02-15)
+
+### New Features
+- **A-B Echo Overlay**: Accumulated video frame echo between A and B markers, with Min and Max echo effects
+- **Record Browser Window**: Record the browser window directly
+- **Environment Map Material**: Environment mapping for 3D objects with IR mode white sky support
+- **Zoom to Point**: Zoom to a specific point in main view
+- **Near Plane Slider**: Adjustable near plane distance for fine-tuning 3D rendering
+
+### Improvements
+- Improved caching logic for echo groups with detailed caching status display
+- More robust handling of corrupt H.264 files, GPU config errors, and open-GOP B-frame decoding
+- Selectable display interval for OSD tracks, Page Up/Down navigates to prev/next keyframe
+- OSD tracks support altitude lock with both AGL (default) and MSL options
+- Spacebar now always toggles pause/unpause instead of toggling GUI
+- Moving A and B sliders now keeps main frame slider in the same position
+- Effect states are now serialized and restored
+- More meaningful file export prefixes
+- Ground overlay syncing with quadtrees more robust
+- Forcing object above surface is now optional
+
+### Bug Fixes
+- Fixed excessive CPU usage from ground overlays
+- Fixed wiggle from smoothed tracks
+- Fixed exported videos not matching screen
+- Fixed overlay visibility issues
+- Fixed overlay duplicate display in wireframe
+- Fixed importing of FOV CSV files
+- Fixed web worker buffer issue for H.264
+- Fixed video frame ordering and open-GOP B-frame decoding
+- Fixed view visibility logic
+
+---
+
+## Version 2.27.0 (2026-02-10)
+
+### New Features
+- **OSD Data Graphing**: Graph OSD data series with scatter plots, separate Y axes, and A-B range selection
+- **OSD Track Editing**: Create and edit tracks derived from OSD data with keyframe editing and tab-cycling between tracks
+- **KML Track Exporting**: Export tracks in KML format
+- **Google Earth Pin Export**: Export Google Earth pins from context menu
+- **Crosshair Display**: Press "/" in video view to show crosshair overlay, click to fix position
+- **Video Info Display**: Frame numbers, datetime, and video metadata shown in video viewer
+- **"Stop At" Parameter**: Track-to-track targets can specify a stop point
+- **TARGET/GROUND Modes**: MQ9UI supports switching between target and ground display modes
+
+### Improvements
+- Elevation data cached and serialized at highest available level, making synth and OSD tracks load faster without degrading when zooming out
+- Multiple OSD data series tracks with serialization, renamed from "Tracks" to "DataSeries" for clarity
+- Better OSD value interpolation and keyframe color consistency
+- Simplified image and video loading in video viewer
+- Corrected overlay borders and dragging for terrain altitude
+- Increased blur range to 200
+
+### Bug Fixes
+- Fixed AB range
+- Fixed scatterplot OSD interpolation
+- Fixed full-screen offset in menu bar
+- Fixed video info display in video viewer sitch
+
+---
+
+## Version 2.26.9 (2026-02-07)
+
+### New Features
+- **Celestial Lock Camera Mode**: Lock camera to celestial objects like "moon", "sirius", etc.
+- **EPS Exporting**: Experimental EPS (Encapsulated PostScript) file exporting
+
+### Improvements
+- Added datetime and frame number information to video info display
+- Better moon libration application
+- Moon parallax adjustment for observer position
+- Restored view menu in video viewer
+
+### Bug Fixes
+- Fixed context menu when zoomed in on Moon
+
+---
+
+## Version 2.26.8 (2026-02-06)
+
+### New Features
+- **3D Lit Moon**: Realistic 3D moon rendering with correct size, phases, and texture
+- **Spline from Data Track**: Create splines from existing data tracks
+- **Elevation Indicator**: Added elevation indicator to MQ9UI
+
+### Improvements
+- Stars now render behind the moon for correct occlusion
+- Auto-load latest version of sitch when none specified
+- Tests now stop if an assertion fires
+
+### Bug Fixes
+- Fixed moon daylight color
+- Fixed specular color in Phong shading
+- Fixed error caused by unexportable empty arrays in GoFast
+
+---
+
+## Version 2.26.7 (2026-02-05)
+
+### Bug Fixes
+- Fixed track edit menu auto-closing and exiting edit mode
+
+---
+
+## Version 2.26.6 (2026-02-04)
+
+### New Features
+- **Compass Graticule**: Compass line overlay for azimuth reference in views
+- **MQ9 UI Display**: Enhanced MQ9 HUD with distances, positions, display units, and video-matched layout
+- **Google Maps Link**: "Google Maps Here" option in ground right-click context menu
+- **MGRS Coordinate Support**: Accept Military Grid Reference System coordinates in CSV imports
+
+### Improvements
+- Wind incorporated into airframe heading and camera azimuth calculations
+- Broader range of coordinate format support including MGRS
+- Better moving and rotating of free-transform overlays
+- Banking objects use local up instead of EUS up for more correct behavior
+
+### Bug Fixes
+- Fixed click-and-drag on look view with MQ9UI
+- Fixed backward camera vector causing azimuth graticule position and value to be flipped
+- Fixed GUI elements that may have changed parents
+- Fixed deserializing lat/lon with new handling
+
+---
+
 ## Version 2.26.5 (2026-02-03)
 
 ### New Features
