@@ -710,12 +710,8 @@ export class CNodeView3D extends CNodeViewCanvas {
             
             // Render sky brightness overlay and sun sky only during daytime
             if (skyOpacity > 0) {
-                // Recreate fullscreen quad (matches renderSky behavior)
-                if (this.fullscreenQuadScene !== undefined) {
-                    this.fullscreenQuadScene.remove(this.fullscreenQuad);
-                }
-                this.fullscreenQuad = new Mesh(this.fullscreenQuadGeometry, this.skyBrightnessMaterial);
-                this.fullscreenQuadScene.add(this.fullscreenQuad);
+                // Restore sky material (effects pipeline swaps it each frame)
+                this.fullscreenQuad.material = this.skyBrightnessMaterial;
                 
                 this.updateSkyUniforms(skyColor, skyOpacity);
                 
@@ -1437,21 +1433,9 @@ export class CNodeView3D extends CNodeViewCanvas {
             // Only render the quad if skyOpacity is greater than zero
             if (skyOpacity > 0) {
 
-                // Add the fullscreen quad to a scene dedicated to it
-                // PROBLEM - WHY DO WE NEED TO KEEP RECREATING THIS?????
-                // if we move the new Mesh to the initSky() function, then it
-                // will render was a plain white polygon. Why?
-                // Not a serious issue, but seems like a bug
-                // or possible some asyc issue with the renerer.clear call
-
-                // // cleanup the old quad and scene
-                if (this.fullscreenQuadScene !== undefined) {
-                    // cleanly remove the scene
-                    this.fullscreenQuadScene.remove(this.fullscreenQuad);
-
-                }
-                this.fullscreenQuad = new Mesh(this.fullscreenQuadGeometry, this.skyBrightnessMaterial);
-                this.fullscreenQuadScene.add(this.fullscreenQuad);
+                // Restore sky material — the effects pipeline (renderCanvas) swaps
+                // this.fullscreenQuad.material to effect/copy materials each frame.
+                this.fullscreenQuad.material = this.skyBrightnessMaterial;
 
                 this.updateSkyUniforms(skyColor, skyOpacity);
 
