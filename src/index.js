@@ -2339,6 +2339,10 @@ function renderMain(elapsed) {
     // Only render viewports if not in XR mode
     // When in XR mode, the XR animation loop handles rendering
     if (!xrActive) {
+        // Compute effective visibility for all views (handles overlays, relativeTo, fullscreen)
+        ViewMan.computeEffectiveVisibility();
+        ViewMan.updateDOMVisibility();
+
         ViewMan.iterate((key, view) => {
 
             // In video analysis mode, only render the video viewport
@@ -2346,31 +2350,7 @@ function renderMain(elapsed) {
                 return;
             }
 
-            // if this is an overlay view, then inherit the "visible" flag from the parent view (this this view overlays)
-            if (view.overlayView && !view.separateVisibility) {
-                view.setVisible(view.overlayView.visible);
-            }
-
-            if (view.in.relativeTo) {
-                if (!view.in.relativeTo.visible) {
-                    if (!view._hiddenByParent) {
-                        view._preParentHiddenVisible = view.visible;
-                        view._hiddenByParent = true;
-                    }
-                    view.setVisible(false);
-                } else if (view._hiddenByParent) {
-                    view._hiddenByParent = false;
-                    view.setVisible(view._preParentHiddenVisible ?? true);
-                }
-            }
-
-            let visible = view.visible;
-            if (view.overlayView && !view.separateVisibility)
-                visible = view.overlayView.visible;
-            if (view.in.relativeTo)
-                visible = view.in.relativeTo.visible;
-
-            if (visible) {
+            if (view._effectivelyVisible) {
                 if (globalProfiler) globalProfiler.push(getViewProfileColor(key), `${key}`);
 
                 // we set from div, which can be moved or resized by the user, or by screen/window resizing

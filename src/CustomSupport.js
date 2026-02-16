@@ -2740,6 +2740,8 @@ export class CCustomManager {
     updateViewFromPreset() {
         const preset = this.viewPresets[this.currentViewPreset];
         if (preset) {
+            // Clear any fullscreen state before applying preset
+            ViewMan.fullscreenView = null;
             ViewMan.iterate((id, v) => {
                 if (v.doubled) {
                     v.doubled = false;
@@ -2748,14 +2750,6 @@ export class CCustomManager {
                     if (v.width > 0) v.width = v.preDoubledWidth;
                     if (v.height > 0) v.height = v.preDoubledHeight;
                     v.updateWH();
-                }
-            });
-            ViewMan.iterate((id, v) => {
-                if (v.preFullScreenVisible !== undefined) {
-                    if (!(id in preset)) {
-                        v.setVisible(v.preFullScreenVisible);
-                    }
-                    v.preFullScreenVisible = undefined;
                 }
             });
 
