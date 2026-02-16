@@ -562,13 +562,7 @@ export class CNodeTerrain extends CNode {
 
                     this.refreshDebugGrids()
 
-                    // WHY IS THIS NEEDED - IF WE HAVE WIREFRAME MODE
-                    // THEN IT SHOULD ALWAYS HAVE GEOMETRY
-
-
-                    // The elevation system might have tried to apply elevation to this tile before
-                    // and failed because there's no geometry yet.
-                    // Process any pending elevation updates that arrived before the texture map was ready
+                    // Process any pending elevation updates that arrived before geometry was ready
                     if (this.pendingElevationUpdates && this.pendingElevationUpdates.length > 0) {
                         this.log("CNodeTerrain: processing " + this.pendingElevationUpdates.length + " pending elevation updates")
                         this.pendingElevationUpdates.forEach(update => {

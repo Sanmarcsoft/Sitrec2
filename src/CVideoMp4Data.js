@@ -44,9 +44,7 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
         // if it's got no forward slashes, then it's a local file
 
 
-        // QUESTION: why do we need to use the file manager here?
-        // why not load the file directly?
-        // ANSWER The file manager does some parsing of the path???
+        // FileManager handles URL resolution, caching, and path normalization
 
         if (v.file !== undefined ) {
             console.log(`[CVideoMp4Data] Loading video file: ${v.file}`);
