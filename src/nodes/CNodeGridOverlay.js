@@ -9,8 +9,8 @@ export class CNodeGridOverlay extends CNodeViewCanvas2D {
         this.visible = false;
         this.ignoreMouseEvents();
 
-        this.gridSize = 16;
-        this.gridSubdivisions = 1;
+        this.gridSize = 64;
+        this.gridSubdivisions = 4;
         this.gridXOffset = 0;
         this.gridYOffset = 0;
         this.gridColor = "#00ff00";
@@ -70,13 +70,24 @@ export class CNodeGridOverlay extends CNodeViewCanvas2D {
         ctx.rect(dx, dy, dWidth, dHeight);
         ctx.clip();
 
-        const drawLines = (step, lineWidth) => {
+        const screenSpacing = (step) => Math.min(step * scaleX, step * scaleY);
+        const fadeAlpha = (step) => Math.max(0, Math.min(1, (screenSpacing(step) - 2) / (4 - 2)));
+
+        const drawLines = (step, lineWidth, skipStep) => {
+            const alpha = fadeAlpha(step);
+            if (alpha <= 0) return;
+
+            ctx.globalAlpha = alpha;
             ctx.strokeStyle = this.gridColor;
             ctx.lineWidth = lineWidth;
             ctx.beginPath();
 
             const firstVX = Math.ceil((visMinX - xOff) / step) * step + xOff;
             for (let vx = firstVX; vx <= visMaxX; vx += step) {
+                if (skipStep) {
+                    const rel = ((vx - xOff) % skipStep + skipStep) % skipStep;
+                    if (Math.abs(rel) < 0.001 || Math.abs(rel - skipStep) < 0.001) continue;
+                }
                 const cx = v2cx(vx);
                 ctx.moveTo(cx, dy);
                 ctx.lineTo(cx, dy + dHeight);
@@ -84,43 +95,25 @@ export class CNodeGridOverlay extends CNodeViewCanvas2D {
 
             const firstVY = Math.ceil((visMinY - yOff) / step) * step + yOff;
             for (let vy = firstVY; vy <= visMaxY; vy += step) {
+                if (skipStep) {
+                    const rel = ((vy - yOff) % skipStep + skipStep) % skipStep;
+                    if (Math.abs(rel) < 0.001 || Math.abs(rel - skipStep) < 0.001) continue;
+                }
                 const cy = v2cy(vy);
                 ctx.moveTo(dx, cy);
                 ctx.lineTo(dx + dWidth, cy);
             }
 
             ctx.stroke();
+            ctx.globalAlpha = 1;
         };
-
-        drawLines(size, 1);
 
         if (subdivisions > 1) {
             const subSize = size / subdivisions;
-
-            ctx.strokeStyle = this.gridColor;
-            ctx.lineWidth = 0.5;
-            ctx.beginPath();
-
-            const firstVX = Math.ceil((visMinX - xOff) / subSize) * subSize + xOff;
-            for (let vx = firstVX; vx <= visMaxX; vx += subSize) {
-                const relX = ((vx - xOff) % size + size) % size;
-                if (Math.abs(relX) < 0.001 || Math.abs(relX - size) < 0.001) continue;
-                const cx = v2cx(vx);
-                ctx.moveTo(cx, dy);
-                ctx.lineTo(cx, dy + dHeight);
-            }
-
-            const firstVY = Math.ceil((visMinY - yOff) / subSize) * subSize + yOff;
-            for (let vy = firstVY; vy <= visMaxY; vy += subSize) {
-                const relY = ((vy - yOff) % size + size) % size;
-                if (Math.abs(relY) < 0.001 || Math.abs(relY - size) < 0.001) continue;
-                const cy = v2cy(vy);
-                ctx.moveTo(dx, cy);
-                ctx.lineTo(dx + dWidth, cy);
-            }
-
-            ctx.stroke();
+            drawLines(subSize, 0.5, size);
         }
+
+        drawLines(size, 1, null);
 
         ctx.restore();
     }
