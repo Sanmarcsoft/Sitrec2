@@ -2153,6 +2153,20 @@ export class CNode3DObject extends CNode3DGroup {
         // Clean up any previous arrows
         this.cleanUpReflectionAnalysis();
 
+        // Apply rotation (same as preRender) so raycasting sees the rotated geometry
+        const common = this.common;
+        let needsRotationUndo = false;
+        let savedQuaternion;
+        if (common && this.group && (common.rotateX || common.rotateY || common.rotateZ)) {
+            needsRotationUndo = true;
+            savedQuaternion = this.group.quaternion.clone();
+            if (common.rotateY) this.group.rotateY(common.rotateY * Math.PI / 180);
+            if (common.rotateX) this.group.rotateX(common.rotateX * Math.PI / 180);
+            if (common.rotateZ) this.group.rotateZ(common.rotateZ * Math.PI / 180);
+            this.group.updateMatrix();
+            this.group.updateMatrixWorld();
+        }
+
         const lookCameraNode = NodeMan.get("lookCamera", false);
         if (!lookCameraNode) {
             console.warn("Reflection Analysis: no lookCamera found");
@@ -2337,6 +2351,13 @@ export class CNode3DObject extends CNode3DGroup {
         console.log(`    Back face: ${backFaceCount}`);
         console.log(`    No terrain hit: ${noTerrainHitCount}`);
         console.log(`    Terrain hits: ${terrainHitCount}`);
+
+        // Restore rotation
+        if (needsRotationUndo) {
+            this.group.quaternion.copy(savedQuaternion);
+            this.group.updateMatrix();
+            this.group.updateMatrixWorld();
+        }
 
         // Create or update the results text view
         this.showReflectionResults({
