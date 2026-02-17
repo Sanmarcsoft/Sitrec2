@@ -611,6 +611,8 @@ function gatherParams() {
     p.camDist_km = p.camDist * NM_TO_KM;
     p.ballAlt_km = p.ballAlt * NM_TO_KM;
     p.bgDist_km = p.bgDist * NM_TO_KM;
+    // Coordinate system: X = horizontal toward balloon, Y = right, Z = up.
+    // Camera looks along dView (pitched down by lookDown angle from horizontal).
     p.dView = [Math.cos(p.lookDownRad), 0, -Math.sin(p.lookDownRad)];
     p.camRight = [0, 1, 0];
     p.camUp = [Math.sin(p.lookDownRad), 0, Math.cos(p.lookDownRad)];
@@ -660,7 +662,11 @@ function tracePixel(u, v, p) {
 
 function backgroundPixelTemp(pixelElevDeg, p, noiseVal) {
     if (pixelElevDeg > 0) {
-        const tau = atmosphericTransmission(100, p.beta);
+        // Sky path: atmospheric scale height ~8km, path length depends on elevation angle.
+        // Near-horizontal = very long path (mostly path radiance), near-zenith = shorter.
+        const elevRad = Math.max(pixelElevDeg, 0.5) * DEG_TO_RAD;
+        const skyPath_km = Math.min(8.0 / Math.sin(elevRad), 200);
+        const tau = atmosphericTransmission(skyPath_km, p.beta);
         return apparentTempLookup(radianceLookup(skyTemperatureK(pixelElevDeg, p.T_zenith_K)) * tau + p.L_atm * (1 - tau));
     }
     const centerDepress = p.lookDown * DEG_TO_RAD;
@@ -736,7 +742,8 @@ function renderAll() {
                     continue;
                 }
             } else if (ballR < 0.5 && ballR > 0.01 && dist < 1.0) {
-                // Sub-pixel object: blend based on fill factor
+                // Sub-pixel object: only the center pixel (dist < 1.0) is affected.
+                // Fill factor = fractional area coverage within this pixel.
                 const fillFactor = Math.min(1, Math.PI * ballR * ballR);
                 const T_ball = tracePixel(0, 0, p).T_app;
                 const pixelElev = -p.lookDown + dy * p.degPerPixel;
@@ -750,9 +757,10 @@ function renderAll() {
     }
 
     // === 3. Add sensor noise (fixed seed for deterministic output) ===
+    // Noise magnitude is absolute (Kelvin), not display-range-relative,
+    // so it stays consistent across exposure modes. 100% = ±5K NETD.
     if (p.noiseAmt > 0) {
-        const range = dMax - dMin;
-        const noiseMag = range * p.noiseAmt / 100;
+        const noiseMag = 10.0 * p.noiseAmt / 100; // max ±5K at 100%
         let seed = 0x600DF00D;
         for (let i = 0; i < sRes * sRes; i++) {
             // mulberry32 PRNG
@@ -786,8 +794,9 @@ function renderAll() {
     dctx.drawImage(sc, cropX, cropY, cropW, cropH, 0, 0, DISPLAY_W, DISPLAY_H);
 
     // === 6. Update sensor info ===
+    const vfov = p.hfov * (DISPLAY_H / DISPLAY_W);
     document.getElementById('sensorInfo').textContent =
-        sRes + 'px sensor | ' + p.hfov.toFixed(2) + '\u00B0 HFOV | ' +
+        sRes + 'px sensor | ' + p.hfov.toFixed(2) + '\u00B0\u00D7' + vfov.toFixed(2) + '\u00B0 FOV | ' +
         zoom.toFixed(1) + 'x zoom | object: ' + (ballR * 2).toFixed(1) + ' px';
 
     // === 7. Rerecord with PSF ===
@@ -798,10 +807,18 @@ function renderAll() {
     renderPathMap(p);
     renderSideView(p);
 
-    // === 9. Profile & charts (physics) ===
+    // === 9. Profile chart (fast) ===
     computeProfileData(p);
     updateProfileChart(p, dMin, dMax);
-    updateContrastChart(p);
+
+    // === 10. Contrast chart (expensive, debounced separately) ===
+    scheduleContrastUpdate(p);
+}
+
+let contrastTimer = null;
+function scheduleContrastUpdate(p) {
+    if (contrastTimer !== null) clearTimeout(contrastTimer);
+    contrastTimer = setTimeout(() => { contrastTimer = null; updateContrastChart(p); }, 300);
 }
 
 // ========== PROFILE DATA ==========
@@ -1090,7 +1107,9 @@ function renderSideView(p) {
     ctx.fillStyle = '#aaa'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
     ctx.fillText('BG: ' + p.bgDist.toFixed(1) + ' NM', (cxC + gpxC) / 2, Math.min(cyC, gpyC) - 14);
 
-    // Horizontal ref + angle arc
+    // Horizontal ref + angle arc.
+    // Canvas arc() sweeps clockwise from 3-o'clock. Because canvas Y is inverted,
+    // positive radians sweep downward visually, correctly showing the look-down angle.
     ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(cxC, cyC); ctx.lineTo(cxC + 50, cyC); ctx.stroke(); ctx.setLineDash([]);
     ctx.strokeStyle = '#ff0'; ctx.lineWidth = 1;
@@ -1165,7 +1184,7 @@ function updateProfileChart(p, dMin, dMax) {
     const config = { type: 'line', data: { labels, datasets }, options: {
         responsive: true, maintainAspectRatio: false, animation: false,
         scales: {
-            x: { title: { display: true, text: 'Position (bottom -1 to top +1)', color: '#aaa', font: { size: 9 } }, ticks: { color: '#888', maxTicksLimit: 9, font: { size: 8 } }, grid: { color: 'rgba(255,255,255,0.05)' }, reverse: true },
+            x: { title: { display: true, text: 'Vertical position (top \u2192 bottom)', color: '#aaa', font: { size: 9 } }, ticks: { color: '#888', maxTicksLimit: 9, font: { size: 8 } }, grid: { color: 'rgba(255,255,255,0.05)' }, reverse: true },
             y: { min: -40, max: 40, title: { display: true, text: 'Apparent Temp (\u00B0C)', color: '#aaa', font: { size: 9 } }, ticks: { color: '#888', font: { size: 8 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
         },
         plugins: { legend: { labels: { color: '#ccc', font: { size: 8 }, boxWidth: 14 } }, annotation: { annotations } }
@@ -1247,15 +1266,25 @@ function setupControls() {
     document.getElementById('expGround').addEventListener('click', () => { exposureMode = 'ground'; updateExpBtns(); scheduleUpdate(); });
     document.getElementById('expFull').addEventListener('click', () => { exposureMode = 'full'; updateExpBtns(); scheduleUpdate(); });
     document.getElementById('btnReset').addEventListener('click', () => applyPreset(DEFAULTS));
-    document.getElementById('preHotDesert').addEventListener('click', () => applyPreset({ groundTemp: 62, skyTemp: -40, beta: 0.05 }));
-    document.getElementById('preSyria').addEventListener('click', () => applyPreset({ groundTemp: 10, skyTemp: -40, beta: 0.07 }));
-    document.getElementById('preMaritime').addEventListener('click', () => applyPreset({ groundTemp: 15, skyTemp: -30, beta: 0.12 }));
-    document.getElementById('preNight').addEventListener('click', () => applyPreset({ groundTemp: 5, skyTemp: -50, beta: 0.06 }));
+    document.getElementById('preHotDesert').addEventListener('click', () => applyPreset({
+        groundTemp: 62, skyTemp: -40, beta: 0.05, lookDown: 15, camDist: 6, groundVar: 12
+    }));
+    document.getElementById('preSyria').addEventListener('click', () => applyPreset({
+        groundTemp: 10, skyTemp: -40, beta: 0.07, lookDown: 20, camDist: 4, objDiam: 0.3, hfov: 0.3
+    }));
+    document.getElementById('preMaritime').addEventListener('click', () => applyPreset({
+        groundTemp: 15, skyTemp: -30, beta: 0.12, lookDown: 5, camDist: 8, groundVar: 2
+    }));
+    document.getElementById('preNight').addEventListener('click', () => applyPreset({
+        groundTemp: 5, skyTemp: -50, beta: 0.06, lookDown: 10, camDist: 5, groundVar: 3
+    }));
 }
 
 function applyPreset(vals) {
     if (vals === DEFAULTS) { for (const d of paramDefs) setSlider(d.id, DEFAULTS[d.key]); }
     else { for (const k of Object.keys(vals)) { const d = paramDefs.find(x => x.key === k); if (d) setSlider(d.id, vals[k]); } }
+    // Recalculate geometry constraint after preset applies
+    recalcBallAlt();
     scheduleUpdate();
 }
 function updateCmBtns() {
@@ -1271,13 +1300,50 @@ function updateExpBtns() {
 let rafId = null;
 function scheduleUpdate() {
     if (rafId !== null) return;
-    rafId = requestAnimationFrame(() => { rafId = null; renderAll(); });
+    rafId = requestAnimationFrame(() => { rafId = null; renderAll(); updateUrlHash(); });
+}
+
+// ========== URL HASH STATE ==========
+// Encode non-default params into URL hash for sharing configurations.
+function updateUrlHash() {
+    const parts = [];
+    for (const d of paramDefs) {
+        const val = parseFloat(document.getElementById(d.id + '_n').value);
+        if (Math.abs(val - DEFAULTS[d.key]) > 0.001) {
+            parts.push(d.key + '=' + val);
+        }
+    }
+    if (colormap !== 'blackHot') parts.push('cm=' + colormap);
+    if (exposureMode !== 'ground') parts.push('exp=' + exposureMode);
+    const hash = parts.length > 0 ? '#' + parts.join('&') : '';
+    if (window.location.hash !== hash) {
+        history.replaceState(null, '', hash || window.location.pathname);
+    }
+}
+
+function loadFromUrlHash() {
+    const hash = window.location.hash.slice(1);
+    if (!hash) return;
+    const pairs = hash.split('&');
+    for (const pair of pairs) {
+        const [key, val] = pair.split('=');
+        if (key === 'cm' && ['whiteHot', 'blackHot', 'ironbow'].includes(val)) {
+            colormap = val; updateCmBtns();
+        } else if (key === 'exp' && ['ground', 'full'].includes(val)) {
+            exposureMode = val; updateExpBtns();
+        } else {
+            const d = paramDefs.find(x => x.key === key);
+            if (d) setSlider(d.id, parseFloat(val));
+        }
+    }
+    recalcBallAlt();
 }
 
 function init() {
     buildRadianceLUT();
     buildIronbowLUT();
     setupControls();
+    loadFromUrlHash();
     renderAll();
 }
 window.addEventListener('load', init);
