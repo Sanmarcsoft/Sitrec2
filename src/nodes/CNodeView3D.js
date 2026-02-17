@@ -630,9 +630,6 @@ export class CNodeView3D extends CNodeViewCanvas {
 //        const fov = xrCamera.fov * Math.PI / 180;
 
 
-        // TODO: this is probably wrong in XR mode with two different fovs
-        // so we really need to go in the other direction
-
         // NOTE: focal length is now set in renderTargetAndEffects() after render targets are sized
         // Do NOT set it here as it would use heightPx instead of actual render target height
         // const fov = lookCamera.fov * Math.PI / 180;
@@ -1833,38 +1830,6 @@ export class CNodeView3D extends CNodeViewCanvas {
 
             // debugText = ""
 
-            /*
-
-            // TODO: dragging spheres
-
-            // we don't check the glare (green) sphere if it's locked to the white (target sphere)
-            if (targetSphere.position.y !== glareSphere.position.y) {
-                if (intersects.find(hit => hit.object === glareSphere) !== undefined) {
-                    // CLICKED ON THE green SPHERE
-                    this.dragMode = DRAG.MOVEHANDLE;
-                    // must pause, as we are controlling the pod now
-                    par.paused = true;
-                }
-            }
-            if (intersects.find(hit => hit.object === targetSphere) !== undefined) {
-
-                if (this.dragMode === 1) {
-                    var glareSphereWorldPosition = glareSphere.getWorldPosition(new Vector3())
-                    var targetSphereWorldPosition = targetSphere.getWorldPosition(new Vector3())
-                    var distGlare = this.raycaster.ray.distanceSqToPoint(glareSphereWorldPosition)
-                    var distTarget = this.raycaster.ray.distanceSqToPoint(targetSphereWorldPosition)
-                    //console.log("glare = " + distGlare + " target = " + distTarget)
-                    // already in mode 1 (glare)
-                    // so only switch if targetGlare is closer to the ray
-                    if (distTarget < distGlare)
-                        this.dragMode = 2;
-                } else {
-                    this.dragMode = 2;
-                }
-                // must pause, as we are controlling the pod now
-                par.paused = true;
-            }
-*/
         }
         if (this.dragMode === 0 && this.controls && mouseInViewOnly(this, mouseX, mouseY)) {
 //            console.log ("Click re-Enabled "+this.id)

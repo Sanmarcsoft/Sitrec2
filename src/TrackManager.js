@@ -86,9 +86,6 @@ class CMetaTrack {
         // dispose data nodes before track nodes, as the track nodes have data nodes as inputs
         // OH, BUT THEY LINK FORWARD AND BACKWARDS.... SO WE NEED TO UNLINK THEM FIRST
         // BUT NOT ANYTHING ELSE, AS WE STILL WANT TO CHECK FOR UNANTICIPATED LINKS
-        //NodeMan.unlink(this.trackNode, this.trackDataNode); TODO
-        //OR  - change disposeRemove so it unlinks first
-
         // trackNode and centerNode will also have the _unsmoothed versions as input, so need to delete those first
         // they will be in the "source" input object
 

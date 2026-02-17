@@ -618,18 +618,6 @@ export const SitAguadilla = {
 
 
 
-        // MAGENTA debug line from final jet track to ground spline
-        // This will differ from other spline transits
-        // mostly due to different spacing on nodes, and how we are not really going along the spline smoothly
-        // a big TODO here is to fix this
-        // new CNodeDisplayTrackToTrack({
-        //     cameraTrack: "jetTrackSmooth",
-        //     targetTrack: "groundSplineEditor",
-        //     color: [1,0,1],
-        //     width: 2,
-        //
-        // })
-
 // The in-air target track that we use to intersect with the ground
         new CNodeSwitch({id:"LOSTargetTrack",
             inputs: {
@@ -732,20 +720,6 @@ export const SitAguadilla = {
             extensioncolor: [0,1,0],
 
         })
-
-
-        /*
-        // the second half the the line is drawn in green
-        // TODO: need a new second half calculating with smoothed value
-        new CNodeDisplayTrackToTrack({
-            id: "DisplayLOS2",
-            cameraTrack: "LOSTraverseSelectSmoothed",
-            targetTrack: "LOSTargetTrack",  // this was terrain track, should be a camera ground track
-            color: [0,1,0],
-            width: 2,
-
-        })
-*/
 
         new CNodeScale("sizeScaled", scaleF2M,
             new CNodeGUIValue({value:Sit.targetSize,start:1,end:2000, step:0.1, desc:"Target size ft"},guiMenus.objects)

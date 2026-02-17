@@ -364,20 +364,6 @@ export function ECEFToEUS(posECEF, radius) {
     return eus;
 }
 
-// This is a work in progress.
-// export function EUSToECEF(posEUS, lat1, lon1, radius) {
-//     var mECEF2ENU = new Matrix3().set(
-//         -sin(lon1), cos(lon1), 0,
-//         -sin(lat1) * cos(lon1), -sin(lat1) * sin(lon1), cos(lat1),
-//         cos(lat1) * cos(lon1), cos(lat1) * sin(lon1), sin(lat1)
-//     );
-//     var mENU2ECEF = new Matrix3().getInverse(ECEF2ENU);
-//     var originECEF = RLLAToECEFV_Sphere(lat1, lon1, 0, radius)
-//     var enu = new Vector3(eus.x, -eus.z, eus.y)
-//     var ecef = enu.applyMatrix3() // TODO!!!!!!!!
-//
-// }
-
 export function EUSToECEF(posEUS, radius) {
     assert(radius === undefined, "undexpected radius in EUSToECEF")
 
