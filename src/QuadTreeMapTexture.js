@@ -274,6 +274,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
             return;
         }
         for (let child of tile.children) {
+            if (!child) continue;
             console.log(`${indent}Child ${child.key()} loaded=${child.loaded} added=${child.added} mesh layers=${child.mesh?.layers.mask}`);
             this.dumpChildren(child, indent + '  ');
         }
@@ -299,7 +300,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
 
     deactivateTile(tile, layerMask = 0, instant = false) {
       //  let tile = this.getTile(x, y, z);
-        if (tile === undefined) {
+        if (!tile) {
             return;
         }
         
@@ -361,9 +362,11 @@ class QuadTreeMapTexture extends QuadTreeMap {
 
 
         if (tile) {
-            // Don't activate tile if it's currently being cancelled - let the system retry later
+            // Tile is being cancelled - return the tile object (so it can be stored
+            // in children arrays) but don't activate its layers. The cancellation will
+            // complete asynchronously and the tile can be properly activated next frame.
             if (tile.isCancelling) {
-                return false;
+                return tile;
             }
             
             // tile already exists, just activate it

@@ -298,6 +298,7 @@ export class QuadTreeMap {
             if (children) {
                 // Check if all four children meet pruning criteria
                 const allChildrenPrunable = children.every(child => {
+                    if (!child) return true; // null/false children are prunable
                     if (child.tileLayers !== 0) return false; // Still active
                     if (this.hasChildren(child)) return false; // Has children
                     if (!child.inactiveSince) return false; // No timestamp
@@ -321,6 +322,7 @@ export class QuadTreeMap {
                 if (children) {
                     let allChildrenPrunable = true;
                     children.forEach(child => {
+                        if (!child) return;
                         if (child.children || child.isLoading) {
                             child.isDeadBranch = true; // mark as dead branch, so its descendants get pruned too
                             allChildrenPrunable = false; // can't prune this one yet
@@ -335,7 +337,7 @@ export class QuadTreeMap {
                         // dead branch pruning can prune active tiles too, so mark them as inactive
                         // (otherwise we get possible errors from aborting loads on active tiles)
                         children.forEach(child => {
-                            child.tileLayers = 0; // mark as inactive so we can cleanly abort loads
+                            if (child) child.tileLayers = 0; // mark as inactive so we can cleanly abort loads
                         })
 
                         tile.children = null; // Clear children reference from parent
@@ -346,6 +348,7 @@ export class QuadTreeMap {
 
         // Prune collected tiles after iteration completes (safe to delete now)
         tilesToPrune.forEach(child => {
+            if (!child) return;
             // Clean up the tile
             if (child.mesh) {
                 this.scene.remove(child.mesh);
@@ -814,7 +817,9 @@ export class QuadTreeMap {
         if (tile.children) {
             // recursively deactivate children
             for (let child of tile.children) {
-                this.deactivateBranch(child, layerMask, instant);
+                if (child) {
+                    this.deactivateBranch(child, layerMask, instant);
+                }
             }
         }
     }
