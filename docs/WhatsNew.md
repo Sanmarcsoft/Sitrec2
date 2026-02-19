@@ -45,6 +45,65 @@ Example entry format:
 
 ---
 
+## Version 2.28.4 (2026-02-19)
+
+### New Features
+- **IR Balloon Thermal Simulator**: Standalone tool for simulating balloon thermal signatures with HDR bloom rendering
+- **FOV Curve Editor Y-Range Slider**: Vertical slider on the curve editor for direct visual control of the Y-axis range
+
+### Improvements
+- Starlink sitch correctly sets video layout in live mode and clears live mode when any video is dragged in
+- Reset live mode when setting time
+- Cleaned up export buttons for legacy sitch "reinterpret" functionality
+
+### Bug Fixes
+- Fixed relative camera controller
+- Fixed ambient temperature calculation in IR balloon simulator (no emissive cooling)
+
+---
+
+## Version 2.28.3 (2026-02-16)
+
+### Bug Fixes
+- Fixed terrain not-loaded check
+- Fixed deferred track locking during deserialization
+
+---
+
+## Version 2.28.2 (2026-02-16)
+
+### New Features
+- **Reflection Analysis**: Analyze surface reflections on 3D objects with configurable grid size and debug arrows
+
+### Improvements
+- Refactored view visibility system, separating user intent from computed state to fix fullscreen exit permanently hiding views
+- Fixed compositing of overlays and relative views (compass, MQ9UI) when rendering video exports
+- Caching AGL positions for jet track and positionLLA so terrain resolution changes don't degrade tracks
+- Fix for sky rendering with effects (removed workaround patch)
+- More robust tile checks in quadtrees
+
+### Bug Fixes
+- Fixed rotation of objects in reflection analysis
+
+---
+
+## Version 2.28.1 (2026-02-16)
+
+### New Features
+- **Video Grid Overlay**: Configurable grid overlay on video views with size, subdivisions, offset, and color controls
+- **Video Menu**: New consolidated "Video" menu grouping video-related controls (current video selector, rotation, adjustments)
+
+### Improvements
+- Grid overlay fades as you zoom out, with default 64px grid and 4 subdivisions
+- Slider max values preserved as maxMax, with 300 maxMax enforced for Tgt Start distance
+- Allow celestial controller updates during video exporting and panorama rendering
+
+### Bug Fixes
+- Fixed feature/pin double deserialization issue (not being disposed on cleanup)
+- Fixed grid serialization
+
+---
+
 ## Version 2.28.0 (2026-02-15)
 
 ### New Features
@@ -111,7 +170,7 @@ Example entry format:
 
 ### New Features
 - **Celestial Lock Camera Mode**: Lock camera to celestial objects like "moon", "sirius", etc.
-- **EPS Exporting**: Experimental EPS (Encapsulated PostScript) file exporting
+- **EPS Exporting**: Experimental EPS (Google Earth Studio) file exporting
 
 ### Improvements
 - Added datetime and frame number information to video info display
