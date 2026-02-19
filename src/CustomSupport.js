@@ -483,7 +483,7 @@ export class CCustomManager {
         EventManager.addEventListener("videoLoaded", (data) => {
             let width, height;
 
-            if (Sit.name !== "custom") {
+            if (!Sit.isCustom) {
                 console.warn("videoLoaded event received for non-custom sitch: " + Sit.name);
                 return;
             }
@@ -533,7 +533,8 @@ export class CCustomManager {
                     setSitchEstablished(true);
                 }
 
-
+                // regardless, we clear the live mode on GlobalDateTimeNode, as loading a video should always put us in control of the time
+                GlobalDateTimeNode.liveMode = false;
 
             }
 
