@@ -2543,8 +2543,8 @@ export class CNodeView3D extends CNodeViewCanvas {
 
 
                             // Create a standalone menu and mirror the object's GUI folder
-                            // Use the same approach as tracks for consistency
-                            const standaloneMenu = Globals.menuBar.createStandaloneMenu(menuTitle, event.clientX, event.clientY, true);
+                            // Use dismissOnOutsideClick=false so interacting with the scene doesn't close the menu
+                            const standaloneMenu = Globals.menuBar.createStandaloneMenu(menuTitle, event.clientX, event.clientY, false);
                             
                             // If menu creation was blocked (persistent menu is open), return early
                             if (!standaloneMenu) {
