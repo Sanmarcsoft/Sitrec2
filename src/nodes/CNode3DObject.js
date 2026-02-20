@@ -549,11 +549,11 @@ function createGradientTexture(paletteName) {
 
 const gradientVertexShader = `
     varying vec3 vWorldPosition;
-    varying vec3 vLocalPosition;
     varying vec4 vPosition;
 
     void main() {
-        vLocalPosition = position;
+        // All gradient modes use world-space positions so the gradient is
+        // consistent across model hierarchies with varying internal transforms.
         vec4 worldPos = modelMatrix * vec4(position, 1.0);
         vWorldPosition = worldPos.xyz;
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
@@ -566,9 +566,8 @@ const gradientFragmentShader = `
     uniform sampler2D gradientMap;
     uniform vec3 gradientCenter;
     uniform vec3 gradientDir;
-    uniform float boundingSphereRadius;
-    uniform float compress;
-    uniform float useWorldCoords;
+    uniform float gradientHalfHeight;
+    uniform float gradientScale;
     uniform float reverseGradient;
     uniform vec3 baseColor;
     uniform float baseMix;
@@ -576,24 +575,15 @@ const gradientFragmentShader = `
     uniform float farPlane;
 
     varying vec3 vWorldPosition;
-    varying vec3 vLocalPosition;
     varying vec4 vPosition;
 
     void main() {
-        // Choose coordinate space based on direction mode
-        vec3 pos;
-        if (useWorldCoords > 0.5) {
-            pos = vWorldPosition;
-        } else {
-            pos = vLocalPosition;
-        }
+        // Project world-space position onto gradient direction vector
+        float d = dot(vWorldPosition - gradientCenter, gradientDir);
 
-        // Project position onto gradient direction vector
-        float d = dot(pos - gradientCenter, gradientDir);
-
-        // Normalize to 0-1 based on bounding sphere, with compress factor
-        float effectiveRadius = boundingSphereRadius / compress;
-        float t = d / (2.0 * effectiveRadius) + 0.5;
+        // Normalize to 0-1 based on object height, scaled by percentage
+        float extent = gradientHalfHeight * (gradientScale / 100.0);
+        float t = d / (2.0 * extent) + 0.5;
         if (reverseGradient > 0.5) {
             t = 1.0 - t;
         }
@@ -688,7 +678,7 @@ const materialTypes = {
             reverse: [false, "Flip the gradient so the start color appears at the opposite end"],
             color: ["black", "Base color to blend with the gradient"],
             baseMix: [[0, 0, 1, 0.01], "Blend between gradient and base color (0 = pure gradient, 1 = pure base color)"],
-            compress: [[1, 0.1, 10, 0.01], "Squeeze the gradient tighter around the center (higher = more compressed)"],
+            scale: [[100, 1, 1000, 1], "Scale the gradient extent as a percentage of the object height (100% = full height)"],
             shift: [[0, -100, 100, 1], "Offset the gradient center along its direction (% of bounding diameter)"],
         }
     }
@@ -1772,7 +1762,12 @@ export class CNode3DObject extends CNode3DGroup {
                         // Cache the bounding sphere in local coordinates for efficient camera collision detection
                         this.cachedBoundingSphere = computeGroupBoundingSphere(this.model);
                         console.log("Cached bounding sphere for model:", model.file, "radius:", this.cachedBoundingSphere.radius);
-                        
+
+                        // Cache half extents of the local bounding box for gradient mapping
+                        const modelBox = computeLocalBoundingBox(this.model);
+                        this.cachedHalfHeight = (modelBox.max.y - modelBox.min.y) / 2;
+                        this.cachedHalfLength = (modelBox.max.z - modelBox.min.z) / 2;
+
                         // Cache the height from center to lowest point for ground clamping
                         this.cachedCenterToLowestPoint = computeCenterToLowestPoint(this.model);
                         console.log("Cached center to lowest point for model:", model.file, "height:", this.cachedCenterToLowestPoint);
@@ -1886,7 +1881,7 @@ export class CNode3DObject extends CNode3DGroup {
         // For geometry objects, compute it from the geometry's bounding sphere
         this.geometry.computeBoundingSphere();
         this.cachedBoundingSphere = this.geometry.boundingSphere.clone();
-        
+
         // Cache the height from center to lowest point for ground clamping
         // For geometry objects, compute it from the geometry's bounding box
         this.geometry.computeBoundingBox();
@@ -1894,6 +1889,10 @@ export class CNode3DObject extends CNode3DGroup {
         const geomCenter = new Vector3();
         geomBox.getCenter(geomCenter);
         this.cachedCenterToLowestPoint = geomCenter.y - geomBox.min.y;
+
+        // Cache half extents of the bounding box for gradient mapping
+        this.cachedHalfHeight = (geomBox.max.y - geomBox.min.y) / 2;
+        this.cachedHalfLength = (geomBox.max.z - geomBox.min.z) / 2;
         
         this.propagateLayerMask()
         this.recalculate()
@@ -2133,9 +2132,8 @@ export class CNode3DObject extends CNode3DGroup {
                     gradientMap: { value: gradientTexture },
                     gradientCenter: { value: new Vector3() },
                     gradientDir: { value: new Vector3(0, -1, 0) },
-                    boundingSphereRadius: { value: 1.0 },
-                    compress: { value: this.materialParams.compress ?? 1.0 },
-                    useWorldCoords: { value: (this.materialParams.gradientDirection ?? "Model Down") !== "Model Down" ? 1.0 : 0.0 },
+                    gradientHalfHeight: { value: 1.0 },
+                    gradientScale: { value: this.materialParams.scale ?? 100 },
                     reverseGradient: { value: this.materialParams.reverse ? 1.0 : 0.0 },
                     baseColor: { value: new Color(this.materialParams.color ?? "black") },
                     baseMix: { value: this.materialParams.baseMix ?? 0.0 },
@@ -2301,43 +2299,43 @@ export class CNode3DObject extends CNode3DGroup {
 
         this.updateEnvMap(view);
 
-        // Update gradient material uniforms with bounding sphere and direction data
-        if (this.material && this.material.isShaderMaterial && this.material.uniforms.boundingSphereRadius) {
+        // Update gradient material uniforms with direction and extent data.
+        // All modes use world-space positions so the gradient is consistent across
+        // model hierarchies with varying internal transforms.
+        if (this.material && this.material.isShaderMaterial && this.material.uniforms.gradientHalfHeight) {
             if (this.cachedBoundingSphere) {
                 const direction = this.materialParams.gradientDirection ?? "Model Down";
-                const isMotionForward = direction === "Motion Forward";
-                const useWorldCoords = direction !== "Model Down";
-                this.material.uniforms.useWorldCoords.value = useWorldCoords ? 1.0 : 0.0;
 
-                let center;
+                // Center is always in world space
+                const center = this.cachedBoundingSphere.center.clone();
+                center.applyMatrix4(this.group.matrixWorld);
+
                 let dir;
-
-                if (isMotionForward) {
-                    // Compute velocity direction from source track positions
+                if (direction === "Motion Forward") {
                     dir = this.getMotionForwardVector();
-                    // Motion forward uses world coordinates
-                    center = this.cachedBoundingSphere.center.clone();
-                    center.applyMatrix4(this.group.matrixWorld);
                 } else if (direction === "World Down") {
-                    center = this.cachedBoundingSphere.center.clone();
-                    center.applyMatrix4(this.group.matrixWorld);
                     dir = new Vector3(0, -1, 0);
                 } else {
-                    // Model Down: local coordinates
-                    center = this.cachedBoundingSphere.center.clone();
+                    // Model Down: extract the object's local -Y axis in world space
+                    // from the group's world matrix. This accounts for any internal
+                    // model rotations and user-applied rotations.
                     dir = new Vector3(0, -1, 0);
+                    dir.transformDirection(this.group.matrixWorld);
                 }
 
-                // Apply shift: offset center along gradient direction by % of bounding diameter
+                // Use half-length (Z) for Motion Forward, half-height (Y) for down modes
+                const halfExtent = (direction === "Motion Forward")
+                    ? (this.cachedHalfLength ?? this.cachedBoundingSphere.radius)
+                    : (this.cachedHalfHeight ?? this.cachedBoundingSphere.radius);
                 const shift = this.materialParams.shift ?? 0;
                 if (shift !== 0) {
-                    const diameter = this.cachedBoundingSphere.radius * 2;
-                    center.addScaledVector(dir, shift / 100 * diameter);
+                    center.addScaledVector(dir, shift / 100 * halfExtent * 2);
                 }
 
                 this.material.uniforms.gradientCenter.value.copy(center);
                 this.material.uniforms.gradientDir.value.copy(dir);
-                this.material.uniforms.boundingSphereRadius.value = this.cachedBoundingSphere.radius;
+                this.material.uniforms.gradientHalfHeight.value = halfExtent;
+                this.material.uniforms.gradientScale.value = this.materialParams.scale ?? 100;
             }
         }
     }
