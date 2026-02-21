@@ -86,28 +86,33 @@ export class CNodeMISBDataTrack extends CNodeEmptyArray {
     // Add GUI controls for the g-force filter
     setupFilterGUI(guiFolder) {
         const folder = guiFolder.addFolder("Filter Bad Data").close();
-        folder.add(this, "filterEnabled").name("Enable Filter").onChange(() => {
+        folder.add(this, "filterEnabled").name("Enable Filter").listen().onChange(() => {
             this.runGForceFilter();
             this.recalculateCascade();
         });
-        folder.add(this, "filterMaxG", 0.1, 10, 0.1).name("Max G").onChange(() => {
+        folder.add(this, "filterMaxG", 0.1, 10, 0.1).name("Max G").listen().onChange(() => {
             this.runGForceFilter();
             this.recalculateCascade();
         });
+
+        this.addSimpleSerial("filterEnabled");
+        this.addSimpleSerial("filterMaxG");
     }
 
     // Multi-pass g-force filter: marks slots where acceleration exceeds filterMaxG * 9.81 m/s²
+    // Uses wide-baseline velocity estimates (minDt = 0.5s) to avoid false positives from
+    // timestamp quantization noise in high-frame-rate data.
     runGForceFilter() {
         this.filteredSlots.clear();
         if (!this.filterEnabled) return;
 
         const maxAccel = this.filterMaxG * 9.81;
+        const minDt = 0.5; // minimum time span for velocity estimates (seconds)
         let changed = true;
 
         while (changed) {
             changed = false;
 
-            // Build list of currently valid slots (passing basic isValid checks, not yet filtered)
             const validSlots = [];
             for (let i = 0; i < this.misb.length; i++) {
                 if (!this.filteredSlots.has(i) && this._isValidBasic(i)) {
@@ -115,31 +120,38 @@ export class CNodeMISBDataTrack extends CNodeEmptyArray {
                 }
             }
 
-            // Check consecutive triplets
             for (let idx = 1; idx < validSlots.length - 1; idx++) {
-                const a = validSlots[idx - 1];
                 const b = validSlots[idx];
-                const c = validSlots[idx + 1];
+
+                // Find wide-baseline neighbors before and after B
+                let aBefore = idx - 1;
+                const timeBMs = this.getTime(b);
+                while (aBefore >= 0 && (timeBMs - this.getTime(validSlots[aBefore])) / 1000 < minDt) aBefore--;
+                if (aBefore < 0) aBefore = 0;
+
+                let cAfter = idx + 1;
+                while (cAfter < validSlots.length && (this.getTime(validSlots[cAfter]) - timeBMs) / 1000 < minDt) cAfter++;
+                if (cAfter >= validSlots.length) cAfter = validSlots.length - 1;
+
+                const a = validSlots[aBefore];
+                const c = validSlots[cAfter];
+                if (a === b || c === b) continue;
 
                 const posA = this.getPosition(a);
                 const posB = this.getPosition(b);
                 const posC = this.getPosition(c);
 
                 const timeA = this.getTime(a);
-                const timeB = this.getTime(b);
                 const timeC = this.getTime(c);
 
-                const dtAB = (timeB - timeA) / 1000; // seconds
-                const dtBC = (timeC - timeB) / 1000;
-
+                const dtAB = (timeBMs - timeA) / 1000;
+                const dtBC = (timeC - timeBMs) / 1000;
                 if (dtAB <= 0 || dtBC <= 0) continue;
 
-                // velocity vectors in m/s
                 const velAB = posB.clone().sub(posA).divideScalar(dtAB);
                 const velBC = posC.clone().sub(posB).divideScalar(dtBC);
 
-                // acceleration magnitude at B
-                const dtAC = (timeC - timeA) / 2000; // half-span in seconds
+                const dtAC = (timeC - timeA) / 2000;
                 const accel = velBC.clone().sub(velAB).length() / dtAC;
 
                 if (accel > maxAccel) {
@@ -152,6 +164,55 @@ export class CNodeMISBDataTrack extends CNodeEmptyArray {
         if (this.filteredSlots.size > 0) {
             console.log(`Filtered ${this.filteredSlots.size} points from track ${this.id} (max ${this.filterMaxG}g)`);
         }
+    }
+
+    // Scan the track and return the peak g-force value (without modifying filteredSlots)
+    // Uses the same wide-baseline approach as runGForceFilter.
+    getMaxGForce() {
+        const validSlots = [];
+        for (let i = 0; i < this.misb.length; i++) {
+            if (this._isValidBasic(i)) {
+                validSlots.push(i);
+            }
+        }
+
+        const minDt = 0.5;
+        let maxG = 0;
+        for (let idx = 1; idx < validSlots.length - 1; idx++) {
+            const b = validSlots[idx];
+            const timeBMs = this.getTime(b);
+
+            let aBefore = idx - 1;
+            while (aBefore >= 0 && (timeBMs - this.getTime(validSlots[aBefore])) / 1000 < minDt) aBefore--;
+            if (aBefore < 0) aBefore = 0;
+
+            let cAfter = idx + 1;
+            while (cAfter < validSlots.length && (this.getTime(validSlots[cAfter]) - timeBMs) / 1000 < minDt) cAfter++;
+            if (cAfter >= validSlots.length) cAfter = validSlots.length - 1;
+
+            const a = validSlots[aBefore];
+            const c = validSlots[cAfter];
+            if (a === b || c === b) continue;
+
+            const posA = this.getPosition(a);
+            const posB = this.getPosition(b);
+            const posC = this.getPosition(c);
+
+            const timeA = this.getTime(a);
+            const timeC = this.getTime(c);
+
+            const dtAB = (timeBMs - timeA) / 1000;
+            const dtBC = (timeC - timeBMs) / 1000;
+            if (dtAB <= 0 || dtBC <= 0) continue;
+
+            const velAB = posB.clone().sub(posA).divideScalar(dtAB);
+            const velBC = posC.clone().sub(posB).divideScalar(dtBC);
+            const dtAC = (timeC - timeA) / 2000;
+            const accel = velBC.clone().sub(velAB).length() / dtAC;
+            const g = accel / 9.81;
+            if (g > maxG) maxG = g;
+        }
+        return maxG;
     }
 
     // Basic validity check without the g-force filter (used by runGForceFilter to avoid circular dependency)

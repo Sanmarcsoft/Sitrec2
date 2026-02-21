@@ -481,6 +481,22 @@ class CTrackManager extends CManager {
                         id: trackID + "_GUI",
                         metaTrack: trackOb,
                     })
+
+                    // For primary tracks (not center tracks), check for spurious data points
+                    // and offer to enable filtering. Done after all nodes are set up so
+                    // recalculateCascade works correctly.
+                    if (trackIndex === 0) {
+                        const maxG = trackDataNode.getMaxGForce();
+                        if (maxG > trackDataNode.filterMaxG) {
+                            const enable = confirm(
+                                `Bad points in track data "${shortName}". Max g-force: ${maxG.toFixed(1)}g. Enable Bad Data Filter?`
+                            );
+                            if (enable) {
+                                trackDataNode.filterEnabled = true;
+                                trackDataNode.recalculateCascade();
+                            }
+                        }
+                    }
                 } else {
                     // if we failed to make the track, then remove the folder
                     // (nothing will have been added to it)
