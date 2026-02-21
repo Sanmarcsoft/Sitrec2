@@ -2609,6 +2609,9 @@ function disposeEverything() {
     // ensure the next sitch has a good default value (false) for Globals.dynamicSubdivision
     Globals.dynamicSubdivision = false;
 
+    // Clear any fullscreen/double-click zoom state so new sitch views are all visible
+    ViewMan.fullscreenView = null;
+
    // ViewMan.disposeAll()
     assert(ViewMan.size() === 0, "ViewMan.size() should be zero, it's " + ViewMan.size());
     console.log("disposeEverything() is finished");
