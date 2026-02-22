@@ -120,7 +120,7 @@ if (strcmp($url_parts['host'],"tiles.maps.eox.at") === 0)
 // if there is no array, or an empty array, then allow all extensions
 if (isset($acceptable_extensions) && count($acceptable_extensions) > 0) {
     if (!in_array($ext, $acceptable_extensions)) {
-        exit("Illegal File Type " . $ext);
+        exit("Illegal File Type " . htmlspecialchars($ext, ENT_QUOTES, 'UTF-8'));
     }
 }
 
@@ -185,7 +185,7 @@ if (file_exists($cachedFile)) {
 
         $dataBlob = curl_exec($ch);
         if ($dataBlob === false) {
-            echo "<br>FAILED to fetch " . $url . $extra;
+            echo "<br>FAILED to fetch " . htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
             $info = curl_getinfo($ch);
             echo '<pre>';
             print_r($info);
@@ -216,7 +216,7 @@ if (file_exists($cachedFile)) {
 
 
     if ($dataBlob == false || strlen($dataBlob) === 0) {
-        echo "<br>FAILED to fetch " . $url . $extra;
+        echo "<br>FAILED to fetch " . htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
         if ($dataBlob == false) echo "<br>that returned false";
         else echo "<br>$dataBlob zero size";
         ob_end_flush();
