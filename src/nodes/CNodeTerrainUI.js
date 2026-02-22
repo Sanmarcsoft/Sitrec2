@@ -6,6 +6,7 @@ import {isLocal, SITREC_APP, SITREC_TERRAIN} from "../configUtils";
 import {CNodeSwitch} from "./CNodeSwitch";
 import {EUSToLLA} from "../LLA-ECEF-ENU";
 import {CNodeTerrain} from "./CNodeTerrain";
+import {CNodeBuildings3DTiles} from "./CNodeBuildings3DTiles";
 import {par} from "../par";
 import {addAlignedGlobe} from "../Globe";
 import {showHider} from "../KeyBoardHandler";
@@ -187,7 +188,7 @@ export class CNodeTerrainUI extends CNode {
         // this allows Docker builds, etc, to specify different map sources
         // a map source definition should be a JSON string
         // like:
-        // env[SITREC_MAPTYPE_MAPBOX] = "{\"name\":\"MapBox\",\"urlTemplate\":\"https://api.mapbox.com/v4/mapbox.{layer}/{z}/{x}/{y}@2x.jpg80?access_token=pk.eyJ1IjoibWlja3dlc3QiLCJhIjoiY21ianEydHIwMGliaTJrcHB4cDgzbGZuaSJ9.J7jU9B_pz4Mo723klYpywQ\",\"layers\":{\"satellite\":{\"type\":\"jpg\"}},\"layer\":\"satellite\",\"minZoom\":0,\"maxZoom\":18,\"supportsOceanSurface\":true}"
+        // env[SITREC_MAPTYPE_MAPBOX] = "{\"name\":\"MapBox\",\"urlTemplate\":\"https://api.mapbox.com/v4/mapbox.{layer}/{z}/{x}/{y}@2x.jpg80?access_token=YOUR_MAPBOX_TOKEN\",\"layers\":{\"satellite\":{\"type\":\"jpg\"}},\"layer\":\"satellite\",\"minZoom\":0,\"maxZoom\":18,\"supportsOceanSurface\":true}"
 
         // iterate over all Globals.env keys
         // if the key starts with SITREC_MAPTYPE_, then we parse the value as JSON
@@ -465,6 +466,37 @@ export class CNodeTerrainUI extends CNode {
             this.terrainNode.updateGreySphereVisibility();
         });
 
+        // 3D Buildings support
+        this.showBuildings = v.showBuildings ?? false;
+        this.buildingsSource = v.buildingsSource ?? "cesium-osm";
+        this.buildingsNode = null;
+
+        // Determine available building sources based on configured API keys
+        const cesiumToken = process.env.CESIUM_ION_TOKEN;
+        const googleKey = process.env.GOOGLE_MAPS_API_KEY;
+        const hasCesium = cesiumToken && cesiumToken !== "your_cesium_ion_token_here";
+        const hasGoogle = googleKey && googleKey !== "your_google_maps_api_key_here";
+
+        if (hasCesium || hasGoogle) {
+            const buildingsSourcesKV = {};
+            if (hasCesium) buildingsSourcesKV["Cesium OSM Buildings"] = "cesium-osm";
+            if (hasGoogle) buildingsSourcesKV["Google Photorealistic"] = "google-photorealistic";
+
+            this.gui.add(this, "showBuildings").name("3D Buildings").onChange(v => {
+                this.toggleBuildings(v);
+            }).tooltip("Show 3D building tiles from Cesium Ion or Google");
+
+            if (Object.keys(buildingsSourcesKV).length > 1) {
+                this.gui.add(this, "buildingsSource", buildingsSourcesKV).name("Buildings Source").onChange(v => {
+                    if (this.buildingsNode) {
+                        this.buildingsNode.setSource(v);
+                        // Update terrain visibility: hide for Google (includes ground), show for Cesium OSM (buildings only)
+                        this.setTerrainVisible(this.buildingsNode._activeSource !== "google-photorealistic");
+                    }
+                }).tooltip("Data source for 3D building tiles");
+            }
+        }
+
         console.log("CNodeTerrainUI: calling setMapType for initial map type " + this.mapType);
         // setMapType is async because it loads the capabilities
         this.setMapType(this.mapType).then(() => {
@@ -474,6 +506,11 @@ export class CNodeTerrainUI extends CNode {
         this.terrainNode = new CNodeTerrain({
             id: initialID,
             UINode: this});
+
+        // Create buildings node if enabled at startup
+        if (this.showBuildings) {
+            this.toggleBuildings(true);
+        }
 
         // Set initial UI visibility
         this.updateUIVisibility();
@@ -557,6 +594,34 @@ export class CNodeTerrainUI extends CNode {
         } else if (shouldShowGlobe && par.globe) {
             // Globe exists and should be visible
             par.globe.visible = true;
+        }
+    }
+
+    toggleBuildings(show) {
+        if (show && !this.buildingsNode) {
+            const cesiumToken = process.env.CESIUM_ION_TOKEN;
+            const googleKey = process.env.GOOGLE_MAPS_API_KEY;
+            this.buildingsNode = new CNodeBuildings3DTiles({
+                id: "buildings3DTiles",
+                source: this.buildingsSource,
+                cesiumIonToken: cesiumToken,
+                googleApiKey: googleKey,
+            });
+            // Google Photorealistic tiles include the ground surface,
+            // so hide terrain to avoid z-fighting and visual clutter.
+            if (this.buildingsNode._activeSource === "google-photorealistic") {
+                this.setTerrainVisible(false);
+            }
+        } else if (!show && this.buildingsNode) {
+            NodeMan.disposeRemove(this.buildingsNode);
+            this.buildingsNode = null;
+            this.setTerrainVisible(true);
+        }
+    }
+
+    setTerrainVisible(visible) {
+        if (this.terrainNode && this.terrainNode.group) {
+            this.terrainNode.group.visible = visible;
         }
     }
 
@@ -688,6 +753,10 @@ export class CNodeTerrainUI extends CNode {
     // but if the terrain is being removed, then we assume the GUI is too
     // this might not be the case, in the future
     dispose() {
+        if (this.buildingsNode) {
+            NodeMan.disposeRemove(this.buildingsNode);
+            this.buildingsNode = null;
+        }
         super.dispose();
     }
 
