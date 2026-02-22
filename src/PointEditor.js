@@ -124,9 +124,12 @@ export class PointEditor {
         // Initially hide the measurement
         this.measureAltitude.group.visible = false;
 
-        document.addEventListener('pointerdown', event => this.onPointerDown(event));
-        document.addEventListener('pointerup', event => this.onPointerUp(event));
-        document.addEventListener('pointermove', event => this.onPointerMove(event));
+        this._onPointerDown = event => this.onPointerDown(event);
+        this._onPointerUp = event => this.onPointerUp(event);
+        this._onPointerMove = event => this.onPointerMove(event);
+        document.addEventListener('pointerdown', this._onPointerDown);
+        document.addEventListener('pointerup', this._onPointerUp);
+        document.addEventListener('pointermove', this._onPointerMove);
 
 
 
@@ -744,6 +747,11 @@ export class PointEditor {
             this.transformControl.detach();
             this.transformControl.dispose();
         }
+
+        // Remove document event listeners
+        document.removeEventListener('pointerdown', this._onPointerDown);
+        document.removeEventListener('pointerup', this._onPointerUp);
+        document.removeEventListener('pointermove', this._onPointerMove);
 
         // Remove all control point objects
         for (let i = 0; i < this.splineHelperObjects.length; i++) {
