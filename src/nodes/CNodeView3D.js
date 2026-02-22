@@ -2404,28 +2404,35 @@ export class CNodeView3D extends CNodeViewCanvas {
     // Helper method to show track menu (extracted to avoid duplication)
     showTrackMenu(closestTrack, event) {
         console.log(`Found track near mouse: ${closestTrack.trackID}`);
-        
+
         // Mirror the track's GUI folder from the Contents menu
         if (closestTrack.guiFolder) {
+            // Refresh smoothing parameter visibility before creating the menu
+            const trackOb = closestTrack.trackOb;
+            const smoothedNode = trackOb?.smoothedTrackNode || trackOb?.trackNode;
+            if (smoothedNode?.isDynamicSmoothing) {
+                smoothedNode._updateParameterVisibility();
+            }
+
             const menuTitle = `Track: ${closestTrack.trackOb?.menuText || closestTrack.trackID}`;
-            
+
             // Create a standalone menu and mirror the track's GUI folder
             // Use dismissOnOutsideClick=false so dragging control points doesn't close the menu
             const standaloneMenu = Globals.menuBar.createStandaloneMenu(menuTitle, event.clientX, event.clientY, false);
-            
+
             // If menu creation was blocked (persistent menu is open), return early
             if (!standaloneMenu) {
                 return;
             }
-            
+
             // Set up dynamic mirroring for the track's GUI folder
             CustomManager.setupDynamicMirroring(closestTrack.guiFolder, standaloneMenu);
-            
+
             // Add a method to manually refresh the mirror
             standaloneMenu.refreshMirror = () => {
                 CustomManager.updateMirror(standaloneMenu);
             };
-            
+
             // Open the menu by default
             standaloneMenu.open();
             console.log(`Created standalone menu for track: ${closestTrack.trackID}`);

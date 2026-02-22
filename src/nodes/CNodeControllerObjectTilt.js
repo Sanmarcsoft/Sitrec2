@@ -10,9 +10,10 @@ import {getGlareAngleFromFrame} from "../JetUtils";
 
 
 // Full set of tilt options for sitch-defined objects (Gimbal, etc.)
+// lil-gui convention: { displayLabel: storedValue }
 const allTiltOptions = {
-    banking:"banking",
-    none:"none",
+    "No Banking":"none",
+    "Physical Banking":"banking",
     frontPointing:"frontPointing",
     frontPointingAir:"frontPointingAir",
     axialPush:"axialPush",
@@ -26,9 +27,8 @@ const allTiltOptions = {
 
 // Simplified set for dynamically-added track objects
 const simpleTiltOptions = {
-    none:"none",
-    banking:"banking",
-    frontPointing:"frontPointing",
+    "No Banking":"none",
+    "Physical Banking":"banking",
 };
 
 export class CNodeControllerObjectTilt extends CNodeController {
@@ -69,12 +69,7 @@ export class CNodeControllerObjectTilt extends CNodeController {
             this.tiltTypeGuiParent = v.guiFolder ?? guiMenus.physics;
             this._explicitGuiFolder = !!v.guiFolder;
             const options = this._explicitGuiFolder ? simpleTiltOptions : allTiltOptions;
-            this.tiltTypeGui = this.tiltTypeGuiParent.add(this,"tiltType", options)
-                .name("Banking")
-                .listen(()=>{setRenderOne(true)})
-            // Mark as common so CNode3DObject.destroyNonCommonUI() preserves it
-            // when rebuilding geometry-specific GUI controls during deserialization
-            this.tiltTypeGui.isCommon = true;
+            this._createTiltGui(this.tiltTypeGuiParent, options);
         }
 
         // the input track is likely not smooth enought, so create a smoothed version
@@ -107,16 +102,24 @@ export class CNodeControllerObjectTilt extends CNodeController {
         }
     }
 
+    _createTiltGui(parent, options) {
+        if (this.tiltTypeGui) {
+            this.tiltTypeGui.destroy();
+        }
+        this.tiltTypeGuiParent = parent;
+        this.tiltTypeGui = parent.add(this, "tiltType", options)
+            .name("Banking")
+            .listen(() => { setRenderOne(true) })
+        // Mark as common so CNode3DObject.destroyNonCommonUI() preserves it
+        // when rebuilding geometry-specific GUI controls during deserialization
+        this.tiltTypeGui.isCommon = true;
+    }
+
     // Move the tilt type GUI from physics menu to the object's GUI folder
     moveGuiTo(newParent) {
         if (this._explicitGuiFolder) return;
         if (this.tiltTypeGui && this.tiltTypeGuiParent !== newParent) {
-            this.tiltTypeGui.destroy();
-            this.tiltTypeGuiParent = newParent;
-            this.tiltTypeGui = newParent.add(this,"tiltType", allTiltOptions)
-                .name("Banking")
-                .listen(()=>{setRenderOne(true)})
-            this.tiltTypeGui.isCommon = true;
+            this._createTiltGui(newParent, allTiltOptions);
         }
     }
 
@@ -356,7 +359,7 @@ export class CNodeControllerObjectTilt extends CNodeController {
                         break;
 
                     default:
-                        asert(0, "Unknown tilt type: " + this.tiltType + " in CNodeControllerObjectTilt.js, node id: " + this.id)
+                        assert(0, "Unknown tilt type: " + this.tiltType + " in CNodeControllerObjectTilt.js, node id: " + this.id)
                         break;
 
                 }

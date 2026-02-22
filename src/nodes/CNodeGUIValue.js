@@ -305,10 +305,7 @@ export class CNodeGUIValue extends CNodeGUIConstant {
             return this
 
 
-        if (visible)
-            this.guiEntry.show()
-        else
-            this.guiEntry.hide()
+        this.guiEntry.show(visible)
 
         return this
     }

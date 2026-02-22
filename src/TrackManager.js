@@ -395,7 +395,9 @@ class CTrackManager extends CManager {
 
                     const dummy = {
                         removeTrack : () => {
-                            TrackManager.disposeRemove(trackID);
+                            if (confirm(`Remove track "${shortName}"?`)) {
+                                TrackManager.disposeRemove(trackID);
+                            }
                         },
                         createSpline : () => {
                             const frames = trackNode.frames;

@@ -59,7 +59,16 @@ export class CNodeSmoothedPositionTrack extends CNodeTrack {
         this.guiFolder.add(this, "method", methods)
             .name("Smoothing Method")
             .onChange(() => this._onMethodChanged());
+        // Set initial visibility, and defer a second pass to ensure the GUI is fully settled
         this._updateParameterVisibility();
+        setTimeout(() => this._updateParameterVisibility(), 0);
+
+        // Refresh visibility when the folder is opened
+        this.guiFolder.onOpenClose((gui) => {
+            if (!gui._closed) {
+                this._updateParameterVisibility();
+            }
+        });
     }
 
     _onMethodChanged() {
