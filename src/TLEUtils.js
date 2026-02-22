@@ -175,7 +175,8 @@ function tleEpochToDate(epochYr, epochDays) {
     const fullYear = (epochYr < 57) ? 2000 + epochYr : 1900 + epochYr;
 
     // Calculate milliseconds since start of year
-    const startOfYear = new Date(Date.UTC(fullYear, 0, 1));
+    // TLE day 1.0 = Jan 1, so use Dec 31 of prior year as base (matching dateToTLE)
+    const startOfYear = new Date(Date.UTC(fullYear, 0, 0));
     const msSinceStart = epochDays * 24 * 60 * 60 * 1000;
 
     return new Date(startOfYear.getTime() + msSinceStart);
