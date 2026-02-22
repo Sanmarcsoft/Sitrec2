@@ -189,17 +189,9 @@ export function ECEFToLLA(X, Y, Z) {
 
     //Now calculate LLA
     const latitude  = Math.atan(num/denom);
-    let longitude = Math.atan(Y/X);
+    const longitude = Math.atan2(Y, X);
     const N = getN(latitude);
     const altitude  = (p / Math.cos(latitude)) - N;
-
-    if (X < 0 && Y < 0) {
-        longitude = longitude - Math.PI;
-    }
-
-    if (X < 0 && Y > 0) {
-        longitude = longitude + Math.PI;
-    }
 
     return [latitude, longitude, altitude];
 }
