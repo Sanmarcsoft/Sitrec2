@@ -1,7 +1,7 @@
 import {Plane, Vector3} from "three";
 import {atan2, cos, degrees, radians, sin} from "./utils.js";
 import {ECEF2EUS, wgs84} from "./LLA-ECEF-ENU";
-import {Sit} from "./Globals";
+import {Globals, Sit} from "./Globals";
 import {assert} from "./assert.js";
 import {MV3, V3} from "./threeUtils";
 
@@ -137,6 +137,79 @@ function PRJ2EA(pitch, roll, jetPitch) {
     return XYZ2EA(PRJ2XYZ(pitch,roll,jetPitch,1))
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Earth geometry utility functions.
+// Currently implemented using sphere geometry (all radii = wgs84.RADIUS).
+// These are the single points of change when migrating to ellipsoid geometry.
+////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Earth center in EUS (East-Up-South) rendering coordinates.
+ * Uses Globals.equatorRadius, which equals wgs84.RADIUS in both sphere and ellipsoid
+ * mode — the equatorial radius is the same. When full geodetic support arrives, callers
+ * that need a latitude-specific "center" will be replaced with geodetic-normal calls.
+ */
+export function earthCenterEUS() {
+    return V3(0, -Globals.equatorRadius, 0);
+}
+
+/**
+ * MSL altitude of a point in EUS coordinates.
+ * Uses Globals.equatorRadius. When Globals.polarRadius === Globals.equatorRadius this
+ * is an exact sphere result. Proper geodetic altitude (perpendicular to ellipsoid
+ * surface) will be implemented here once EUSToECEF/ECEFToLLA are fully parameterised.
+ */
+export function altitudeMSL(point) {
+    return point.clone().sub(earthCenterEUS()).length() - Globals.equatorRadius;
+}
+
+/**
+ * Move a point to a specific MSL altitude, staying on the same radial line.
+ * Degenerates to exact sphere result when polarRadius === equatorRadius.
+ * Will be replaced with a geodetic-normal offset once the ECEF pipeline is parameterised.
+ */
+export function setAltitudeMSL(point, altitude) {
+    const center = earthCenterEUS();
+    const dir = point.clone().sub(center).normalize();
+    return center.clone().add(dir.multiplyScalar(Globals.equatorRadius + altitude));
+}
+
+/**
+ * Point on the Earth surface directly below a given EUS point.
+ */
+export function pointOnSurface(point) {
+    return setAltitudeMSL(point, 0);
+}
+
+/**
+ * Vertical drop of Earth's surface below a flat horizontal tangent plane
+ * at horizontal distance dist from the tangent point.
+ * The default radius is Globals.equatorRadius; a caller with a latitude-specific
+ * radius of curvature may pass it explicitly.
+ */
+export function earthSurfaceDrop(dist, r = Globals.equatorRadius) {
+    return r - Math.sqrt(r * r - dist * dist);
+}
+
+/**
+ * Straight-line distance to the visible horizon from height h above MSL.
+ * Default radius is Globals.equatorRadius.
+ */
+export function horizonDistance(h, r = Globals.equatorRadius) {
+    return Math.sqrt((r + h) * (r + h) - r * r);
+}
+
+/**
+ * How much of an object at ground distance d and height h above MSL
+ * is hidden below the horizon due to Earth's curvature.
+ * Default radius is Globals.equatorRadius.
+ */
+export function hiddenBelowHorizon(h, d, r = Globals.equatorRadius) {
+    return r / Math.cos(d / r - Math.acos(r / (r + h))) - r;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 // How much is the ground below the EUS plane
 // x, y and radius are in meters
 // Note there two Pythagorean ways you can derive drop
@@ -146,12 +219,11 @@ function PRJ2EA(pitch, roll, jetPitch) {
 function drop(x,y,radius) {
     // dist = how far it is from 0,0 horizontally
     const dist = Math.sqrt(x*x + y*y);
-    return radius - Math.sqrt(radius*radius - dist*dist)
-
+    return earthSurfaceDrop(dist, radius);
 }
 
-export function dropFromDistance(dist, radius=wgs84.RADIUS) {
-    return radius - Math.sqrt(radius*radius - dist*dist)
+export function dropFromDistance(dist, radius=Globals.equatorRadius) {
+    return earthSurfaceDrop(dist, radius);
 }
 
 
@@ -160,6 +232,7 @@ export function dropFromDistance(dist, radius=wgs84.RADIUS) {
 export function pointAltitude(position, radius=wgs84.RADIUS) {
     return V3(0,-radius,0).sub(position).length() - radius;
 }
+// preferred: use altitudeMSL(position) for MSL altitude calculations
 
 
 export function raisePoint(position, raise, radius=wgs84.RADIUS) {
@@ -181,9 +254,10 @@ export {drop, drop3, CueAz,PRJ2EA,EAJP2PR,XYZJ2PR,XYZ2EA,EA2XYZ,PRJ2XYZ}
 // position is in EUS (East, Up, South) coordinates relative to an arbitary origin
 // origin might be above the surface (in Gimbal it's the start of the jet track, so that is passed in
 export function getLocalUpVector(position, radius=wgs84.RADIUS) {
-    const center = V3(0, -(radius), 0)
-    const centerToPosition = position.clone().sub(center)
-    return centerToPosition.normalize();
+    // Uses earthCenterEUS() for the default radius (wgs84.RADIUS).
+    // ELLIPSOID: the center concept breaks down — up will become the geodetic normal.
+    const center = (radius === wgs84.RADIUS) ? earthCenterEUS() : V3(0, -radius, 0);
+    return position.clone().sub(center).normalize();
 }
 
 export function getLocalDownVector(position, radius=wgs84.RADIUS) {
@@ -285,14 +359,11 @@ export function extractRollFromMatrix(m) {
 // Given a point p. return the point on the globe below this, with an optional added altitude
 // (essentially adjusting the MSL altitude of a point)
 export function pointOnSphereBelow(p, altitude=0) {
-    const center = V3(0,-wgs84.RADIUS, 0);
-    const toP = p.clone().sub(center)
-    return toP.normalize().multiplyScalar(wgs84.RADIUS+altitude).add(center);
+    return setAltitudeMSL(p, altitude);
 }
 
 export function altitudeAboveSphere(p) {
-    const center = V3(0,-wgs84.RADIUS, 0);
-    return p.clone().sub(center).length() - wgs84.RADIUS;
+    return altitudeMSL(p);
 }
 
 // given a position and a forward vector, return the Azimuth and Elevation (heading and pitch)
@@ -386,9 +457,9 @@ export function getCompassHeading(position, forward, camera) {
 }
 
 export function distanceToHorizon(h, r = wgs84.RADIUS) {
-    return Math.sqrt((r + h) * (r + h) - r * r)
+    return horizonDistance(h, r);
 }
 
 export function hiddenByGlobe(h, d, r = wgs84.RADIUS) {
-    return r / Math.cos(d / r - Math.acos(r / (r + h))) - r
+    return hiddenBelowHorizon(h, d, r);
 }

@@ -13,6 +13,7 @@ import {MV3} from "../threeUtils";
 import {getPTZController} from "../js/CameraControls";
 
 import {waitForParsingToComplete} from "../CFileManager";
+import {updateEarthRadii} from "../LLA-ECEF-ENU";
 
 
 export const SitNightSky = {
@@ -97,6 +98,7 @@ export const SitNightSky = {
     useDayNightGlobe: true,
     globeScale: 1,  // was defaulting to 0.99
     localLatLon: true,
+    useEllipsoid: true,
 
     dropTargets: {
         "track": ["cameraSwitch"],
@@ -112,6 +114,11 @@ export const SitNightSky = {
 
     setup2: function () {
 
+        guiMenus.main.add(Sit, "useEllipsoid")
+            .name("Use Ellipsoid Earth Model")
+            .tooltip("Sphere: fast legacy model. Ellipsoid: accurate WGS84 shape (higher latitudes benefit most).")
+            .listen()
+            .onChange((v) => { updateEarthRadii(v); setRenderOne(true); });
 
         const cameraSwitch = new CNodeSwitch({
             id: "cameraSwitch",

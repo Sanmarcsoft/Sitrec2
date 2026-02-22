@@ -25,7 +25,7 @@ import {Globals, NodeMan, setRenderOne, Synth3DManager} from './Globals';
 import {par} from "./par";
 
 
-import {drop3, pointOnSphereBelow} from "./SphericalMath"
+import {altitudeMSL, drop3, pointOnSphereBelow, raisePoint, setAltitudeMSL} from "./SphericalMath"
 import {GlobalScene} from "./LocalFrame";
 import * as LAYER from "./LayerMasks";
 import {ECEFToEUS, EUSToECEF, LLAToEUS, wgs84} from "./LLA-ECEF-ENU";
@@ -762,9 +762,7 @@ export function aboveGroundLevelAtLL(lat, lon) {
 
 // given a point in EUS, return a point above (or below) it by a given additional height
 export function pointAbove(point, height) {
-    const center = V3(0,-wgs84.RADIUS,0);
-    const toPoint = point.clone().sub(center).normalize();
-    return point.clone().add(toPoint.multiplyScalar(height));
+    return raisePoint(point, height);
 }
 
 export function adjustHeightAboveGround (point, height, raycast = false) {
@@ -773,14 +771,11 @@ export function adjustHeightAboveGround (point, height, raycast = false) {
 }
 
 export function adjustHeightMSL(point, height) {
-    const center = V3(0, -wgs84.RADIUS, 0);
-    const dir = point.clone().sub(center).normalize();
-    return center.clone().add(dir.multiplyScalar(wgs84.RADIUS + height));
+    return setAltitudeMSL(point, height);
 }
 
 export function calculateAltitude(point) {
-    const center = V3(0,-wgs84.RADIUS,0);
-    return point.clone().sub(center).length() - wgs84.RADIUS;
+    return altitudeMSL(point);
 }
 
 // given a lat/lon, calculate the terrainelevation of the ground above the WGS84 sphere

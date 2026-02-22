@@ -31,7 +31,7 @@ import {
     Units
 } from "./Globals";
 import {isKeyHeld, toggler} from "./KeyBoardHandler";
-import {ECEFToLLAVD_Sphere, EUSToECEF, EUSToLLA, LLAToEUS} from "./LLA-ECEF-ENU";
+import {ECEFToLLAVD_Sphere, EUSToECEF, EUSToLLA, LLAToEUS, updateEarthRadii} from "./LLA-ECEF-ENU";
 import {par} from "./par";
 import {GlobalScene} from "./LocalFrame";
 import {refreshLabelsAfterLoading} from "./nodes/CNodeLabels3D";
@@ -183,6 +183,13 @@ export class CCustomManager {
                 this.saveGlobalSettings(true);
             })
             .listen();
+
+        // Earth model toggle: sphere (legacy) vs WGS84 ellipsoid
+        settingsFolder.add(Sit, "useEllipsoid")
+            .name("Use Ellipsoid Earth Model")
+            .tooltip("Sphere: fast legacy model. Ellipsoid: accurate WGS84 shape (higher latitudes benefit most).")
+            .listen()
+            .onChange((v) => { updateEarthRadii(v); setRenderOne(true); });
 
         // Add AI Model selector dropdown (bound directly to Globals.settings.chatModel)
         this.availableChatModels = [];

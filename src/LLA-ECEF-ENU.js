@@ -3,7 +3,7 @@
 
 import {Matrix3, Vector3} from "three";
 // Removed import of cos, degrees, radians, sin - using direct Math functions instead
-import {Sit} from "./Globals";
+import {Globals, Sit} from "./Globals";
 import {assert} from "./assert.js";
 
 // Earth radius in kilometers (average)
@@ -76,6 +76,17 @@ export const wgs84 = {
 wgs84.FLATTENING = 1/wgs84.FLATTENING_DENOM;
 wgs84.POLAR_RADIUS = wgs84.RADIUS*(1-wgs84.FLATTENING);
 wgs84.CIRC = 2*Math.PI*wgs84.RADIUS
+
+/**
+ * Update Globals.equatorRadius and Globals.polarRadius based on the earth model.
+ *   useEllipsoid=false → both = wgs84.RADIUS (degenerate sphere, same as legacy code)
+ *   useEllipsoid=true  → equatorial = wgs84.RADIUS, polar = wgs84.POLAR_RADIUS (real WGS84)
+ * Call this when a sitch loads and when the user toggles the earth model.
+ */
+export function updateEarthRadii(useEllipsoid) {
+    Globals.equatorRadius = wgs84.RADIUS;
+    Globals.polarRadius   = useEllipsoid ? wgs84.POLAR_RADIUS : wgs84.RADIUS;
+}
 
 
 // Other elipsoids I've seen:
