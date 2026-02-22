@@ -67,9 +67,10 @@ if (isset($_GET['action']) && $_GET['action'] === 'getPresignedUrl') {
     
     $fileName = preg_replace('/[^\w\s\.\-\(\)]/', '_', $fileName);
     
-    if (!isSafeName($fileName) || ($version && !isSafeName($version))) {
+    if (!isSafeName($fileName) || !isSafeExtension($fileName) ||
+        ($version && (!isSafeName($version) || !isSafeExtension($version)))) {
         http_response_code(400);
-        echo json_encode(['error' => 'Invalid filename or version']);
+        echo json_encode(['error' => 'Invalid filename, version, or file type']);
         exit();
     }
     
@@ -162,9 +163,10 @@ if (isset($_GET['action']) && $_GET['action'] === 'initiateMultipart') {
     
     $fileName = preg_replace('/[^\w\s\.\-\(\)]/', '_', $fileName);
     
-    if (!isSafeName($fileName) || ($version && !isSafeName($version))) {
+    if (!isSafeName($fileName) || !isSafeExtension($fileName) ||
+        ($version && (!isSafeName($version) || !isSafeExtension($version)))) {
         http_response_code(400);
-        echo json_encode(['error' => 'Invalid filename or version']);
+        echo json_encode(['error' => 'Invalid filename, version, or file type']);
         exit();
     }
     
@@ -269,9 +271,10 @@ if (isset($_GET['action']) && $_GET['action'] === 'completeMultipart') {
     
     $fileName = preg_replace('/[^\w\s\.\-\(\)]/', '_', $fileName);
     
-    if (!isSafeName($fileName) || ($version && !isSafeName($version))) {
+    if (!isSafeName($fileName) || !isSafeExtension($fileName) ||
+        ($version && (!isSafeName($version) || !isSafeExtension($version)))) {
         http_response_code(400);
-        echo json_encode(['error' => 'Invalid filename or version']);
+        echo json_encode(['error' => 'Invalid filename, version, or file type']);
         exit();
     }
     
@@ -358,6 +361,17 @@ function isSafeName($name) {
     return preg_match('/^[A-Za-z0-9 _\\-\\.\\(\\)]+$/', $name);
 }
 
+// Extensions that must never be stored — server-side executables and config overrides
+function isSafeExtension($filename) {
+    static $DANGEROUS_EXTENSIONS = [
+        'php', 'php3', 'php4', 'php5', 'php7', 'phtml', 'phar',
+        'shtml', 'shtm', 'cgi', 'pl', 'py', 'rb', 'sh', 'bash',
+        'asp', 'aspx', 'jsp', 'cfm', 'htaccess', 'htpasswd'
+    ];
+    $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+    return !in_array($ext, $DANGEROUS_EXTENSIONS, true);
+}
+
 // check to see if we have delete = true
 if (isset($_POST['delete']) && $_POST['delete'] == 'true') {
     $filename = $_POST['filename'] ?? '';
@@ -423,11 +437,12 @@ $version = isset($_POST['version']) ? basename($_POST['version']) : null;
 $fileName = preg_replace('/[^\w\s\.\-\(\)]/', '_', $fileName);
 
 
-// Validate names
-if (!isSafeName($fileName) || ($version && !isSafeName($version))) {
+// Validate names and extensions
+if (!isSafeName($fileName) || !isSafeExtension($fileName) ||
+    ($version && (!isSafeName($version) || !isSafeExtension($version)))) {
     http_response_code(400);
-    echo("Invalid filename or version provided " . $fileName);
-    exit("Invalid filename or version provided");
+    echo("Invalid filename, version, or file type provided " . $fileName);
+    exit("Invalid filename, version, or file type provided");
 }
 
 writeLog(print_r($_FILES, true));
