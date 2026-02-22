@@ -1631,6 +1631,16 @@ export class CNodeView3D extends CNodeViewCanvas {
             this.xrActive = false;
         }
         
+        // Dispose render targets
+        if (this.renderTargetAntiAliased) this.renderTargetAntiAliased.dispose();
+        if (this.renderTargetA) this.renderTargetA.dispose();
+        if (this.renderTargetB) this.renderTargetB.dispose();
+
+        // Dispose shader materials and geometry
+        if (this.copyMaterial) this.copyMaterial.dispose();
+        if (this.skyBrightnessMaterial) this.skyBrightnessMaterial.dispose();
+        if (this.fullscreenQuadGeometry) this.fullscreenQuadGeometry.dispose();
+
         super.dispose();
         this.renderer.dispose();
         this.renderer.forceContextLoss();
