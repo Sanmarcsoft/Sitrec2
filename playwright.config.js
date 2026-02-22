@@ -30,9 +30,10 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         launchOptions: {
           args: [
-            '--use-gl=swiftshader',
+            '--use-angle=swiftshader',
             '--ignore-gpu-blocklist',
             '--enable-webgl',
+            '--enable-unsafe-swiftshader',
             '--disk-cache-dir=./playwright-cache',
             '--disk-cache-size=1073741824',
           ],
