@@ -1032,7 +1032,7 @@ export class CNodeSpecificFrame extends CNode {
     }
 
     getValueFrame(frame) {
-        return this.in.node.getValueFrame(frame)
+        return this.in.node.getValueFrame(this.specificFrame)
     }
 }
 
