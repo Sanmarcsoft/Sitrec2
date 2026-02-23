@@ -97,3 +97,109 @@ The conversion chain is: **LLA <-> ECEF <-> ENU <-> EUS**, implemented in `LLA-E
 ## 3D Tiles (Cesium / Google)
 
 Cesium Ion and Google Photorealistic 3D Tiles are delivered in ECEF coordinates on the WGS84 ellipsoid. Sitrec transforms them into EUS using a precomputed ECEF-to-EUS matrix (`CNodeBuildings3DTiles.js`, `buildECEFToEUSMatrix4`). No geoid correction is needed here because the tile positions are already ellipsoid-relative.
+
+
+# (In Depth) Altitude Naming Conventions & the MSL Confusion Problem
+
+## The Three Surfaces
+
+| Surface | Description |
+|---|---|
+| **WGS84 Ellipsoid** | A smooth mathematical oblate spheroid. Pure geometry, no physical meaning. Reference for GPS. |
+| **Geoid** | An equipotential gravitational surface approximating mean sea level. Irregular shape, physically meaningful. |
+| **Mean Sea Level (MSL)** | Approximated by the geoid, but also used loosely for barometric altitude — the source of most confusion. |
+
+---
+
+## Standard Terms
+
+### Ellipsoidal Height (geometric)
+- **HAE** — Height Above Ellipsoid *(most common in military/DoD)*
+- **Ellipsoidal height / ellipsoid height**
+- **h** *(lowercase, formal geodetic literature)*
+- *"GPS altitude"* *(informal)*
+
+### Geoid / Orthometric Height (physical)
+- **MSL** — Mean Sea Level *(aviation, colloquial — ambiguous, see below)*
+- **AMSL** — Above Mean Sea Level *(aviation — same ambiguity)*
+- **Orthometric height** *(formal geodetic term)*
+- **H** *(uppercase, formal geodetic literature)*
+
+### Geoid Undulation (the separation between the two)
+- **N** — geoid undulation *(formal geodetic literature)*
+- **Geoid separation** *(NMEA $GPGGA sentence field name)*
+- **Geoid height** *(less precise — easily confused with "height above geoid")*
+
+---
+
+## The Fundamental Relationship
+
+```
+h (HAE) = H (orthometric/MSL) + N (geoid undulation)
+```
+
+The geoid undulation **N** ranges globally from approximately **−107 m** (Indian Ocean) to **+85 m** (North Atlantic). Over the continental US it is typically **+20 to +30 m**.
+
+---
+
+## Geoid Models
+
+| Model | Resolution | Accuracy | Status |
+|---|---|---|---|
+| EGM96 | 15′ | ~1 m | Legacy — still dominant in military avionics, ArcGIS default |
+| EGM2008 | 2.5′ / 1′ | ~10 cm | Current NGA standard, EPSG recommended, slow adoption |
+| EGM2020 | TBD | Better | Not yet released as of early 2026; NGA plans ~2028 |
+
+---
+
+## The MSL Confusion Problem
+
+"MSL" is used to mean **three different things** in practice:
+
+### 1. Geodetic / GPS MSL (orthometric height)
+Height above the geoid (EGM96 or EGM2008). Derived by GPS receiver applying a geoid model to the raw ellipsoidal height. This is the geodetically correct meaning.
+
+### 2. Barometric / Aviation MSL
+Height derived from atmospheric pressure, calibrated to the ISA (International Standard Atmosphere) model. Reported by altimeters and used in ATC. **Not the same as geodetic MSL** — deviates by tens of meters under non-standard temperature/pressure conditions.
+
+### 3. "GPS altitude" mislabeled as MSL
+Many GPS devices, NMEA sentences, and flight logs report the raw ellipsoidal height (HAE) but label it "altitude" or "MSL" — especially when the onboard geoid model is absent or low quality.
+
+---
+
+## NMEA $GPGGA Sentence
+The NMEA standard correctly separates these:
+```
+$GPGGA,...,<MSL altitude>,M,<geoid separation>,M,...
+```
+- **MSL altitude** = orthometric height (H) above geoid
+- **Geoid separation** = N (geoid height above ellipsoid)
+- **Ellipsoidal height** = MSL altitude + geoid separation (h = H + N)
+
+However, the geoid separation field is often populated from a coarse onboard table (sometimes just a single global constant), making it unreliable on many consumer devices.
+
+---
+
+## MISB ST 0601 (Military UAV Metadata)
+
+| Tag | Name | Meaning |
+|---|---|---|
+| 15 | SensorTrueAltitude | MSL (orthometric, assumed EGM96) |
+| 75 | SensorEllipsoidHeight | HAE (WGS84 ellipsoid) |
+| 104 | SensorEllipsoidHeightExtended | HAE, extended precision |
+
+The standard defines Tag 15 as "MSL" but **does not explicitly specify EGM96**. In practice, DoD platforms of the Predator/Reaper era use EGM96 as the geoid model. Tag 75 was added later specifically because Tag 15's ambiguity was a known problem.
+
+---
+
+## Summary of What to Assume
+
+| Source | What "altitude" likely means |
+|---|---|
+| Raw GPS / GNSS receiver output | HAE (ellipsoidal) |
+| NMEA $GPGGA "MSL altitude" field | Orthometric (geoid), quality varies |
+| Aviation altimeter / ATC reports | Barometric MSL |
+| Military KLV/MISB Tag 15 | EGM96 orthometric MSL |
+| Military KLV/MISB Tag 75/104 | HAE (WGS84) |
+| ArcGIS / web mapping elevation | EGM96 orthometric MSL |
+| SRTM terrain data | EGM96 orthometric MSL |
