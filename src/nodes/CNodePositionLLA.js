@@ -6,6 +6,7 @@
 //
 // Now with optional wind to adjust the position over time
 import {EUSToLLA, LLAToEUS} from "../LLA-ECEF-ENU";
+import {meanSeaLevelOffset} from "../EGM96Geoid";
 import {CNode} from "./CNode";
 import {CNodeTrack} from "./CNodeTrack";
 import {V3} from "../threeUtils";
@@ -418,7 +419,8 @@ export class CNodePositionLLA extends CNodeTrack {
                 this.updateGroundLevel();
                 this.EUS = LLAToEUS(this._LLA[0], this._LLA[1], aglHeight + this.groundLevel);
             } else {
-                this.EUS = LLAToEUS(this._LLA[0], this._LLA[1], aglHeight);
+                // aglHeight is MSL; convert to HAE for LLAToEUS (h = H + N)
+                this.EUS = LLAToEUS(this._LLA[0], this._LLA[1], aglHeight + meanSeaLevelOffset(this._LLA[0], this._LLA[1]));
             }
 
             for (let f = 0; f < this.frames; f++) {
@@ -475,11 +477,9 @@ export class CNodePositionLLA extends CNodeTrack {
         const lat = this.in.lat.v(f)
         const lon = this.in.lon.v(f)
         let alt = this.in.alt.v(f)
-        // alt is MSL in meters
+        // alt is MSL in meters; convert to HAE for LLAToEUS (h = H + N)
 
-
-
-        return LLAToEUS(lat, lon, alt)
+        return LLAToEUS(lat, lon, alt + meanSeaLevelOffset(lat, lon))
     }
 
 
