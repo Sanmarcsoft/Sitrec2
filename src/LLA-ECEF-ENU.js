@@ -87,8 +87,8 @@ export function updateEarthRadii(useEllipsoid) {
     const newEquator = wgs84.RADIUS;
     // Testing: use 0.5 * equatorialRadius when ellipsoid is enabled for obvious visual difference.
     // Replace 0.5 * wgs84.RADIUS with wgs84.POLAR_RADIUS once the implementation is verified.
-    const newPolar = useEllipsoid ? 0.5 * wgs84.RADIUS : wgs84.RADIUS;
-//    const newPolar = useEllipsoid ? wgs84.POLAR_RADIUS : wgs84.RADIUS;
+//    const newPolar = useEllipsoid ? 0.5 * wgs84.RADIUS : wgs84.RADIUS;
+    const newPolar = useEllipsoid ? wgs84.POLAR_RADIUS : wgs84.RADIUS;
 
     if (newEquator === Globals.equatorRadius && newPolar === Globals.polarRadius) return;
 
@@ -126,7 +126,9 @@ export function RLLAToECEF_radii(latitude, longitude, altitude) {
     return new Vector3(X, Y, Z);
 }
 
-/** ECEF → [lat, lon, alt] (radians) using the Bowring method with Globals radii. */
+/** ECEF → [lat, lon, alt] (radians) using the iterative Bowring method with Globals radii.
+ *  The single-step Bowring approximation has ~10m error at 10km altitude on extreme ellipsoids
+ *  (e.g. the 0.5× polar radius test ellipsoid). Iterating the latitude converges to sub-mm. */
 export function ECEFToLLA_radii(X, Y, Z) {
     const a = Globals.equatorRadius;
     const b = Globals.polarRadius;
@@ -140,10 +142,21 @@ export function ECEFToLLA_radii(X, Y, Z) {
     const sintheta = Math.sin(theta);
     const costheta = Math.cos(theta);
 
-    const num = Z + eprime2 * b * sintheta * sintheta * sintheta;
-    const denom = p - e2 * a * costheta * costheta * costheta;
+    // Bowring initial estimate
+    let latitude  = Math.atan2(
+        Z + eprime2 * b * sintheta * sintheta * sintheta,
+        p - e2 * a * costheta * costheta * costheta
+    );
 
-    const latitude  = Math.atan(num / denom);
+    // Iterate to converge latitude (needed for high eccentricity or high altitude)
+    for (let i = 0; i < 5; i++) {
+        const sinLat = Math.sin(latitude);
+        const N = a / Math.sqrt(1 - e2 * sinLat * sinLat);
+        const newLat = Math.atan2(Z + e2 * N * sinLat, p);
+        if (Math.abs(newLat - latitude) < 1e-15) break;
+        latitude = newLat;
+    }
+
     const longitude = Math.atan2(Y, X);
     const N         = getN_radii(latitude);
     const cosLat    = Math.cos(latitude);
