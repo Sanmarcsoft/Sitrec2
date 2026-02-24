@@ -195,8 +195,8 @@ export class CNodeDisplayEarthShadow extends CNode3DGroup {
         const vertices = [];
         const indices = [];
         
-        // Globe center in EUS coordinates
-        const globeCenter = V3(0, -this.earthRadius, 0);
+        // ECEF/EUS are identical in this mode, so Earth's center is at origin.
+        const globeCenter = V3(0, 0, 0);
         
         // Bottom circle (at Earth)
         for (let i = 0; i < segments; i++) {
@@ -266,8 +266,8 @@ export class CNodeDisplayEarthShadow extends CNode3DGroup {
         const umbraRadius = shadowData.umbraDiameter / 2;
         const penumbraRadius = shadowData.penumbraDiameter / 2;
         
-        // Globe center in EUS coordinates
-        const globeCenter = V3(0, -this.earthRadius, 0);
+        // ECEF/EUS are identical in this mode, so Earth's center is at origin.
+        const globeCenter = V3(0, 0, 0);
         
         // Circle center is at altitude along antisolar direction (fromSun)
         const circleCenter = globeCenter.clone().add(this.fromSun.clone().multiplyScalar(this.altitude));

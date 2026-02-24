@@ -10,7 +10,6 @@ import {
     Vector3
 } from "three";
 import {GlobalScene} from "./LocalFrame";
-import {wgs84} from "./LLA-ECEF-ENU";
 import {Globals, NodeMan, setRenderOne, Sit} from "./Globals";
 import {earthCenterEUS} from "./SphericalMath";
 
@@ -219,9 +218,8 @@ export function addAlignedGlobe(globeScale = 1) {
     GlobalScene.add(world);
     let sphere
 
-    const equatorRadius = wgs84.RADIUS * globeScale;
-//    const polarRadius = wgs84.POLAR_RADIUS * globeScale;
-    const polarRadius = wgs84.RADIUS * globeScale;
+    const equatorRadius = Globals.equatorRadius * globeScale;
+    const polarRadius = Globals.polarRadius * globeScale;
 
     if (Sit.useDayNightGlobe)
         sphere = createSphereDayNight(equatorRadius, polarRadius, 80);
@@ -243,5 +241,4 @@ export function addAlignedGlobe(globeScale = 1) {
     return sphere;
 
 }
-
 

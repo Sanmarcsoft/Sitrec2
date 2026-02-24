@@ -1262,11 +1262,14 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             Globals.toMoon = eusDir.clone().normalize()
             Globals.fromMoon = Globals.toMoon.clone().negate()
             
-            const eusOriginObserver = new Astronomy.Observer(Sit.lat, Sit.lon, 0);
-            const moonFromOrigin = Astronomy.Equator(planet, date, eusOriginObserver, false, true);
-            const moonDistance = moonFromOrigin.dist * 149597870700;
-            const moonRA = (moonFromOrigin.ra) / 24 * 2 * Math.PI;
-            const moonDec = radians(moonFromOrigin.dec);
+            // For eclipse geometry, use geocentric Moon coordinates.
+            // Using a topocentric observer (Sit.lat/lon) introduces parallax that
+            // shifts the umbra footprint on Earth (often visibly north/south).
+            const geocentricObserver = new Astronomy.Observer(0, 0, 0);
+            const moonGeocentric = Astronomy.Equator(planet, date, geocentricObserver, false, true);
+            const moonDistance = moonGeocentric.dist * 149597870700;
+            const moonRA = (moonGeocentric.ra) / 24 * 2 * Math.PI;
+            const moonDec = radians(moonGeocentric.dec);
             const moonDir = getCelestialDirectionFromRaDec(moonRA, moonDec, date);
             
             Globals.moonPos = moonDir.clone().multiplyScalar(moonDistance)
@@ -1434,6 +1437,5 @@ export function addNightSky(def) {
 
     return nightSky;
 }
-
 
 

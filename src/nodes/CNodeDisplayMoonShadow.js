@@ -229,7 +229,8 @@ export class CNodeDisplayMoonShadow extends CNode3DGroup {
         
         const shadowDir = Globals.fromSun.clone().normalize();
         
-        const globeCenter = new Vector3(0, -this.earthRadius, 0);
+        // ECEF/EUS are identical in this mode, so Earth's center is at origin.
+        const globeCenter = new Vector3(0, 0, 0);
         
         const oc = moonCenter.clone().sub(globeCenter);
         const b = -oc.dot(shadowDir);
