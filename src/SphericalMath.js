@@ -1,13 +1,6 @@
 import {Plane, Vector3} from "three";
 import {atan2, cos, degrees, radians, sin} from "./utils.js";
-import {
-    ECEF2EUS,
-    ECEFToEUS_radii,
-    ECEFToLLA_radii,
-    EUSToECEF_radii,
-    RLLAToECEF_radii,
-    wgs84
-} from "./LLA-ECEF-ENU";
+import {ECEF2EUS, ECEFToEUS_radii, ECEFToLLA_radii, EUSToECEF_radii, RLLAToECEF_radii, wgs84} from "./LLA-ECEF-ENU";
 import {Globals, Sit} from "./Globals";
 import {assert} from "./assert.js";
 import {MV3, V3} from "./threeUtils";
@@ -336,10 +329,10 @@ export function calcHorizonPoint(A, fwd, horizonAlt) {
     // altAboveSphere = A.length() - horizonRadius = geodeticAlt - horizonAlt
     const observerR = A.length();
     const distToHorizon = Math.sqrt(observerR * observerR - horizonRadius * horizonRadius);
-    const fwdHorizontal = fwd.clone()
-    fwdHorizontal.normalize()
-    fwdHorizontal.multiplyScalar(distToHorizon)
-    const horizonPoint = A.clone().add(fwdHorizontal)
+
+    const fwdNorm = fwd.clone().normalize();
+    fwdNorm.multiplyScalar(distToHorizon);
+    const horizonPoint = A.clone().add(fwdNorm)
 
     return horizonPoint;
 }

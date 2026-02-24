@@ -230,8 +230,108 @@ This node runs an internal mini jet simulation to compute turn rates that match 
 - **Jet forward:** `V3(0, 0, -1)` → `getLocalNorthVector(jetPos)` — old EUS north direction, meaningless in ECEF.
 - **Horizontal angle:** `atan2(from.z, from.x)` → project onto local tangent plane basis vectors (east, north) computed from `getLocalUpVector`/`getLocalNorthVector`/cross product for east. Old EUS horizontal plane angle (X=East, Z=South) is invalid in ECEF.
 
+These initial fixes got the code running, but the cloud speed readback (green line) showed ~55% of the expected value (red line). See fix #31 for the full resolution.
+
 ### 19. calcHorizonPoint Equatorial Radius Mismatch (`src/SphericalMath.js`)
 
 `calcHorizonPoint` used `Globals.equatorRadius` (6378 km) to compute the horizon sphere radius. In ECEF with WGS84 ellipsoidal positions, the geocentric distance at non-equatorial latitudes is less than equatorial radius (e.g. ~6373 km at lat 28.5°). This caused `altAboveSphere = A.length() - (equatorialRadius + cloudAlt)` to go negative, producing `sqrt(negative) = NaN`.
 
 **Fix:** Use `ECEFToLLA()` to get the actual geodetic altitude of the observer position, then derive the local geocentric surface radius as `A.length() - geodeticAlt`. The horizon sphere radius is then `localSurfaceRadius + horizonAlt`, which is consistent regardless of latitude. This affects all callers of `calcHorizonPoint` including `CNodeLOSHorizonTrack` and `CNodeTurnRateFromClouds`.
+
+### 20. CNodeDisplayLOS Sea Level Clipping (`src/nodes/CNodeDisplayLOS.js`)
+
+The sea level clipping check used `fwd.y < 0` to detect if the LOS was pointing downward. In ECEF, the Y component has no relation to "down".
+
+**Fix:** `fwd.dot(getLocalUpVector(A)) < 0` — project onto local geodetic up vector.
+
+### 21. CNodeGimbalTriangulate Sea Level Clipping (`src/nodes/CNodeGimbalTriangulate.js`)
+
+Same `fwd.y < 0` issue as CNodeDisplayLOS.
+
+**Fix:** `fwd.dot(getLocalUpVector(start)) < 0`
+
+### 22. LocalFrame Orientation (`src/JetStuff.js`)
+
+LocalFrame quaternion was set by starting from identity (ECEF world axes) and rotating around the local up axis. But identity quaternion in ECEF means X/Y/Z align with ECEF axes, not the local tangent plane.
+
+**Fix:** Build an explicit local tangent frame: East→X, Up→Y, (-North)→Z, then apply heading rotation around the Y (up) axis, and set quaternion from the resulting basis matrix.
+
+### 23. CameraControls Drag Plane and Tilt Check (`src/js/CameraControls.js`)
+
+Two Y-up assumptions:
+- **Drag plane** (line ~1044): `new Plane(V3(0, -1, 0), target.y)` used a flat Y=0 world plane. In ECEF the surface is a sphere, not a flat plane.
+- **Tilt check** (line ~1011): `yAxis.y <= 0.01` checked if the camera's Y-axis was nearly horizontal. In ECEF the Y component is meaningless.
+
+**Fix:**
+- Drag plane: use `getLocalUpVector(target)` as the plane normal, with distance `localUp.dot(target)`.
+- Tilt check: use `yAxis.dot(getLocalUpVector(camera.position)) <= 0.01`.
+
+### 24. Pod Camera Positioning (`src/JetStuff.js`)
+
+Pod camera position used `LocalFrame.position.y` as an altitude component. In ECEF, `.y` is one axis of the Earth-centered coordinate system, not altitude.
+
+**Fix:** Position the pod camera using local tangent vectors (east, up, north) offset from `LocalFrame.position`. Set `camera.up` to the local up vector.
+
+### 25. Pod View Orbit Controls (`src/JetStuff.js`)
+
+Orbit controls position and target used `new Vector3(10, LocalFrame.position.y, 0)` and `new Vector3(0, LocalFrame.position.y, 0)` — ECEF Y component as altitude.
+
+**Fix:** Use `LocalFrame.position.clone()` as target and offset by local east vector for position.
+
+### 26. updateLockTrack Y-Up Rotation Axis (`src/updateLockTrack.js`)
+
+Camera lock-tracking rotated around `V3(0, 1, 0)` when following heading changes. In ECEF, Y is not up.
+
+**Fix:** Use `getLocalUpVector(lockPos)` as the rotation axis.
+
+### 27. trackHeading World-Axis Heading (`src/trackUtils.js`)
+
+`trackHeading()` computed heading as `atan2(fwd.x, -fwd.z)` — using ECEF X and Z as east/south. In ECEF these axes have no relation to compass directions.
+
+**Fix:** Project forward vector onto local tangent plane (remove component along `getLocalUpVector`), then compute heading from `atan2(fwdH.dot(localEast), fwdH.dot(localNorth))`.
+
+### 28. Ground Grid Parenting (`src/JetStuff.js`)
+
+The GridHelperWorld was added to `GlobalScene` (ECEF origin = Earth's center). Its vertices are computed in local flat-plane coordinates with Y=up and origin at the surface. In ECEF, these vertices end up near Earth's center.
+
+**Fix:** Add the grid to `LocalFrame` instead of `GlobalScene`. LocalFrame is oriented with Y=local-up and positioned at the jet's ECEF location, matching the grid's local coordinate system.
+
+### 29. Cloud Display Parenting (`src/Clouds.js`)
+
+Same issue as the ground grid — `CNodeDisplayClouds` was added to `GlobalScene` by default. Cloud geometry is generated in local EUS-style coordinates with Y=altitude above surface.
+
+**Fix:** Set `container: LocalFrame` so clouds are parented to the jet's local frame.
+
+### 30. CNodeTraverseAngularSpeed Direction Sign (`src/nodes/CNodeTraverseAngularSpeed.js`)
+
+`clockwiseZX()` used world Z and X components to determine angular direction sign — meaningless in ECEF.
+
+**Fix:** Use cross product of the view direction and step vector, projected onto local up vector, to determine the sign.
+
+### 31. Cloud Speed Round-Trip Mismatch (`src/nodes/CNodeTurnRateFromClouds.js`, `src/sitch/SitGimbal.js`)
+
+**Problem:** After the initial ECEF fixes (#18, #30), the cloud speed readback (green line from `CNodeTraverseAngularSpeed`) showed ~55% of the expected value (red line from `cloudSpeedEditor`). The sign was correct but the magnitude was consistently wrong across all frames.
+
+**Root cause:** `CNodeTurnRateFromClouds` (TRC) and `CNodeTraverseAngularSpeed` (TAS) used fundamentally different angle measurement methods:
+
+- **TRC** used `atan2` of projected direction vectors from **two different observer positions** (frame f and f+1) to the same horizon point. This measured the parallax angle including the position-dependent viewing direction change.
+- **TAS** used `asin(perpStep/offset)` from a **single observer position**, measuring the angular subtense of the horizon point's motion.
+
+In the old flat-plane EUS system, both methods gave equivalent results because after projecting to Y=0, the 2D geometry was identical. In ECEF, the 3D geometry makes them diverge — `atan2` from different 3D positions gives a different angular change than `asin` from one position.
+
+Additionally, TRC's internal jet simulation did not match `CNodeJetTrack`'s behavior:
+- TRC started at heading 0° (north); the actual jet starts at 315°
+- TRC had no wind; `CNodeJetTrack` includes 120-knot local wind
+- TRC used `RLLAToECEF_radii(Sit.lat, Sit.lon, altitude)` as origin; `CNodeJetTrack` uses `jetOrigin`
+
+**Fix — complete rewrite of CNodeTurnRateFromClouds:**
+
+1. **Same measurement formula as TAS:** Replaced the `atan2` parallax method with the identical `asin(perpStep/offset)` formula that TAS uses. Both nodes now measure angular speed the same way, ensuring the round trip is mathematically closed.
+
+2. **Matching internal simulation:** Added `wind`, `heading`, and `origin` inputs (same as CNodeJetTrack). The internal jet sim now uses the same starting position, heading, and wind as the actual jet track. Removed the unused `altitude` input.
+
+3. **Multi-pass convergence:** Single-pass computation caused frame-to-frame oscillation because the turn rate at frame f immediately affects the geometry measured at frame f. The fix uses 10 full passes over the entire frame range: each pass simulates the complete trajectory with the current turn rate array, measures what TAS would read back, and adjusts each frame's turn rate by the error. This converges to a stable, smooth turn rate array.
+
+4. **Node ordering in SitGimbal.js:** Moved `localWind` and `initialHeading` creation before `CNodeTurnRateFromClouds` so the string-based input references resolve correctly (inputs are resolved eagerly during construction).
+
+**Result:** Green/red ratio improved from ~0.554 to ~1.013 across all frames. The ~1.3% residual error is from the cloud wind not being modeled in TRC's internal simulation (TAS subtracts cloud wind from the horizon step; TRC's internal sim has no cloud wind, relying on the `cloudSpeed` input to account for it).

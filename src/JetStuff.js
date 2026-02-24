@@ -348,7 +348,7 @@ export function ChangedPR() {
     // then apply heading rotation around the up axis.
     const upAxis = getLocalUpVector(jet)
     const northAxis = getLocalNorthVector(jet)
-    const eastAxis = V3().crossVectors(upAxis, northAxis).normalize()
+    const eastAxis = V3().crossVectors(northAxis, upAxis).normalize()
 
     // Start with the tangent frame: X=east, Y=up, Z=south (i.e. -Z=north)
     const _x = eastAxis.clone()
@@ -909,7 +909,7 @@ export function initViews() {
         // a grid spaced one Nautical mile square
         const gridSquaresGround = 200
         let gridHelperGround = new GridHelperWorld(1,metersFromNM(gridSquaresGround), gridSquaresGround, metersFromMiles(EarthRadiusMiles), 0x606000, 0x606000);
-        GlobalScene.add(gridHelperGround);
+        Sit.groundFrame.add(gridHelperGround);
 
         setATFLIR(new CNodeDisplayATFLIR({
             id: "displayATFLIR",
@@ -1105,10 +1105,18 @@ export function initJetStuff() {
 
     const farClipLook = metersFromMiles(500)
 
-    // viw of the back of the pod with rotating glare on it.
+    // view of the back of the pod with rotating glare on it.
     const podCamera = new PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, farClipLook);
-    podCamera.position.set(-20, LocalFrame.position.y + 20, -40)
-    podCamera.lookAt(new Vector3(0, LocalFrame.position.y, 0));
+    // Position the pod camera offset from LocalFrame using local tangent vectors
+    const podUp = getLocalUpVector(LocalFrame.position);
+    const podNorth = getLocalNorthVector(LocalFrame.position);
+    const podEast = V3().crossVectors(podUp, podNorth).normalize();
+    podCamera.position.copy(LocalFrame.position.clone()
+        .add(podEast.clone().multiplyScalar(-20))
+        .add(podUp.clone().multiplyScalar(20))
+        .add(podNorth.clone().multiplyScalar(40)));
+    podCamera.up.copy(podUp);
+    podCamera.lookAt(LocalFrame.position);
 
 
     // wrap these other cameras in nodes
@@ -1137,8 +1145,12 @@ export function initJetStuff() {
     })
 
     viewPod.addOrbitControls(view.renderer);
-    viewPod.controls.position = new Vector3(10, LocalFrame.position.y, 0);
-    viewPod.controls.target = new Vector3(0, LocalFrame.position.y, 0);
+    // Set orbit controls position/target relative to LocalFrame using local tangent vectors
+    const podCtrlUp = getLocalUpVector(LocalFrame.position);
+    const podCtrlNorth = getLocalNorthVector(LocalFrame.position);
+    const podCtrlEast = V3().crossVectors(podCtrlUp, podCtrlNorth).normalize();
+    viewPod.controls.position = LocalFrame.position.clone().add(podCtrlEast.clone().multiplyScalar(10));
+    viewPod.controls.target = LocalFrame.position.clone();
 
 
 //

@@ -7,6 +7,7 @@ import {CNodeDisplayTrack} from "./nodes/CNodeDisplayTrack";
 import {MeshStandardMaterial, TextureLoader} from "three";
 
 import {SITREC_APP} from "./configUtils";
+import {Sit} from "./Globals";
 
 // Wrapper for the cloud node setup - used by Gimbal
 export function SetupCloudNodes() {
@@ -37,7 +38,7 @@ export function SetupCloudNodes() {
             wind: "cloudWind",
             heading: "initialHeading",
         },
-
+        container: Sit.groundFrame,
         layers: LAYER.MASK_WORLD,
     })
 

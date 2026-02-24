@@ -1,4 +1,4 @@
-import {AlwaysDepth, Color} from "three";
+import {AlwaysDepth, Color, Group, Matrix4} from "three";
 import * as LAYER from "../LayerMasks";
 import {par} from "../par";
 import {arrayColumn, ExpandKeyframes, RollingAverage, scaleF2M} from "../utils";
@@ -20,7 +20,10 @@ import {CNodeSAPage} from "../nodes/CNodeSAPage";
 import {CNodeLOSTrackAzEl} from "../nodes/CNodeLOSTrackAzEl";
 import {calculateGlareStartAngle} from "../JetHorizon";
 import {curveChanged, SetupCommon, SetupTrackLOSNodes, SetupTraverseNodes} from "../JetStuff";
-import {LocalFrame} from "../LocalFrame";
+import {GlobalScene, LocalFrame} from "../LocalFrame";
+import {getLocalNorthVector, getLocalUpVector} from "../SphericalMath";
+import {LLAToEUS} from "../LLA-ECEF-ENU";
+import {V3} from "../threeUtils";
 import {SetupJetGUI} from "../JetGUI";
 import {CNodeFleeter} from "../nodes/CNodeFleeter";
 import {CNodeGraphSeries} from "../nodes/CNodeGraphSeries";
@@ -804,45 +807,6 @@ export function SetupGimbal() {
         }
     )
 
-    var turnRateFromCloudsNode = new CNodeTurnRateFromClouds({
-        id: "turnRateFromClouds",
-        inputs: {
-            cloudAlt: "cloudAltitude",
-            speed: "jetTAS",
-            altitude: "jetAltitude",
-            az: "azSources",
-            cloudSpeed: "cloudSpeedEditor",
-        }
-    })
-
-    console.log("+++ turnRateNode")
-    new CNodeSwitch({
-        id: "turnRate",
-        inputs: {
-            "Match Clouds": turnRateFromCloudsNode,
-            //      "Curve Editor": turnRateEditorNode,
-            "From Bank and Speed": "turnRateBS",
-            "User (fine)": new CNodeGUIValue({
-                id: "userTurnRateFine",
-                value: -1.6,
-                desc: "User Turn Rate",
-                start: -2,
-                end: -1.64,
-                step: 0.001
-            }, guiJetTweaks),
-            "User (large)": new CNodeGUIValue({
-                id: "userTurnRateLarge",
-                value: -1.6,
-                desc: "User Turn Rate",
-                start: -3,
-                end: 1,
-                step: 0.01
-            }, guiJetTweaks)
-        },
-        desc: "Turn Rate Type"
-    }, guiJetTweaks)
-
-
     new CNodeWind({
         id: "cloudWind",
         from: Sit.cloudWindFrom,
@@ -883,6 +847,46 @@ export function SetupGimbal() {
 
     }, gui)
 
+    var turnRateFromCloudsNode = new CNodeTurnRateFromClouds({
+        id: "turnRateFromClouds",
+        inputs: {
+            cloudAlt: "cloudAltitude",
+            speed: "jetTAS",
+            az: "azSources",
+            cloudSpeed: "cloudSpeedEditor",
+            wind: "localWind",
+            heading: "initialHeading",
+            origin: "jetOrigin",
+        }
+    })
+
+    console.log("+++ turnRateNode")
+    new CNodeSwitch({
+        id: "turnRate",
+        inputs: {
+            "Match Clouds": turnRateFromCloudsNode,
+            //      "Curve Editor": turnRateEditorNode,
+            "From Bank and Speed": "turnRateBS",
+            "User (fine)": new CNodeGUIValue({
+                id: "userTurnRateFine",
+                value: -1.6,
+                desc: "User Turn Rate",
+                start: -2,
+                end: -1.64,
+                step: 0.001
+            }, guiJetTweaks),
+            "User (large)": new CNodeGUIValue({
+                id: "userTurnRateLarge",
+                value: -1.6,
+                desc: "User Turn Rate",
+                start: -3,
+                end: 1,
+                step: 0.01
+            }, guiJetTweaks)
+        },
+        desc: "Turn Rate Type"
+    }, guiJetTweaks)
+
     console.log("+++ jetTrack Node")
     var jetTrack = new CNodeJetTrack({
         id: "jetTrack",
@@ -913,6 +917,25 @@ export function SetupGimbal() {
 
     LocalFrame.position.copy(jetTrack.v0.position.clone())
     console.log("Setting LocalFrame Position to " + LocalFrame.position.x + "," + LocalFrame.position.y + "," + LocalFrame.position.z)
+
+    // Create a static ground-level frame at the surface below the sitch origin.
+    // Grid and clouds use local flat-plane geometry (X=east, Y=up, Z=south)
+    // so this frame is positioned at sea level and oriented to match that convention.
+    // LLAToEUS uses Globals.equatorRadius/polarRadius, so it adapts to the active earth model.
+    const surfacePos = LLAToEUS(Sit.lat, Sit.lon, 0);
+    const groundUp = getLocalUpVector(surfacePos);
+    const groundNorth = getLocalNorthVector(surfacePos);
+    const groundEast = V3().crossVectors(groundNorth, groundUp).normalize();
+    const groundSouth = groundNorth.clone().negate();
+    const groundMatrix = new Matrix4();
+    groundMatrix.makeBasis(groundEast, groundUp, groundSouth);
+    Sit.groundFrame = new Group();
+    Sit.groundFrame.position.copy(surfacePos);
+    Sit.groundFrame.quaternion.setFromRotationMatrix(groundMatrix);
+    Sit.groundFrame.updateMatrix();
+    Sit.groundFrame.updateMatrixWorld();
+    GlobalScene.add(Sit.groundFrame);
+
     console.log("+++ JetLOS Node")
     new CNodeLOSTrackAzEl({
         id: "JetLOS",
