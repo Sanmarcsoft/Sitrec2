@@ -1,6 +1,14 @@
 import {Plane, Vector3} from "three";
 import {atan2, cos, degrees, radians, sin} from "./utils.js";
-import {ECEF2EUS, ECEFToEUS_radii, ECEFToLLA_radii, EUSToECEF_radii, RLLAToECEF_radii, wgs84} from "./LLA-ECEF-ENU";
+import {
+    ECEF2EUS,
+    ECEFToEUS_radii,
+    ECEFToLLA,
+    ECEFToLLA_radii,
+    EUSToECEF_radii,
+    RLLAToECEF_radii,
+    wgs84
+} from "./LLA-ECEF-ENU";
 import {Globals, Sit} from "./Globals";
 import {assert} from "./assert.js";
 import {MV3, V3} from "./threeUtils";
@@ -316,15 +324,19 @@ export function getLocalWestVector(position) {
 // find the position of the horizon in that direction
 // this actually calculates the distance to the horizon, and then a point that distance along the fwd vector.
 export function calcHorizonPoint(A, fwd, horizonAlt) {
-    const earthRadius = Globals.equatorRadius;
-    const horizonRadius = earthRadius + horizonAlt
+    // Derive the local geocentric surface radius from the ECEF position.
+    // Using equatorialRadius fails at non-equatorial latitudes because the Earth is oblate:
+    // at lat 28.5°, the geocentric distance is ~6373 km vs equatorial 6378 km,
+    // so (A.length() - equatorialRadius - cloudAlt) can go negative → sqrt(negative) = NaN.
+    const lla = ECEFToLLA(A.x, A.y, A.z); // [lat_rad, lon_rad, altitude_m]
+    const geodeticAlt = lla[2];
+    const localSurfaceRadius = A.length() - geodeticAlt;
+    const horizonRadius = localSurfaceRadius + horizonAlt;
 
-    // convert points to ECEF (i.e. origin at the center of the earth)
-    const pos = A.clone()
-    pos.y += earthRadius
-
-    const altAboveSphere = pos.length() - horizonRadius
-    const distToHorizon = Math.sqrt((horizonRadius + altAboveSphere) * (horizonRadius + altAboveSphere) - horizonRadius * horizonRadius);
+    // A is already in ECEF (origin at Earth center)
+    // altAboveSphere = A.length() - horizonRadius = geodeticAlt - horizonAlt
+    const observerR = A.length();
+    const distToHorizon = Math.sqrt(observerR * observerR - horizonRadius * horizonRadius);
     const fwdHorizontal = fwd.clone()
     fwdHorizontal.normalize()
     fwdHorizontal.multiplyScalar(distToHorizon)

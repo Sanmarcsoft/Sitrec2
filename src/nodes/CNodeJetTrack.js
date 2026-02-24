@@ -158,10 +158,13 @@ export class CNodeTrackSpeed extends CNode {
 
     getValueFrame(f) {
         if (f < 1) f = 1;
-        let move = this.in.source.p(f)
-        move.sub(this.in.source.p(f - 1))
-        if (this.horizontal)
-            move.y = 0;
+        const pos = this.in.source.p(f)
+        let move = pos.clone().sub(this.in.source.p(f - 1))
+        if (this.horizontal) {
+            // Remove the vertical (radial) component to get horizontal speed
+            const up = getLocalUpVector(pos)
+            move.sub(up.clone().multiplyScalar(move.dot(up)))
+        }
         return (move.length() * this.in.source.fps * Units.m2Speed)
     }
 

@@ -31,9 +31,13 @@ export class CNodeSplineEditor extends CNodeTrack {
 
         const camera = getCameraNode(v.camera).camera;
 
+        // Auto-detect legacy EUS: if initialPoints is provided without initialPointsLLA,
+        // assume the points are in old EUS local tangent plane coordinates
+        const legacyEUS = v.legacyEUS ?? (v.initialPoints !== undefined && v.initialPointsLLA === undefined);
+
         if (v.initialPointsLLA === undefined) {
             this.splineEditor = new SplineEditor(v.scene, camera, renderer, controls, () => this.recalculateCascade(),
-                v.initialPoints, false, v.type.toLowerCase())
+                v.initialPoints, false, v.type.toLowerCase(), legacyEUS)
         } else {
             this.splineEditor = new SplineEditor(v.scene, camera, renderer, controls, () => this.recalculateCascade(),
                 v.initialPointsLLA, true, v.type.toLowerCase())

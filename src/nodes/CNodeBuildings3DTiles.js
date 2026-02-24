@@ -8,10 +8,9 @@
 // competing for budget.
 
 import {CNode} from "./CNode";
-import {NodeMan, Sit} from "../Globals";
+import {NodeMan} from "../Globals";
 import {GlobalScene} from "../LocalFrame";
 import {Group, Matrix4} from "three";
-import {RLLAToECEF} from "../LLA-ECEF-ENU";
 import * as LAYER from "../LayerMasks";
 import {TilesRenderer} from "3d-tiles-renderer";
 import {CesiumIonAuthPlugin, GoogleCloudAuthPlugin} from "3d-tiles-renderer/plugins";
@@ -20,47 +19,9 @@ import {TilesDayNightPlugin} from "../TilesDayNightPlugin";
 // Build a Matrix4 that transforms ECEF coordinates to EUS (East-Up-South) local frame.
 // This is the matrix form of ECEFToEUS(), applied to the TilesRenderer group
 // so all child tiles are automatically positioned in Sitrec's coordinate system.
+// EXPERIMENT: EUS is now identical to ECEF, so no transformation needed
 function buildECEFToEUSMatrix4() {
-    const lat = Sit.lat * Math.PI / 180;
-    const lon = Sit.lon * Math.PI / 180;
-
-    const sinLat = Math.sin(lat);
-    const cosLat = Math.cos(lat);
-    const sinLon = Math.sin(lon);
-    const cosLon = Math.cos(lon);
-
-    // ECEF→ENU rotation matrix (3x3):
-    //   [ -sinLon,          cosLon,          0      ]
-    //   [ -sinLat*cosLon,  -sinLat*sinLon,   cosLat ]
-    //   [  cosLat*cosLon,   cosLat*sinLon,   sinLat ]
-    //
-    // Then ENU→EUS swap: EUS.x = ENU.x, EUS.y = ENU.z, EUS.z = -ENU.y
-    // Combined ECEF→EUS rotation:
-    //   Row 0 (EUS.x = ENU.x):  -sinLon,          cosLon,          0
-    //   Row 1 (EUS.y = ENU.z):   cosLat*cosLon,    cosLat*sinLon,   sinLat
-    //   Row 2 (EUS.z = -ENU.y):  sinLat*cosLon,    sinLat*sinLon,  -cosLat
-
-    // Use WGS84 ellipsoid (not sphere) because the 3D tiles are in ellipsoid ECEF.
-    // RLLAToECEFV_Sphere would place the origin ~7km too high at mid-latitudes,
-    // causing tiles to render underground.
-    const originECEF = RLLAToECEF(lat, lon, 0);
-
-    // Build as a 4x4 matrix: rotation + translation
-    // Three.js Matrix4 is column-major: .set(row-major args)
-    const rotationMatrix = new Matrix4().set(
-        -sinLon,        cosLon,         0,       0,
-        cosLat*cosLon,  cosLat*sinLon,  sinLat,  0,
-        sinLat*cosLon,  sinLat*sinLon, -cosLat,  0,
-        0,              0,              0,       1
-    );
-
-    // First translate by -originECEF, then rotate
-    const translationMatrix = new Matrix4().makeTranslation(
-        -originECEF.x, -originECEF.y, -originECEF.z
-    );
-
-    // Combined: rotation * translation
-    return rotationMatrix.multiply(translationMatrix);
+    return new Matrix4(); // identity
 }
 
 

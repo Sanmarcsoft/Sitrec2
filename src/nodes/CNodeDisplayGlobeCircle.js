@@ -45,7 +45,7 @@ export class CNodeDisplayGlobeCircle extends CNode3DGroup {
         const perpendicular = perpendicularVector(this.normal).normalize();
         const otherPerpendicular = this.normal.clone().cross(perpendicular);
 
-        const globeCenter = V3(0,-Globals.equatorRadius,0);
+        const globeCenter = V3(0, 0, 0);
         const circleCenter = globeCenter.clone().add(this.normal.multiplyScalar(this.offset));
         const circleRadius = Math.sqrt(this.radius*this.radius - this.offset*this.offset);
         const segments = 100;

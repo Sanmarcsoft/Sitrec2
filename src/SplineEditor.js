@@ -6,9 +6,9 @@ import * as LAYER from "./LayerMasks";
 
 export class   SplineEditor extends PointEditor{
 
-    constructor(_scene, _camera, _renderer, controls, onChange, initialPoints, isLLA, curveType) {
+    constructor(_scene, _camera, _renderer, controls, onChange, initialPoints, isLLA, curveType, legacyEUS) {
 
-        super(_scene, _camera, _renderer, controls, onChange, initialPoints, isLLA)
+        super(_scene, _camera, _renderer, controls, onChange, initialPoints, isLLA, legacyEUS)
 
 
         // segments per arc (between control points) for rendering

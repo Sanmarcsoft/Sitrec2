@@ -3,6 +3,14 @@
 // for this frame and the previous frame.
 import {CNode} from "./CNode";
 import {asin, clockwiseZX, degrees} from "../utils";
+import {getLocalUpVector} from "../SphericalMath";
+
+// Project a position onto the local horizontal plane at refPos
+// (removes the component along the local up direction)
+function projectHorizontal(pos, refPos) {
+    const up = getLocalUpVector(refPos)
+    return pos.clone().sub(up.clone().multiplyScalar(pos.dot(up)))
+}
 
 export class CNodeTraverseAngularSpeed extends CNode {
     constructor(v) {
@@ -20,20 +28,21 @@ export class CNodeTraverseAngularSpeed extends CNode {
         let trackPos = this.in.track.p(f)
         let traversePos = this.in.traverse.p(f)
 
-        trackPos.y = 0;
-        traversePos.y = 0;
+        // Project onto local horizontal plane (remove vertical component)
+        trackPos = projectHorizontal(trackPos, trackPos);
+        traversePos = projectHorizontal(traversePos, trackPos);
 
         let offset = traversePos.clone().sub(trackPos)
 //        let angle = atan2(offset.z, offset.x)
 
         let trackPos0 = this.in.track.p(f - 1)
         let traversePos0 = this.in.traverse.p(f - 1)
-        trackPos0.y = 0;
+        trackPos0 = projectHorizontal(trackPos0, trackPos0);
 
         // this position has ALSO moved by the per-frame cloud wind velocity
         const wind = this.in.wind.v(f)
         traversePos0.add(wind)
-        traversePos0.y = 0;
+        traversePos0 = projectHorizontal(traversePos0, trackPos0);
 
         let offset0 = traversePos0.clone(0).sub(trackPos0)
 //        let angle0 = atan2(offset0.z, offset0.x)

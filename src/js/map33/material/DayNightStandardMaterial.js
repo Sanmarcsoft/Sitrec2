@@ -1,6 +1,5 @@
 import {MeshStandardMaterial, Vector3} from "three";
 import {sharedUniforms} from "./SharedUniforms";
-import {wgs84} from "../../../LLA-ECEF-ENU";
 import {Globals} from "../../../Globals";
 
 const CACHE_KEY = "DayNightStandardMaterial";
@@ -24,7 +23,7 @@ export class DayNightStandardMaterial extends MeshStandardMaterial {
 
         this._dayNightUniforms = {
             sunDirection: {value: Globals.sunLight.position},
-            earthCenter: {value: new Vector3(0, -wgs84.RADIUS, 0)},
+            earthCenter: {value: new Vector3(0, 0, 0)},
             useDayNight: sharedUniforms.useDayNight,
             sunAmbientIntensity: sharedUniforms.sunAmbientIntensity,
         };

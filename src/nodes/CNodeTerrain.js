@@ -136,8 +136,10 @@ export class CNodeTerrain extends CNode {
             Globals.polarRadius  - 1000,   // Y – polar semi-axis (before rotation)
             Globals.equatorRadius - 1000   // Z – equatorial semi-axis
         );
-        // Rotate so the polar (local-Y) axis aligns with the Earth's rotation axis in EUS.
-        this.greySphere.rotation.x = Sit.lat * Math.PI / 180 - Math.PI / 2;
+        // Rotate so the polar (local-Y) axis aligns with the Earth's rotation axis.
+        // In ECEF the polar axis is always Z, so rotate Y→+Z with +π/2 about X.
+        // (In old EUS this was latitude-dependent: Sit.lat * π/180 - π/2)
+        this.greySphere.rotation.x = Math.PI / 2;
         // Position at the true Earth centre in EUS (depends on ellipsoid shape and latitude).
         this.greySphere.position.copy(earthCenterEUS());
         this.greySphere.visible = Globals.dynamicSubdivision === true;
@@ -402,7 +404,7 @@ export class CNodeTerrain extends CNode {
                 Globals.polarRadius  - 1000,
                 Globals.equatorRadius - 1000
             );
-            this.greySphere.rotation.x = Sit.lat * Math.PI / 180 - Math.PI / 2;
+            this.greySphere.rotation.x = Math.PI / 2;
             this.greySphere.position.copy(earthCenterEUS());
         }
     }

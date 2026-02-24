@@ -141,7 +141,9 @@ export function getCelestialDirection(body, date, pos) {
     // if a position is provided, use that to calculate the LLA of the observer
     // realistically this won't make any significant difference for the Sun,
     // the biggest difference will be for the Moon, then nearby planets
-    if (pos !== undefined) {
+    if (pos !== undefined && pos.lengthSq() > 1e12) {
+        // Position must be on or above Earth's surface (radius ~6.4e6 m, so lengthSq ~4e13)
+        // If too close to origin (e.g. camera not yet positioned), fall back to Sit origin.
         LLA = EUSToLLA(pos);
     } else {
         // default to the local origin, should be fine for the sun.

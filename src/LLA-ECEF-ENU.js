@@ -168,36 +168,15 @@ export function ECEFToLLA_radii(X, Y, Z) {
 }
 
 /** EUS → ECEF using the ellipsoid origin at Sit.lat/lon computed from Globals radii. */
+// EXPERIMENT: EUS is now identical to ECEF (origin at Earth center, same axes)
 export function EUSToECEF_radii(posEUS) {
-    const lat1 = Sit.lat * Math.PI / 180;
-    const lon1 = Sit.lon * Math.PI / 180;
-
-    const mECEF2ENU = new Matrix3().set(
-        -Math.sin(lon1), Math.cos(lon1), 0,
-        -Math.sin(lat1) * Math.cos(lon1), -Math.sin(lat1) * Math.sin(lon1), Math.cos(lat1),
-        Math.cos(lat1) * Math.cos(lon1), Math.cos(lat1) * Math.sin(lon1), Math.sin(lat1)
-    );
-    const mENU2ECEF = new Matrix3().copy(mECEF2ENU).invert();
-
-    const originECEF = RLLAToECEF_radii(lat1, lon1, 0);
-    const enu = new Vector3(posEUS.x, -posEUS.z, posEUS.y);
-    return enu.applyMatrix3(mENU2ECEF).add(originECEF);
+    return posEUS.clone();
 }
 
 /** ECEF → EUS using the ellipsoid origin at Sit.lat/lon computed from Globals radii. */
+// EXPERIMENT: EUS is now identical to ECEF (origin at Earth center, same axes)
 export function ECEFToEUS_radii(posECEF) {
-    const lat1 = Sit.lat * Math.PI / 180;
-    const lon1 = Sit.lon * Math.PI / 180;
-
-    const mECEF2ENU = new Matrix3().set(
-        -Math.sin(lon1), Math.cos(lon1), 0,
-        -Math.sin(lat1) * Math.cos(lon1), -Math.sin(lat1) * Math.sin(lon1), Math.cos(lat1),
-        Math.cos(lat1) * Math.cos(lon1), Math.cos(lat1) * Math.sin(lon1), Math.sin(lat1)
-    );
-
-    const originECEF = RLLAToECEF_radii(lat1, lon1, 0);
-    const enu = posECEF.clone().sub(originECEF).applyMatrix3(mECEF2ENU);
-    return new Vector3(enu.x, enu.z, -enu.y);
+    return posECEF.clone();
 }
 
 
@@ -338,9 +317,9 @@ export function ECEFToLLAVD_Sphere(V) {
     return new Vector3(a[0] * 180 / Math.PI, a[1] * 180 / Math.PI, a[2])
 }
 
+// EXPERIMENT: EUS is now identical to ECEF, so eus coords are ECEF coords
 export function EUSToLLA(eus) {
-    const ecef = EUSToECEF_radii(eus);
-    const lla = ECEFToLLA_radii(ecef.x, ecef.y, ecef.z);
+    const lla = ECEFToLLA_radii(eus.x, eus.y, eus.z);
     return new Vector3(lla[0] * 180 / Math.PI, lla[1] * 180 / Math.PI, lla[2]);
 }
 
@@ -424,9 +403,9 @@ export function ECEF2ENU(pos,lat1, lon1, radius, justRotate=false) {
     return enu;
 }
 
+// EXPERIMENT: EUS is now identical to ECEF
 export function ECEF2EUS(pos,lat1, lon1, radius, justRotate=false) {
-    const enu = ECEF2ENU(pos,lat1, lon1, radius, justRotate)
-    return new Vector3(enu.x, enu.z, -enu.y)
+    return pos.clone();
 }
 
 // Inverse of ECEF2ENU - converts from ENU to ECEF
@@ -453,61 +432,30 @@ export function ENU2ECEF(pos, lat1, lon1, radius, justRotate=false) {
     return ecef;
 }
 
-// Inverse of EUSToECEF - converts from ECEF to EUS (at Sit location)
-export function ECEFToEUS(posECEF, radius) {
-    assert(radius === undefined, "unexpected radius in ECEFToEUS")
-    
-    const lat1 = Sit.lat * Math.PI / 180;
-    const lon1 = Sit.lon * Math.PI / 180;
-    
-    const mECEF2ENU = new Matrix3().set(
-        -Math.sin(lon1), Math.cos(lon1), 0,
-        -Math.sin(lat1) * Math.cos(lon1), -Math.sin(lat1) * Math.sin(lon1), Math.cos(lat1),
-        Math.cos(lat1) * Math.cos(lon1), Math.cos(lat1) * Math.sin(lon1), Math.sin(lat1)
-    );
-    
-    // Get the origin in ECEF using the ellipsoid model
-    const originECEF = RLLAToECEF_radii(lat1, lon1, 0);
-
-    // Subtract origin and apply rotation to get ENU
-    const enu = posECEF.clone().sub(originECEF).applyMatrix3(mECEF2ENU);
-    
-    // Convert from ENU to EUS (reverse of: ENU = (EUS.x, -EUS.z, EUS.y))
-    // So: EUS.x = ENU.x, EUS.y = ENU.z, EUS.z = -ENU.y
-    const eus = new Vector3(enu.x, enu.z, -enu.y);
-    
-    return eus;
+// Convert legacy EUS (East-Up-South) local tangent plane coordinates
+// to ECEF on the ellipsoid. Used for old sitch data that has spline points
+// defined in the local EUS frame at Sit.lat/Sit.lon.
+// The old EUS frame assumed a spherical Earth (wgs84.RADIUS), so we:
+// 1. EUS→ENU axis swap: (x, y, z) → (x, -z, y)
+// 2. ENU→ECEF on the sphere (recovering the spherical ECEF position)
+// 3. Spherical ECEF→LLA (getting the geographic coordinates)
+// 4. LLA→ECEF on the ellipsoid (placing the point correctly on the WGS84 ellipsoid)
+export function legacyEUSToECEF(eus, lat, lon) {
+    const enu = new Vector3(eus.x, -eus.z, eus.y);
+    const sphericalECEF = ENU2ECEF(enu, lat, lon, wgs84.RADIUS);
+    const lla = ECEFToLLA_Sphere(sphericalECEF.x, sphericalECEF.y, sphericalECEF.z);
+    // lla = [lat_rad, lon_rad, alt_m]
+    return LLAToEUSRadians(lla[0], lla[1], lla[2]);
 }
 
+// EXPERIMENT: EUS is now identical to ECEF
+export function ECEFToEUS(posECEF, radius) {
+    return posECEF.clone();
+}
+
+// EXPERIMENT: EUS is now identical to ECEF
 export function EUSToECEF(posEUS, radius) {
-    assert(radius === undefined, "undexpected radius in EUSToECEF")
-
-    const lat1 = Sit.lat * Math.PI / 180
-    const lon1 = Sit.lon * Math.PI / 180
-
-    const mECEF2ENU = new Matrix3().set(
-        -Math.sin(lon1), Math.cos(lon1), 0,
-        -Math.sin(lat1) * Math.cos(lon1), -Math.sin(lat1) * Math.sin(lon1), Math.cos(lat1),
-        Math.cos(lat1) * Math.cos(lon1), Math.cos(lat1) * Math.sin(lon1), Math.sin(lat1)
-    );
-
-    const mENU2ECEF = new Matrix3()
-    mENU2ECEF.copy(mECEF2ENU)
-    mENU2ECEF.invert()
-
-    // Get the origin in ECEF using the ellipsoid model
-    const originECEF = RLLAToECEF_radii(lat1, lon1, 0);
-
-    // Convert from eus to enu
-    const enu = new Vector3(posEUS.x, -posEUS.z, posEUS.y);
-
-    // Apply the matrix transformation
-    const ecef = enu.applyMatrix3(mENU2ECEF);
-
-    // You might want to add this ECEF coordinate to the origin to get the final ECEF coordinate
-    ecef.add(originECEF);
-
-    return ecef;
+    return posEUS.clone();
 }
 
 // Pre-computed constants for optimization - updated when Sit location or earth model changes
@@ -566,40 +514,27 @@ function _updateSitConstants() {
 }
 
 // Convert LLA to EUS. Optional earth's radius parameter is deprecated, and should not be used.
-// OPTIMIZED VERSION: All calculations inlined with pre-computed constants for maximum performance.
-// Uses Globals.equatorRadius / Globals.polarRadius; degenerates to sphere when they are equal.
+// EXPERIMENT: EUS is now identical to ECEF, so this just does LLA → ECEF.
 export function LLAToEUSRadians(lat, lon, alt=0, radius) {
     assert(radius === undefined, "undexpected radius in LLAToEUS")
     assert(Sit.lat !== undefined, "Sit.lat undefined in LLAToEUS")
 
-    // Update constants if Sit location or earth model changed
+    // Update constants if Sit location or earth model changed (need ellipsoid constants)
     _updateSitConstants();
 
-    // Pre-compute trigonometric functions
     const cos_lat = Math.cos(lat);
     const sin_lat = Math.sin(lat);
     const cos_lon = Math.cos(lon);
     const sin_lon = Math.sin(lon);
 
     // Convert LLA to ECEF using the current earth model (ellipsoid or degenerate sphere)
-    // When _llaeus_e2 == 0 (sphere), N = equatorRadius and ratio = 1, giving the classic formula.
     const N = Globals.equatorRadius / Math.sqrt(1 - _llaeus_e2 * sin_lat * sin_lat);
     const ecef_x = (N + alt) * cos_lat * cos_lon;
     const ecef_y = (N + alt) * cos_lat * sin_lon;
     const ecef_z = (_llaeus_ratio * N + alt) * sin_lat;
-    
-    // Subtract origin ECEF to get relative position
-    const rel_x = ecef_x - _originEcefX;
-    const rel_y = ecef_y - _originEcefY;
-    const rel_z = ecef_z - _originEcefZ;
-    
-    // Apply ECEF to ENU transformation matrix (inlined)
-    const enu_x = _m00 * rel_x + _m01 * rel_y;  // _m02 * rel_z is always 0
-    const enu_y = _m10 * rel_x + _m11 * rel_y + _m12 * rel_z;
-    const enu_z = _m20 * rel_x + _m21 * rel_y + _m22 * rel_z;
-    
-    // Convert ENU to EUS coordinate system and return
-    return new Vector3(enu_x, enu_z, -enu_y);
+
+    // EUS = ECEF (no origin subtraction, no rotation)
+    return new Vector3(ecef_x, ecef_y, ecef_z);
 }
 
 // Convert LLA to Spherical EUS. Optional earth's radius parameter is deprecated, and should not be used.

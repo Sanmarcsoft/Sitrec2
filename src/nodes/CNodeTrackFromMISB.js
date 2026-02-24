@@ -1,6 +1,5 @@
 import {interpolate} from "../utils";
 import {GlobalDateTimeNode, Globals, NodeMan, Sit} from "../Globals";
-import {RLLAToECEF_radii} from "../LLA-ECEF-ENU";
 import {meanSeaLevelOffset} from "../EGM96Geoid";
 
 import {MISB} from "../MISBUtils";
@@ -10,7 +9,7 @@ import {assert} from "../assert.js";
 import {CGeoJSON} from "../geoJSONUtils";
 import {isLocal} from "../configUtils.js"
 import stringify from "json-stringify-pretty-compact";
-import {Matrix3, Matrix4, Vector3} from "three";
+import {Matrix4, Vector3} from "three";
 
 export class CNodeTrackFromMISB extends CNodeTrack {
     constructor(v) {
@@ -304,45 +303,8 @@ export class CNodeTrackFromMISB extends CNodeTrack {
 
 
 
-// I'm now precalculating a lot for speed. Could do more.
-// Build ECEF to ENU rotation
-        const mECEF2ENU = new Matrix3().set(
-            -Math.sin(lon1),                    Math.cos(lon1),                      0,
-            -Math.sin(lat1)*Math.cos(lon1), -Math.sin(lat1)*Math.sin(lon1), Math.cos(lat1),
-            Math.cos(lat1)*Math.cos(lon1),  Math.cos(lat1)*Math.sin(lon1), Math.sin(lat1)
-        );
-
-// Compose ENU → EUS swap
-        const mENUtoEUS = new Matrix3().set(
-            1, 0,  0,
-            0, 0,  1,
-            0, -1, 0
-        );
-
-// Final rotation
-        const mECEF2EUS_3x3 = new Matrix3().multiplyMatrices(mENUtoEUS, mECEF2ENU);
-
-// Promote to Matrix4
-        const mECEF2EUS = new Matrix4();
-
-// Assign that combined 3x3 rotation into top-left of 4x4
-        const e = mECEF2EUS.elements;
-        const r = mECEF2EUS_3x3.elements;
-
-        e[0] = r[0]; e[4] = r[3]; e[8]  = r[6]; e[12] = 0;
-        e[1] = r[1]; e[5] = r[4]; e[9]  = r[7]; e[13] = 0;
-        e[2] = r[2]; e[6] = r[5]; e[10] = r[8]; e[14] = 0;
-        e[3] = 0;    e[7] = 0;    e[11] = 0;    e[15] = 1;
-
-
-// Translation
-        const originECEF = RLLAToECEF_radii(lat1, lon1, 0);
-        const translation = new Matrix4().makeTranslation(-originECEF.x, -originECEF.y, -originECEF.z);
-
-// Final matrix: rotate * translate
-
-        // TODO!!! this should be global, and used in many other places for ECEF->EUS
-        mECEF2EUS.multiply(translation);
+// EXPERIMENT: EUS is now identical to ECEF, so use identity matrix
+        const mECEF2EUS = new Matrix4(); // identity
 
         // Pre-compute ellipsoid constants for per-vertex ECEF conversion
         const eqR = Globals.equatorRadius;

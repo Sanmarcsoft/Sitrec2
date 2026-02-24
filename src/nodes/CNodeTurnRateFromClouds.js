@@ -1,8 +1,10 @@
 import {degrees, metersPerSecondFromKnots, radians} from "../utils";
-import {calcHorizonPoint, getLocalUpVector} from "../SphericalMath";
+import {calcHorizonPoint, getLocalNorthVector, getLocalUpVector} from "../SphericalMath";
 import {CNodeEmptyArray} from "./CNodeArray";
 import {assert} from "../assert.js";
 import {V3} from "../threeUtils";
+import {RLLAToECEF} from "../LLA-ECEF-ENU";
+import {Sit} from "../Globals";
 
 /*
     cloudAlt = altitude of the top of the cloud layer above the ground
@@ -39,8 +41,9 @@ export class CNodeTurnRateFromClouds extends CNodeEmptyArray {
     recalculate() {
         this.array = []
         var jetHeading = 0
-        var jetPos = V3(0,this.in.altitude.v0,0)   // this is above the EUS (East, Up, South) origin
-        var jetFwd = V3(0,0,-1) // start out pointing north (Z = -1 in EUS
+        // Initialize jet position from Sit lat/lon at the given altitude (already in meters)
+        var jetPos = RLLAToECEF(radians(Sit.lat), radians(Sit.lon), this.in.altitude.v0)
+        var jetFwd = getLocalNorthVector(jetPos) // start out pointing north in ECEF
 
         var turnRate = this.startTurnRate // initial value of turn rate - could start with something better
 
@@ -92,14 +95,28 @@ export class CNodeTurnRateFromClouds extends CNodeEmptyArray {
             let horizon1 = calcHorizonPoint(lastPosition, LOS, cloudAlt)
             let from1 = horizon1.clone().sub(lastPosition).normalize()
             let from2 = horizon1.clone().sub(jetPos).normalize()
-            let angle1 = Math.atan2(from1.z, from1.x)
-            let angle2 = Math.atan2(from2.z, from2.x)
+
+            // Project onto local tangent plane and compute horizontal angles
+            // In old EUS: atan2(z, x) gave horizontal angle (X=East, Z=South)
+            // In ECEF: project onto local east/north basis vectors
+            const localUp = getLocalUpVector(lastPosition)
+            const localEast = V3().crossVectors(localUp, getLocalNorthVector(lastPosition)).normalize()
+            const localNorth = getLocalNorthVector(lastPosition)
+
+            // Remove vertical component from from1 and from2
+            const f1h = from1.clone().sub(localUp.clone().multiplyScalar(from1.dot(localUp)))
+            const f2h = from2.clone().sub(localUp.clone().multiplyScalar(from2.dot(localUp)))
+
+            // atan2 of the projected vector in the east/north plane
+            // In old EUS: atan2(z, x) = atan2(-north, east)
+            // Equivalent: atan2(-north_component, east_component)
+            let angle1 = Math.atan2(-f1h.dot(localNorth), f1h.dot(localEast))
+            let angle2 = Math.atan2(-f2h.dot(localNorth), f2h.dot(localEast))
             let angleChange = degrees((angle2-angle1));
 
             angleChange -= this.in.az.getValueFrame(f+1) - this.in.az.getValueFrame(f)
             turnRate = angleChange * this.fps
             turnRate += this.in.cloudSpeed.v(f)
-
 
             ///////////////////////////////////////////////////////////
             // finally store and add that turn rate

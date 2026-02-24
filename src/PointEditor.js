@@ -10,19 +10,20 @@ import {
     Vector2,
     Vector3
 } from "three";
-import {EUSToLLA, LLAToEUS} from "./LLA-ECEF-ENU";
+import {EUSToLLA, legacyEUSToECEF, LLAToEUS} from "./LLA-ECEF-ENU";
 import {assert} from "./assert.js";
 import {V3} from "./threeUtils";
 import {ViewMan} from "./CViewManager";
 import {mouseInViewOnly, mouseToViewNormalized} from "./ViewUtils";
-import {setRenderOne} from "./Globals";
+import {setRenderOne, Sit} from "./Globals";
+import {radians} from "./utils";
 import {undoManager as UndoManager} from "./UndoManager";
 import * as LAYER from "./LayerMasks";
 import {CNodePositionXYZ} from "./nodes/CNodePositionLLA";
 import {CNodeMeasureAltitude, setupMeasurementUI} from "./nodes/CNodeLabels3D";
 
 export class PointEditor {
-    constructor(_scene, _camera, _renderer, controls, onChange, initialPoints, isLLA=false) {
+    constructor(_scene, _camera, _renderer, controls, onChange, initialPoints, isLLA=false, legacyEUS=false) {
 
         this.splineHelperObjects = [];  // the objects that are the control points
         this.frameNumbers = []          // matching frame numbers
@@ -141,8 +142,20 @@ export class PointEditor {
 
 
 //        this.data = new PointEditorData(initialPoints);
-        if (!isLLA) {
-            // legacy, allow EUS points (deprecated, as it bnreaks when map origin changes)
+        if (!isLLA && legacyEUS) {
+            // legacy EUS points from sitch definitions: convert from old local tangent plane to ECEF
+            const latRad = radians(Sit.lat);
+            const lonRad = radians(Sit.lon);
+            const ecefPoints = [];
+            for (let i = 0; i < initialPoints.length; i++) {
+                const frame = initialPoints[i][0];
+                const eus = V3(initialPoints[i][1], initialPoints[i][2], initialPoints[i][3]);
+                const ecef = legacyEUSToECEF(eus, latRad, lonRad);
+                ecefPoints.push([frame, ecef.x, ecef.y, ecef.z]);
+            }
+            this.load(ecefPoints)
+        } else if (!isLLA) {
+            // points already in current coordinate system (ECEF)
             this.load(initialPoints)
         } else {
             // convert from LLA to EUS, accounting for any new map coordinate system

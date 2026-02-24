@@ -32,7 +32,7 @@ export class CNodeLOSTraverseConstantAltitude extends CNodeTrack {
 
         if (this.in.altitude !== undefined) {
             startRadius = earthRadius + this.in.altitude.v0;
-            altitudeSphere = new Sphere(V3(0, -earthRadius, 0), startRadius )
+            altitudeSphere = new Sphere(V3(0, 0, 0), startRadius )
             position = this.in.LOS.v0.position.clone() // in case there's no initial intersection, default
         }
 
@@ -47,8 +47,8 @@ export class CNodeLOSTraverseConstantAltitude extends CNodeTrack {
                 var startDistance = this.in.startDist.v(0)
                 heading.multiplyScalar(startDistance)
                 position.add(heading)
-                startRadius = V3(0, -earthRadius, 0).sub(position).length()
-                altitudeSphere = new Sphere(V3(0, -earthRadius, 0), startRadius)
+                startRadius = V3(0, 0, 0).sub(position).length()
+                altitudeSphere = new Sphere(V3(0, 0, 0), startRadius)
             } else {
 
              //   if we have a vertical speed, then we increase the radius of the altitude sphere

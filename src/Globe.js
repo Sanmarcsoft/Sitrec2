@@ -11,7 +11,6 @@ import {
 } from "three";
 import {GlobalScene} from "./LocalFrame";
 import {wgs84} from "./LLA-ECEF-ENU";
-import {radians} from "./utils";
 import {Globals, NodeMan, setRenderOne, Sit} from "./Globals";
 import {earthCenterEUS} from "./SphericalMath";
 
@@ -233,18 +232,13 @@ export function addAlignedGlobe(globeScale = 1) {
     sphere.position.set(center.x, center.y, center.z)
     world.add(sphere)
 
-// Convert target latitude and longitude to radians
-    var targetLatitudeRad = radians(Sit.lat);
-    var targetLongitudeRad = radians(Sit.lon);
-
-// Step 1: Align Longitude by rotating around the world Y-axis
-// Rotate the sphere around the world Y-axis by the negative of the target longitude
-    var worldAxisY = new Vector3(0, 1, 0);
-    sphere.rotateOnWorldAxis(worldAxisY, -targetLongitudeRad - radians(90));
-// Step 2: Align Latitude by rotating around the world X-axis
-// Rotate the sphere around the world X-axis by (90 - target latitude)
+    // In ECEF, the pole is along Z. Three.js SphereGeometry has poles on Y.
+    // Rotate +90° about X to map Y→+Z (north pole from Y-up to Z-up).
+    // This also correctly aligns longitude: lon=0 at +X, lon=90° at +Y.
+    // (The old EUS code used lat/lon-dependent rotations to align the globe
+    //  to the local tangent plane's Y-up orientation.)
     var worldAxisX = new Vector3(1, 0, 0);
-    sphere.rotateOnWorldAxis(worldAxisX, -(radians(90) - targetLatitudeRad));
+    sphere.rotateOnWorldAxis(worldAxisX, Math.PI / 2);
 
     return sphere;
 

@@ -472,8 +472,8 @@ export async function SetupFromKeyAndData(key, _data, depth=0) {
             if (data.startCameraPosition === undefined && data.startCameraPositionLLA === undefined) {
                 data = {
                     ...data,
-                    ...{startCameraPosition:[0,130000,160000],
-                        startCameraTarget:[0,0,0]}
+                    ...{startCameraPositionLLA:[Sit.lat - 1, Sit.lon, 200000],
+                        startCameraTargetLLA:[Sit.lat, Sit.lon, 0]}
                 }
             }
 
@@ -793,6 +793,7 @@ export async function SetupFromKeyAndData(key, _data, depth=0) {
 
                 initialPoints: data.initialPoints,
                 initialPointsLLA: data.initialPointsLLA,
+                legacyEUS: data.initialPoints !== undefined && data.initialPointsLLA === undefined,
             })
             break;
 

@@ -1,7 +1,7 @@
 import {Camera, PerspectiveCamera, Vector3} from "three";
 import {f2m, m2f} from "../utils";
-import {GlobalDateTimeNode, guiMenus, NodeMan} from "../Globals";
-import {EUSToLLA, LLAVToEUS} from "../LLA-ECEF-ENU";
+import {GlobalDateTimeNode, guiMenus, NodeMan, Sit} from "../Globals";
+import {EUSToLLA, LLAToEUS, LLAVToEUS} from "../LLA-ECEF-ENU";
 import {
     altitudeAboveSphere,
     getAzElFromPositionAndForward,
@@ -98,6 +98,12 @@ export class CNodeCamera extends CNode3D {
 
         if (this.startPosLLA !== undefined) {
             this._object.position.copy(LLAVToEUS(MV3(this.startPosLLA)));
+        }
+
+        // If no explicit position was set, default to the surface at Sit origin.
+        // In ECEF-based EUS this prevents the camera from being at (0,0,0) = Earth's center.
+        if (this.startPos === undefined && this.startPosLLA === undefined && Sit.lat !== undefined) {
+            this._object.position.copy(LLAToEUS(Sit.lat, Sit.lon, 0));
         }
 
         if (this.upLLA !== undefined) {
