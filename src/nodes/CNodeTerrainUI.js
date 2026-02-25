@@ -506,23 +506,21 @@ export class CNodeTerrainUI extends CNode {
         }
 
         // Ellipsoid Earth Model toggle (moved here from global settings)
-        this.gui.add(Sit, "useEllipsoid")
+        this.ellipsoidController = this.gui.add(Sit, "useEllipsoid")
             .name("Use Ellipsoid Earth Model")
             .tooltip("Sphere: fast legacy model. Ellipsoid: accurate WGS84 shape (higher latitudes benefit most).")
             .listen()
             .onChange((v) => {
-                updateEarthRadii(v);
-
-                if (par.globe) {
-                    const globeScale = Sit.globeScale ?? (Sit.terrain !== undefined ? 0.9999 : 1.0);
-                    updateAlignedGlobe(par.globe, globeScale);
+                // 3D building tiles are aligned to the WGS84 ellipsoid.
+                // Keep this hard dependency enforced in UI.
+                if (!v && this.showBuildings) {
+                    Sit.useEllipsoid = true;
+                    this.applyUseEllipsoid(true);
+                    if (this.ellipsoidController) this.ellipsoidController.updateDisplay();
+                    return;
                 }
 
-                if (this.terrainNode) {
-                    this.terrainNode.updateGreySphereVisibility();
-                }
-
-                setRenderOne(true);
+                this.applyUseEllipsoid(v);
             });
 
         console.log("CNodeTerrainUI: calling setMapType for initial map type " + this.mapType);
@@ -625,11 +623,38 @@ export class CNodeTerrainUI extends CNode {
         }
     }
 
+    applyUseEllipsoid(v) {
+        updateEarthRadii(v);
+
+        if (par.globe) {
+            const globeScale = Sit.globeScale ?? (Sit.terrain !== undefined ? 0.9999 : 1.0);
+            updateAlignedGlobe(par.globe, globeScale);
+        }
+
+        if (this.terrainNode) {
+            this.terrainNode.updateGreySphereVisibility();
+        }
+
+        setRenderOne(true);
+    }
+
+    forceEllipsoidForBuildings() {
+        if (!Sit.useEllipsoid) {
+            Sit.useEllipsoid = true;
+            this.applyUseEllipsoid(true);
+            if (this.ellipsoidController) this.ellipsoidController.updateDisplay();
+        }
+    }
+
     toggleBuildings(show) {
         if (show && !this.canUse3DBuildings) {
             console.warn("CNodeTerrainUI: 3D Buildings not enabled for this user.");
             this.showBuildings = false;
             return;
+        }
+
+        if (show) {
+            this.forceEllipsoidForBuildings();
         }
 
         if (show && !this.buildingsNode) {
