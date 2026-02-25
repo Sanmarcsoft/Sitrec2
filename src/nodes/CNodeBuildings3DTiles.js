@@ -13,8 +13,12 @@ import {GlobalScene} from "../LocalFrame";
 import {Group, Matrix4} from "three";
 import * as LAYER from "../LayerMasks";
 import {TilesRenderer} from "3d-tiles-renderer";
-import {CesiumIonAuthPlugin, GoogleCloudAuthPlugin} from "3d-tiles-renderer/plugins";
 import {TilesDayNightPlugin} from "../TilesDayNightPlugin";
+import {
+    getSharedGooglePhotorealisticState,
+    SharedGoogleCloudAuthPlugin,
+    TrackedCesiumIonAuthPlugin,
+} from "../GooglePhotorealisticTilesAuth";
 
 // Build a Matrix4 that transforms ECEF coordinates to EUS (East-Up-South) local frame.
 // This is the matrix form of ECEFToEUS(), applied to the TilesRenderer group
@@ -27,17 +31,19 @@ function buildECEFToEUSMatrix4() {
 
 // Per-view state: a TilesRenderer instance, its parent group, and the view it tracks.
 class PerViewTiles {
-    constructor(parentGroup, layerMask, source, cesiumIonToken, googleApiKey) {
+    constructor(parentGroup, layerMask, source, cesiumIonToken, googleApiKey, googleSharedState) {
         this.renderer = new TilesRenderer();
 
         if (source === "cesium-osm") {
-            this.renderer.registerPlugin(new CesiumIonAuthPlugin({
+            this.renderer.registerPlugin(new TrackedCesiumIonAuthPlugin({
                 apiToken: cesiumIonToken,
                 assetId: 96188, // Cesium OSM Buildings
             }));
         } else if (source === "google-photorealistic") {
-            this.renderer.registerPlugin(new GoogleCloudAuthPlugin({
+            this.renderer.registerPlugin(new SharedGoogleCloudAuthPlugin({
                 apiToken: googleApiKey,
+                sharedState: googleSharedState,
+                autoRefreshToken: true,
             }));
         }
 
@@ -121,11 +127,14 @@ export class CNodeBuildings3DTiles extends CNode {
             {id: "mainView", mask: LAYER.MASK_MAIN},
             {id: "lookView", mask: LAYER.MASK_LOOK},
         ];
+        const googleSharedState = activeSource === "google-photorealistic"
+            ? getSharedGooglePhotorealisticState(this.googleApiKey)
+            : null;
 
         for (const {id, mask} of viewConfigs) {
             this._perView[id] = new PerViewTiles(
                 this.group, mask, activeSource,
-                this.cesiumIonToken, this.googleApiKey
+                this.cesiumIonToken, this.googleApiKey, googleSharedState
             );
         }
 

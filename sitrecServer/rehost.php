@@ -34,21 +34,97 @@ function startS3() {
     return $s3;
 }
 
+function getGoogle3DRootDailyLimitForGroups($userGroups) {
+    $dailyLimits = [
+        3 => 1000000, // Admin: effectively unlimited
+        14 => 30,     // Meta Members
+        19 => 30,     // Sitrec Plus
+    ];
+
+    $limit = 0;
+    foreach ($userGroups as $group) {
+        if (isset($dailyLimits[$group])) {
+            $limit = max($limit, $dailyLimits[$group]);
+        }
+    }
+    return $limit;
+}
+
+function getCesiumOSM3DBytesDailyLimitForGroups($userGroups) {
+    $dailyLimitBytes = intdiv(1024 * 1024 * 1024, 30); // 1 GiB / 30 days per day
+    $dailyLimits = [
+        3 => 1000000000000, // Admin: effectively unlimited
+        14 => $dailyLimitBytes,
+        19 => $dailyLimitBytes,
+    ];
+
+    $limit = 0;
+    foreach ($userGroups as $group) {
+        if (isset($dailyLimits[$group])) {
+            $limit = max($limit, $dailyLimits[$group]);
+        }
+    }
+    return $limit;
+}
+
+function getTileServiceDailyUsage($userId, $service) {
+    $usageDir = sys_get_temp_dir() . '/sitrec_tile_usage/';
+    $file = $usageDir . "user_{$userId}.json";
+    if (!file_exists($file)) {
+        return 0;
+    }
+
+    $data = json_decode(file_get_contents($file), true);
+    if (!$data) {
+        return 0;
+    }
+
+    $now = time();
+    if ($now > ($data['dayReset'] ?? 0)) {
+        return 0;
+    }
+
+    return max(0, intval($data['daily'][$service] ?? 0));
+}
 
 // if we were passed the parameter "getuser", then we return user data as JSON
 if (isset($_GET['getuser'])) {
     header('Content-Type: application/json');
 
-    $response = ['userID' => $user_id];
+    $userInfo = getUserInfo();
+    $userGroups = $userInfo['user_groups'] ?? [];
+    $allowed3DBuildingGroups = [3, 14, 19]; // Admin, Sitrec Members, Sitrec Plus
+    $has3DBuildingGroup = count(array_intersect($userGroups, $allowed3DBuildingGroups)) > 0;
 
-    // Include API keys for admin users (user 1 or localhost)
+    $response = [
+        'userID' => $user_id,
+        'userGroups' => $userGroups,
+        'canUse3DBuildings' => false,
+    ];
+
+    $googleRootLimit = getGoogle3DRootDailyLimitForGroups($userGroups);
+    $googleRootUsed = getTileServiceDailyUsage($user_id, 'google_3d_root');
+    $googleRootRemaining = max(0, $googleRootLimit - $googleRootUsed);
+    $response['google3DRootDailyLimit'] = $googleRootLimit;
+    $response['google3DRootDailyRemaining'] = $googleRootRemaining;
+
+    $cesiumBytesLimit = getCesiumOSM3DBytesDailyLimitForGroups($userGroups);
+    $cesiumBytesUsed = getTileServiceDailyUsage($user_id, 'cesium_osm_3d_bytes');
+    $cesiumBytesRemaining = max(0, $cesiumBytesLimit - $cesiumBytesUsed);
+    $response['cesium3DBytesDailyLimit'] = $cesiumBytesLimit;
+    $response['cesium3DBytesDailyRemaining'] = $cesiumBytesRemaining;
+
+    // Include 3D buildings API keys only for allowed groups (or localhost).
     $isLocalhost = ($_SERVER['REMOTE_ADDR'] === '127.0.0.1' ||
                     $_SERVER['REMOTE_ADDR'] === '::1');
-    if ($user_id == 1 || $isLocalhost) {
+    if ($has3DBuildingGroup || $isLocalhost) {
         $googleKey = getenv('GOOGLE_MAPS_API_KEY');
         $cesiumToken = getenv('CESIUM_ION_TOKEN');
-        if ($googleKey) $response['GOOGLE_MAPS_API_KEY'] = $googleKey;
-        if ($cesiumToken) $response['CESIUM_ION_TOKEN'] = $cesiumToken;
+        $googleAllowedByQuota = $isLocalhost || $googleRootRemaining > 0;
+        $cesiumAllowedByQuota = $isLocalhost || $cesiumBytesRemaining > 0;
+        if ($googleKey && $googleAllowedByQuota) $response['GOOGLE_MAPS_API_KEY'] = $googleKey;
+        if ($cesiumToken && $cesiumAllowedByQuota) $response['CESIUM_ION_TOKEN'] = $cesiumToken;
+        $response['canUse3DBuildings'] = true;
     }
 
     echo json_encode($response);

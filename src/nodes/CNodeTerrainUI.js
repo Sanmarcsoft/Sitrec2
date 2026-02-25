@@ -468,14 +468,19 @@ export class CNodeTerrainUI extends CNode {
 
         // 3D Buildings support
         this.showBuildings = v.showBuildings ?? false;
-        this.buildingsSource = v.buildingsSource ?? "cesium-osm";
+        this.buildingsSource = v.buildingsSource ?? "google-photorealistic";
         this.buildingsNode = null;
 
-        // Determine available building sources based on API keys from server
+        // Determine available building sources based on API keys and user permission.
+        const allowed3DBuildingGroups = [3, 14, 19]; // Admin, Sitrec Members, Sitrec Plus
+        const userGroups = Array.isArray(Globals.userData?.userGroups) ? Globals.userData.userGroups : [];
+        const hasGroupPermission = userGroups.some(group => allowed3DBuildingGroups.includes(group));
+        this.canUse3DBuildings = Globals.userData?.canUse3DBuildings ?? hasGroupPermission;
+
         const cesiumToken = Globals.userData?.CESIUM_ION_TOKEN;
         const googleKey = Globals.userData?.GOOGLE_MAPS_API_KEY;
-        const hasCesium = !!cesiumToken;
-        const hasGoogle = !!googleKey;
+        const hasCesium = this.canUse3DBuildings && !!cesiumToken;
+        const hasGoogle = this.canUse3DBuildings && !!googleKey;
 
         if (hasCesium || hasGoogle) {
             const buildingsSourcesKV = {};
@@ -618,9 +623,19 @@ export class CNodeTerrainUI extends CNode {
     }
 
     toggleBuildings(show) {
+        if (show && !this.canUse3DBuildings) {
+            console.warn("CNodeTerrainUI: 3D Buildings not enabled for this user.");
+            this.showBuildings = false;
+            return;
+        }
+
         if (show && !this.buildingsNode) {
             const cesiumToken = Globals.userData?.CESIUM_ION_TOKEN;
             const googleKey = Globals.userData?.GOOGLE_MAPS_API_KEY;
+            if (!cesiumToken && !googleKey) {
+                this.showBuildings = false;
+                return;
+            }
             this.buildingsNode = new CNodeBuildings3DTiles({
                 id: "buildings3DTiles",
                 source: this.buildingsSource,
