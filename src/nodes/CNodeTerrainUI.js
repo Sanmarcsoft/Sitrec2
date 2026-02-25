@@ -467,7 +467,6 @@ export class CNodeTerrainUI extends CNode {
         });
 
         // 3D Buildings support
-        this.showBuildings = v.showBuildings ?? false;
         this.buildingsSource = v.buildingsSource ?? "google-photorealistic";
         this.buildingsNode = null;
 
@@ -481,6 +480,10 @@ export class CNodeTerrainUI extends CNode {
         const googleKey = Globals.userData?.GOOGLE_MAPS_API_KEY;
         const hasCesium = this.canUse3DBuildings && !!cesiumToken;
         const hasGoogle = this.canUse3DBuildings && !!googleKey;
+
+        // Only enable showBuildings if user has permission and at least one API key;
+        // otherwise force it off so we don't serialize an unusable state.
+        this.showBuildings = (hasCesium || hasGoogle) ? (v.showBuildings ?? false) : false;
 
         if (hasCesium || hasGoogle) {
             const buildingsSourcesKV = {};

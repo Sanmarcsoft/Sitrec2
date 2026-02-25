@@ -3136,6 +3136,18 @@ export class CCustomManager {
                 modding: Sit.name,
                 useEllipsoid: Sit.useEllipsoid,
             }
+
+            // Serialize terrain UI overrides (buildings, etc.) for modded sitches.
+            // checkForModding does a shallow merge, so this TerrainModel replaces the base sitch's.
+            // We spread the original Sit.TerrainModel first to preserve base values.
+            if (Sit.TerrainModel !== undefined && NodeMan.exists("terrainUI")) {
+                const terrainModel = NodeMan.get("terrainUI");
+                out.TerrainModel = {
+                    ...Sit.TerrainModel,
+                    showBuildings: terrainModel.showBuildings,
+                    buildingsSource: terrainModel.buildingsSource,
+                }
+            }
         }
         else {
             // but for a custom sitch, we need to store the whole Sit object (which automatically stores changes)
@@ -3210,6 +3222,8 @@ export class CCustomManager {
                     elevationType: terrainModel.elevationType,
                     elevationScale: terrainModel.elevationScale,
                     dynamic: terrainModel.dynamic,
+                    showBuildings: terrainModel.showBuildings,
+                    buildingsSource: terrainModel.buildingsSource,
                 }
             }
 
