@@ -2,7 +2,7 @@ import {par} from "../par";
 import {FileManager, guiMenus, guiTweaks, NodeMan, setRenderOne, Sit} from "../Globals";
 import {AlwaysDepth} from "three";
 import {ExpandKeyframes, f2m, scaleF2M} from "../utils";
-import {LLAToEUS} from "../LLA-ECEF-ENU";
+import {EUSToLLA, LLAToEUS} from "../LLA-ECEF-ENU";
 import {CNodeSplineEditor} from "../nodes/CNodeSplineEdit";
 import * as LAYER from "../LayerMasks.js"
 import {CNodeSwitch} from "../nodes/CNodeSwitch";
@@ -283,13 +283,16 @@ export const SitAguadilla = {
 
 
            for (row=0;row<csv.length;row++) {
-               points.push({position: V3(xExp[row], yExp[row], zExp[row])});
+               const position = V3(xExp[row], yExp[row], zExp[row]);
+               const lla = EUSToLLA(position);
+               points.push({position, lla: [lla.x, lla.y, lla.z]});
            }
 
 
            const track = new CNodeArray({
                id:id,
                array:points,
+               reprojectFromLLA: true,
            })
 
            return track;
