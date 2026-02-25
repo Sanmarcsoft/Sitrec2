@@ -63,6 +63,7 @@ import {addMenuToLeftSidebar, addMenuToRightSidebar, isInLeftSidebar, isInRightS
 import {CNodeControllerCelestial} from "./nodes/CNodeControllerVarious";
 import {CNodeVideoInfoUI} from "./nodes/CNodeVideoInfoUI";
 import {CNodeOSDDataSeriesController} from "./nodes/CNodeOSDDataSeriesController";
+import {meanSeaLevelOffset} from "./EGM96Geoid";
 
 export class CCustomManager {
     constructor() {
@@ -2079,7 +2080,10 @@ export class CCustomManager {
         const groundLLA = EUSToLLA(groundPoint);
         const lat = groundLLA.x;
         const lon = groundLLA.y;
-        const alt = groundLLA.z;
+        const altHAE = groundLLA.z;
+        const alt = altHAE; // legacy HAE value used by non-camera context menu actions
+        const geoidOffset = meanSeaLevelOffset(lat, lon);
+        const altMSL = altHAE - geoidOffset;
 
         // Get ground elevation at this point
         const groundElevation = elevationAtLL(lat, lon);
@@ -2105,7 +2109,7 @@ export class CCustomManager {
         this.groundContextMenu = menu;
 
         // Format the location text
-        const locationText = `${lat.toFixed(6)}, ${lon.toFixed(6)}, ${alt.toFixed(1)}m`;
+        const locationText = `${lat.toFixed(6)}, ${lon.toFixed(6)}, ${altMSL.toFixed(1)}m MSL`;
 
         // Create an object to hold the menu actions
         const menuData = {
@@ -2124,8 +2128,8 @@ export class CCustomManager {
                 if (NodeMan.exists("fixedCameraPosition")) {
                     const camera = NodeMan.get("fixedCameraPosition");
                     // Set camera at ground level (2m above ground for eye level)
-                    camera.setLLA(lat, lon, alt + 2);
-                    console.log(`Camera set to ground: ${lat}, ${lon}, ${alt + 2}m`);
+                    camera.setLLA(lat, lon, altMSL + 2);
+                    console.log(`Camera set to ground: ${lat}, ${lon}, ${altMSL + 2}m MSL`);
                 }
                 this.groundContextMenu = null;
                 menu.destroy();
@@ -2145,8 +2149,8 @@ export class CCustomManager {
                 if (NodeMan.exists("fixedTargetPositionWind")) {
                     const target = NodeMan.get("fixedTargetPositionWind");
                     // Set target at ground level
-                    target.setLLA(lat, lon, alt);
-                    console.log(`Target set to ground: ${lat}, ${lon}, ${alt}m`);
+                    target.setLLA(lat, lon, altMSL);
+                    console.log(`Target set to ground: ${lat}, ${lon}, ${altMSL}m MSL`);
                 }
                 this.groundContextMenu = null;
                 menu.destroy();
@@ -4128,5 +4132,3 @@ function restoreIfDisabled(ob) {
         ob.customOldVisible = undefined;
     }
 }
-
-

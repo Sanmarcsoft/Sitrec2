@@ -379,16 +379,16 @@ export class CNodePositionLLA extends CNodeTrack {
 
             } else {
                 // altitude is absolute, so we either leave it alone, or
-                // (if shift held) set it to ground + 2m
-                // if the shift key is held, then set the altitude to the ground + 2m
+                // (if shift held) set it to eye level above ground
                 if (isKeyHeld('Shift')) {
-                    // get the ground altitude, buy first getting the cursor position, adjusted for height
-                    const groundPoint = adjustHeightAboveGround(cursorPos, 2, true);
-                    // converts the ground point to LLA
+                    const eyeLevel = f2m(7); // ~2.13m
+                    // Get the point at eye level above local ground.
+                    // EUSToLLA returns ellipsoid height (HAE), but _LLA[2] stores MSL.
+                    const groundPoint = adjustHeightAboveGround(cursorPos, eyeLevel, true);
                     const groundPointLLA = EUSToLLA(groundPoint);
-                    // so the altitude is in the Z component
-                    const groundAlt = groundPointLLA.z;
-                    this._LLA[2] = this.guiAlt.setValueWithUnits(groundAlt, "metric", "small", true)
+                    const geoidOffset = meanSeaLevelOffset(groundPointLLA.x, groundPointLLA.y);
+                    const groundAltMSL = groundPointLLA.z - geoidOffset;
+                    this._LLA[2] = this.guiAlt.setValueWithUnits(groundAltMSL, "metric", "small", true)
                 }
             }
 
