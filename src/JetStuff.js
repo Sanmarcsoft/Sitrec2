@@ -18,6 +18,7 @@ import {metersFromMiles, metersFromNM, radians} from "./utils";
 import {EA2XYZ, EAJP2PR, getLocalNorthVector, getLocalUpVector, PRJ2XYZ} from "./SphericalMath";
 import {DebugArrowAB, dispose, GridHelperWorld, propagateLayerMaskObject, sphereMark} from "./threeExt";
 import * as LAYER from "./LayerMasks";
+import {LLAToEUS} from "./LLA-ECEF-ENU";
 import {Line2} from "three/addons/lines/Line2.js";
 import {LineGeometry} from "three/addons/lines/LineGeometry.js";
 import {showHider} from "./KeyBoardHandler";
@@ -55,6 +56,7 @@ import {
     Color,
     DoubleSide,
     Float32BufferAttribute,
+    Group,
     LineBasicMaterial,
     Matrix4,
     Mesh,
@@ -879,6 +881,36 @@ export function updateSize(force) {
 }
 
 
+function ensureGroundFrame() {
+    if (Sit.groundFrame !== undefined) {
+        return Sit.groundFrame;
+    }
+
+    // Legacy sitches (like flir1) can call initViews without creating groundFrame first.
+    if (Sit.lat === undefined || Sit.lon === undefined) {
+        console.warn("initViews: missing Sit.groundFrame and Sit.lat/lon, skipping ground-frame helper setup");
+        return null;
+    }
+
+    const surfacePos = LLAToEUS(Sit.lat, Sit.lon, 0);
+    const groundUp = getLocalUpVector(surfacePos);
+    const groundNorth = getLocalNorthVector(surfacePos);
+    const groundEast = V3().crossVectors(groundNorth, groundUp).normalize();
+    const groundSouth = groundNorth.clone().negate();
+    const groundMatrix = new Matrix4();
+    groundMatrix.makeBasis(groundEast, groundUp, groundSouth);
+
+    Sit.groundFrame = new Group();
+    Sit.groundFrame.position.copy(surfacePos);
+    Sit.groundFrame.quaternion.setFromRotationMatrix(groundMatrix);
+    Sit.groundFrame.updateMatrix();
+    Sit.groundFrame.updateMatrixWorld();
+    GlobalScene.add(Sit.groundFrame);
+
+    return Sit.groundFrame;
+}
+
+
 
 export function initViews() {
     new CNodeChartView({
@@ -909,7 +941,10 @@ export function initViews() {
         // a grid spaced one Nautical mile square
         const gridSquaresGround = 200
         let gridHelperGround = new GridHelperWorld(1,metersFromNM(gridSquaresGround), gridSquaresGround, metersFromMiles(EarthRadiusMiles), 0x606000, 0x606000);
-        Sit.groundFrame.add(gridHelperGround);
+        const groundFrame = ensureGroundFrame();
+        if (groundFrame) {
+            groundFrame.add(gridHelperGround);
+        }
 
         setATFLIR(new CNodeDisplayATFLIR({
             id: "displayATFLIR",
