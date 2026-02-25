@@ -157,10 +157,11 @@ export function earthCenterEUS() {
 }
 
 /**
- * Geodetic MSL altitude of a point in EUS coordinates.
- * Converts EUS → ECEF → LLA using the active earth model (Globals radii).
- * When Globals.polarRadius === Globals.equatorRadius this degenerates to the
- * same result as the old sphere formula, preserving regression stability.
+ * Geodetic ellipsoid height (HAE) of a point in EUS coordinates.
+ *
+ * Historical note: this function name predates geoid-aware MSL handling and is
+ * still used broadly in geometry code. User-facing MSL should be computed as:
+ *   MSL = altitudeMSL(point) - meanSeaLevelOffset(lat, lon)
  */
 export function altitudeMSL(point) {
     const ecef = EUSToECEF_radii(point);
@@ -168,9 +169,10 @@ export function altitudeMSL(point) {
 }
 
 /**
- * Move a point to a specific geodetic MSL altitude.
- * Converts EUS → ECEF → LLA, replaces the altitude, then converts back.
- * Degenerates to exact sphere result when polarRadius === equatorRadius.
+ * Move a point to a specific geodetic ellipsoid height (HAE).
+ *
+ * Historical note: function name is retained for compatibility with existing
+ * callers. For true MSL targets, convert MSL->HAE first by adding geoid offset.
  */
 export function setAltitudeMSL(point, altitude) {
     const ecef = EUSToECEF_radii(point);
@@ -180,7 +182,7 @@ export function setAltitudeMSL(point, altitude) {
 }
 
 /**
- * Point on the Earth surface directly below a given EUS point.
+ * Point on the WGS84 ellipsoid (HAE=0) directly below a given EUS point.
  */
 export function pointOnSurface(point) {
     return setAltitudeMSL(point, 0);

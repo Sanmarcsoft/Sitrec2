@@ -3,12 +3,13 @@
 
 import * as LAYER from "../LayerMasks";
 import {DebugArrowAB, DebugArrows, isVisible, propagateLayerMaskObject, removeDebugArrow} from "../threeExt";
-import {altitudeAboveSphere, pointOnSphereBelow} from "../SphericalMath";
+import {pointOnSphereBelow} from "../SphericalMath";
 import {CNodeMunge} from "./CNodeMunge";
 import {Globals, guiShowHide, NodeMan, setRenderOne, Units} from "../Globals";
 import {CNode3DGroup} from "./CNode3DGroup";
 import {par} from "../par";
-import {LLAToEUS} from "../LLA-ECEF-ENU";
+import {EUSToLLA, LLAToEUS} from "../LLA-ECEF-ENU";
+import {meanSeaLevelOffset} from "../EGM96Geoid";
 
 import {assert} from "../assert.js";
 import {V2, V3} from "../threeUtils";
@@ -31,6 +32,11 @@ let labelsControllerLook = null;
 let featuresGroupNode = null;
 let featuresControllerMain = null;
 let featuresControllerLook = null;
+
+function altitudeMSLFromEUS(pos) {
+    const lla = EUSToLLA(pos);
+    return lla.z - meanSeaLevelOffset(lla.x, lla.y);
+}
 
 
 // adds a new group for measurements, and a GUI controller to toggle it.
@@ -315,9 +321,11 @@ export class CNodeMeasureAB extends CNodeLabel3D {
         let length
 
         if (this.altitude) {
-            // if we are measuring altitude, then we need to use the altitude of A and B
-            // to calculate the length
-            length = altitudeAboveSphere(this.A) - altitudeAboveSphere(this.B);
+            // User-facing altitude labels should be MSL, so convert from geodetic
+            // ellipsoid height (HAE) to MSL at each endpoint before differencing.
+            const altA = altitudeMSLFromEUS(this.A);
+            const altB = altitudeMSLFromEUS(this.B);
+            length = altA - altB;
         } else {
             length = this.A.distanceTo(this.B);
         }
@@ -326,8 +334,7 @@ export class CNodeMeasureAB extends CNodeLabel3D {
 
         let text;
         if (this.altitude) {
-            // TODO: verify this is correct, use the fixed camera and target
-            var alt = altitudeAboveSphere(this.A)
+            const alt = altitudeMSLFromEUS(this.A);
             if (Math.abs(alt-length) < 1) {
                 // if the altitude is within 1 meter of the length, then just show the length
                 // as that means we are over the ocean (zero altitude msl))
@@ -563,5 +570,3 @@ export function doLabel3D(id, pos, text, size, layers) {
     return node;
 
 }
-
-

@@ -438,9 +438,11 @@ export class CNodePositionLLA extends CNodeTrack {
                     }
                 }
                 const lla = EUSToLLA(pos);
+                const altMSL = lla.z - meanSeaLevelOffset(lla.x, lla.y);
                 this.array.push({
                     position: pos,
-                    lla: [lla.x, lla.y, lla.z],
+                    lla: [lla.x, lla.y, altMSL],
+                    altReference: "MSL",
                 });
             }
         }

@@ -141,8 +141,10 @@ export class CNodeTrack extends CNodeEmptyArray {
 
             const frameData = this.v(f);
             let lat, lon, alt;
+            let altReference = "HAE";
             if (frameData.lla) {
                 [lat, lon, alt] = frameData.lla;
+                altReference = frameData.altReference ?? "HAE";
             } else if (frameData.position) {
                 const llaVec = EUSToLLA(frameData.position);
                 lat = llaVec.x;
@@ -152,6 +154,11 @@ export class CNodeTrack extends CNodeEmptyArray {
                 lat = 0;
                 lon = 0;
                 alt = 0;
+            }
+
+            // KML absolute altitude is ellipsoid height (HAE).
+            if (altReference === "MSL") {
+                alt += meanSeaLevelOffset(lat, lon);
             }
             coordLines.push(`<gx:coord>${lon} ${lat} ${alt}</gx:coord>`);
         }
@@ -197,13 +204,20 @@ export class CNodeTrack extends CNodeEmptyArray {
             const timeMS = GlobalDateTimeNode.frameToMS(f);
 
             let lla;
+            let altReference = "HAE";
             if (frameData.lla) {
-                lla = frameData.lla;
+                lla = frameData.lla.slice();
+                altReference = frameData.altReference ?? "HAE";
             } else if (frameData.position) {
                 const llaVec = EUSToLLA(frameData.position);
                 lla = [llaVec.x, llaVec.y, llaVec.z];
             } else {
                 lla = ["", "", ""];
+            }
+
+            // MISB SensorTrueAltitude is MSL.
+            if (lla[0] !== "" && lla[1] !== "" && lla[2] !== "" && altReference === "HAE") {
+                lla[2] -= meanSeaLevelOffset(lla[0], lla[1]);
             }
 
             const misbRow = frameData.misbRow;
@@ -436,7 +450,6 @@ export class CNodeTrackFromLLAArray extends CNodeTrack {
     //     return {position: eus}
     // }
 }
-
 
 
 
