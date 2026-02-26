@@ -4,12 +4,22 @@ import {assert} from "../assert";
 import {configParams} from "../login";
 import {isLocal, SITREC_APP, SITREC_TERRAIN} from "../configUtils";
 import {CNodeSwitch} from "./CNodeSwitch";
-import {EUSToLLA, updateEarthRadii} from "../LLA-ECEF-ENU";
+import {EUSToLLA, LLAToEUS, updateEarthRadii} from "../LLA-ECEF-ENU";
 import {CNodeTerrain} from "./CNodeTerrain";
 import {CNodeBuildings3DTiles} from "./CNodeBuildings3DTiles";
+import {GlobalScene} from "../LocalFrame";
 import {par} from "../par";
 import {addAlignedGlobe, updateAlignedGlobe} from "../Globe";
 import {showHider} from "../KeyBoardHandler";
+import {meanSeaLevelOffset} from "../EGM96Geoid";
+import * as LAYER from "../LayerMasks";
+import {BufferGeometry, DoubleSide, Float32BufferAttribute, Group, Mesh, MeshPhongMaterial} from "three";
+
+const OCEAN_SURFACE_OFFSET_METERS = 0;
+const OCEAN_SURFACE_TILE_GRID = 17;
+const OCEAN_SURFACE_WATER_THRESHOLD_METERS = 2;
+const OCEAN_SURFACE_REFRESH_MS = 1200;
+const OCEAN_SURFACE_FIXED_DATUM = "egm96-msl";
 
 export class CNodeTerrainUI extends CNode {
     constructor(v) {
@@ -469,6 +479,13 @@ export class CNodeTerrainUI extends CNode {
         // 3D Buildings support
         this.buildingsSource = v.buildingsSource ?? "google-photorealistic";
         this.buildingsNode = null;
+        this.showOceanSurface = v.showOceanSurface ?? false;
+        this.oceanSurfaceDatum = OCEAN_SURFACE_FIXED_DATUM;
+        this.oceanSurfaceGroup = null;
+        this.oceanSurfaceMaterial = null;
+        this.oceanSurfaceTileSignature = null;
+        this.oceanSurfaceNeedsRebuild = true;
+        this.oceanSurfaceNextRefreshAtMs = 0;
 
         // Determine available building sources based on API keys and user permission.
         const allowed3DBuildingGroups = [3, 14, 19]; // Admin, Sitrec Members, Sitrec Plus
@@ -494,12 +511,17 @@ export class CNodeTerrainUI extends CNode {
                 this.toggleBuildings(v);
             }).tooltip("Show 3D building tiles from Cesium Ion or Google");
 
+            if (hasGoogle) {
+                this.gui.add(this, "showOceanSurface").name("Ocean Surface (Beta)").onChange(() => {
+                    this.updateTerrainAndOceanVisibility();
+                }).tooltip("Experimental: render sea-level water surface (fixed EGM96 MSL) while Google Photorealistic tiles are active");
+            }
+
             if (Object.keys(buildingsSourcesKV).length > 1) {
                 this.gui.add(this, "buildingsSource", buildingsSourcesKV).name("Buildings Source").onChange(v => {
                     if (this.buildingsNode) {
                         this.buildingsNode.setSource(v);
-                        // Update terrain visibility: hide for Google (includes ground), show for Cesium OSM (buildings only)
-                        this.setTerrainVisible(this.buildingsNode._activeSource !== "google-photorealistic");
+                        this.updateTerrainAndOceanVisibility();
                     }
                 }).tooltip("Data source for 3D building tiles");
             }
@@ -635,6 +657,9 @@ export class CNodeTerrainUI extends CNode {
             this.terrainNode.updateGreySphereVisibility();
         }
 
+        this.markOceanSurfaceDirty();
+        this.rebuildOceanSurfaceTiles(true);
+
         setRenderOne(true);
     }
 
@@ -670,22 +695,239 @@ export class CNodeTerrainUI extends CNode {
                 cesiumIonToken: cesiumToken,
                 googleApiKey: googleKey,
             });
-            // Google Photorealistic tiles include the ground surface,
-            // so hide terrain to avoid z-fighting and visual clutter.
-            if (this.buildingsNode._activeSource === "google-photorealistic") {
-                this.setTerrainVisible(false);
-            }
         } else if (!show && this.buildingsNode) {
             NodeMan.disposeRemove(this.buildingsNode);
             this.buildingsNode = null;
-            this.setTerrainVisible(true);
         }
+
+        this.updateTerrainAndOceanVisibility();
 
         // Hide the grey sphere when 3D tiles are active
         if (this.terrainNode) {
             this.terrainNode.hide3DTilesGreySphere = !!this.buildingsNode;
             this.terrainNode.updateGreySphereVisibility();
         }
+    }
+
+    isGooglePhotorealisticActive() {
+        return !!this.buildingsNode && this.buildingsNode._activeSource === "google-photorealistic";
+    }
+
+    ensureOceanSurface() {
+        if (this.oceanSurfaceGroup) return;
+
+        this.oceanSurfaceMaterial = new MeshPhongMaterial({
+            color: 0x2f6aa8,
+            emissive: 0x0d2a46,
+            transparent: true,
+            opacity: 0.35,
+            depthTest: true,
+            depthWrite: false,
+            shininess: 70,
+            side: DoubleSide,
+        });
+
+        this.oceanSurfaceGroup = new Group();
+        this.oceanSurfaceGroup.layers.mask = LAYER.MASK_MAIN | LAYER.MASK_LOOK;
+        this.oceanSurfaceGroup.visible = false;
+        this.oceanSurfaceGroup.renderOrder = 1;
+        GlobalScene.add(this.oceanSurfaceGroup);
+
+        this.markOceanSurfaceDirty();
+    }
+
+    markOceanSurfaceDirty() {
+        this.oceanSurfaceNeedsRebuild = true;
+        this.oceanSurfaceNextRefreshAtMs = 0;
+    }
+
+    getOceanSurfaceTileSignature(tiles) {
+        const keys = tiles.map(tile => tile.key()).sort().join(",");
+        return `${Globals.equatorRadius}:${Globals.polarRadius}:${this.mapType}:${this.oceanSurfaceDatum}:${keys}`;
+    }
+
+    getActiveOceanSurfaceTiles() {
+        const terrainMap = this.terrainNode?.maps?.[this.mapType]?.map;
+        if (!terrainMap) {
+            return [];
+        }
+
+        const activeTiles = [];
+        terrainMap.forEachTile(tile => {
+            if (!tile || !tile.mesh || !tile.tileLayers) {
+                return;
+            }
+
+            // Only drop parent coverage when all four children are present and usable.
+            // Frozen/partial subdivision can leave sparse child sets; dropping parent
+            // unconditionally creates large visible holes.
+            if (this.tileHasCompleteUsableChildCoverage(tile)) {
+                return;
+            }
+            activeTiles.push(tile);
+        });
+        return activeTiles;
+    }
+
+    tileHasCompleteUsableChildCoverage(tile) {
+        if (!tile?.children || tile.children.length < 4) {
+            return false;
+        }
+
+        for (let i = 0; i < 4; i++) {
+            const child = tile.children[i];
+            if (!child || !child.mesh || !child.tileLayers) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    addOceanTriangle(indices, waterMask, a, b, c) {
+        if (waterMask[a] && waterMask[b] && waterMask[c]) {
+            indices.push(a, b, c);
+        }
+    }
+
+    createOceanSurfaceGeometryForTile(tile) {
+        const mapProjection = tile.map?.options?.mapProjection;
+        const elevationMap = this.terrainNode?.elevationMap;
+        const tileCenter = tile.mesh?.position;
+        if (!mapProjection || !elevationMap || !tileCenter) {
+            return null;
+        }
+
+        const grid = OCEAN_SURFACE_TILE_GRID;
+        const vertexCount = grid * grid;
+        const positions = new Float32Array(vertexCount * 3);
+        const waterMask = new Uint8Array(vertexCount);
+
+        for (let j = 0; j < grid; j++) {
+            const v = j / (grid - 1);
+            const yWorld = tile.y + v;
+            const lat = mapProjection.getNorthLatitude(yWorld, tile.z);
+
+            for (let i = 0; i < grid; i++) {
+                const u = i / (grid - 1);
+                const xWorld = tile.x + u;
+                const lon = mapProjection.getLeftLongitude(xWorld, tile.z);
+
+                const geoidOffset = meanSeaLevelOffset(lat, lon);
+                const oceanAltitudeHAE = geoidOffset + OCEAN_SURFACE_OFFSET_METERS;
+                const oceanPoint = LLAToEUS(lat, lon, oceanAltitudeHAE);
+
+                const idx = j * grid + i;
+                const p = idx * 3;
+                positions[p] = oceanPoint.x - tileCenter.x;
+                positions[p + 1] = oceanPoint.y - tileCenter.y;
+                positions[p + 2] = oceanPoint.z - tileCenter.z;
+
+                const {elevation: terrainElevation, tileZ} = elevationMap.getElevationWithTileInfo(lat, lon, tile.z);
+                const waterThreshold = geoidOffset + OCEAN_SURFACE_WATER_THRESHOLD_METERS;
+                waterMask[idx] = (tileZ >= 0 && terrainElevation <= waterThreshold) ? 1 : 0;
+            }
+        }
+
+        const indices = [];
+        for (let j = 0; j < grid - 1; j++) {
+            for (let i = 0; i < grid - 1; i++) {
+                const a = j * grid + i;
+                const b = a + 1;
+                const c = a + grid;
+                const d = c + 1;
+
+                this.addOceanTriangle(indices, waterMask, a, c, b);
+                this.addOceanTriangle(indices, waterMask, b, c, d);
+            }
+        }
+
+        if (indices.length === 0) {
+            return null;
+        }
+
+        const geometry = new BufferGeometry();
+        geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+        geometry.setIndex(indices);
+        geometry.computeVertexNormals();
+        geometry.computeBoundingSphere();
+        return geometry;
+    }
+
+    clearOceanSurfaceTiles() {
+        if (!this.oceanSurfaceGroup) {
+            return;
+        }
+
+        const oldChildren = [...this.oceanSurfaceGroup.children];
+        for (const child of oldChildren) {
+            this.oceanSurfaceGroup.remove(child);
+            child.geometry?.dispose();
+        }
+    }
+
+    rebuildOceanSurfaceTiles(force = false) {
+        if (!this.oceanSurfaceGroup || !this.oceanSurfaceMaterial) {
+            return;
+        }
+
+        const activeTiles = this.getActiveOceanSurfaceTiles();
+        const signature = this.getOceanSurfaceTileSignature(activeTiles);
+        const now = Date.now();
+
+        if (!force
+            && !this.oceanSurfaceNeedsRebuild
+            && signature === this.oceanSurfaceTileSignature
+            && now < this.oceanSurfaceNextRefreshAtMs) {
+            return;
+        }
+
+        this.clearOceanSurfaceTiles();
+
+        for (const tile of activeTiles) {
+            const geometry = this.createOceanSurfaceGeometryForTile(tile);
+            if (!geometry) {
+                continue;
+            }
+
+            const mesh = new Mesh(geometry, this.oceanSurfaceMaterial);
+            mesh.layers.mask = LAYER.MASK_MAIN | LAYER.MASK_LOOK;
+            mesh.position.copy(tile.mesh.position);
+            mesh.renderOrder = 1;
+            this.oceanSurfaceGroup.add(mesh);
+        }
+
+        this.oceanSurfaceTileSignature = signature;
+        this.oceanSurfaceNeedsRebuild = false;
+        this.oceanSurfaceNextRefreshAtMs = now + OCEAN_SURFACE_REFRESH_MS;
+    }
+
+    setOceanSurfaceVisible(visible) {
+        if (visible) {
+            this.ensureOceanSurface();
+            this.rebuildOceanSurfaceTiles(true);
+        }
+        if (this.oceanSurfaceGroup) {
+            this.oceanSurfaceGroup.visible = visible;
+        }
+    }
+
+    updateTerrainAndOceanVisibility() {
+        const googleActive = this.isGooglePhotorealisticActive();
+        this.setTerrainVisible(!googleActive);
+        this.setOceanSurfaceVisible(googleActive && this.showOceanSurface);
+    }
+
+    disposeOceanSurface() {
+        if (!this.oceanSurfaceGroup) return;
+        this.clearOceanSurfaceTiles();
+        GlobalScene.remove(this.oceanSurfaceGroup);
+        this.oceanSurfaceMaterial?.dispose();
+        this.oceanSurfaceGroup = null;
+        this.oceanSurfaceMaterial = null;
+        this.oceanSurfaceTileSignature = null;
+        this.oceanSurfaceNeedsRebuild = false;
+        this.oceanSurfaceNextRefreshAtMs = 0;
     }
 
     setTerrainVisible(visible) {
@@ -827,6 +1069,7 @@ export class CNodeTerrainUI extends CNode {
             NodeMan.disposeRemove(this.buildingsNode);
             this.buildingsNode = null;
         }
+        this.disposeOceanSurface();
         super.dispose();
     }
 
@@ -972,6 +1215,10 @@ export class CNodeTerrainUI extends CNode {
 
         }
 
+        if (this.oceanSurfaceGroup?.visible) {
+            this.rebuildOceanSurfaceTiles();
+        }
+
     }
 
     recalculate() {
@@ -1021,6 +1268,8 @@ export class CNodeTerrainUI extends CNode {
             UINode: this,
             }
         )
+
+        this.updateTerrainAndOceanVisibility();
     }
 
     // one time button to add a terrain node
