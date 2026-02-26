@@ -751,8 +751,14 @@ export class CFileManager extends CManager {
 
 
 // open the login URL in a new window
-// the redirect takes that tab to the main page
-            window.open("https://www.metabunk.org/login?_xfRedirect=https://www.metabunk.org/sitrec/sitrecServer/successfullyLoggedIn.html  ", "_blank");
+// the redirect takes that tab to a lightweight success page in this current SitRec instance
+            const forumOrigin = (Globals.env && Globals.env.SITREC_FORUM_ORIGIN)
+                ? Globals.env.SITREC_FORUM_ORIGIN
+                : window.location.origin;
+            const redirectUrl = new URL("sitrecServer/successfullyLoggedIn.html", SITREC_APP).toString();
+            const loginUrl = new URL("/login", forumOrigin);
+            loginUrl.searchParams.set("_xfRedirect", redirectUrl);
+            window.open(loginUrl.toString(), "_blank");
 
 // When the current window regains focus, we'll check if we are logged in
 // and if we are, we'll make the permalink
@@ -2702,5 +2708,4 @@ export async function waitForParsingToComplete() {
     });
     console.log("Parsing complete!");
 }
-
 
