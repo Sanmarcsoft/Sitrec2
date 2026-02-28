@@ -898,7 +898,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
             if (quickToggle("Smooth", false, guiVideoEffectsFolder) === false)
                 ctx.imageSmoothingEnabled = false;
 
-            var filter = ''
+            let filter = ''
             const effectsEnabled = this.in.enableVideoEffects ? this.in.enableVideoEffects.v0 : true;
 
             let sourceImage = image;
@@ -925,16 +925,27 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
                 }
             }
 
-            if (effectsEnabled) {
+            const blurPx = effectsEnabled ? (this.in.blur?.v0 ?? 0) : 0;
+            if (effectsEnabled && blurPx !== 0) {
+                let sourceFilter = '';
+                if (this.in.contrast && this.in.contrast.v0 !== 1) {
+                    sourceFilter += "contrast(" + this.in.contrast.v0 + ") "
+                }
+                if (this.in.brightness && this.in.brightness.v0 !== 1) {
+                    sourceFilter += "brightness(" + this.in.brightness.v0 + ") "
+                }
+                sourceFilter += "blur(" + blurPx + "px) ";
+                sourceImage = applySourcePixelFilterToImage(sourceImage, sourceFilter, this);
+            } else if (effectsEnabled) {
                 if (this.in.contrast && this.in.contrast.v0 !== 1) {
                     filter += "contrast(" + this.in.contrast.v0 + ") "
                 }
                 if (this.in.brightness && this.in.brightness.v0 !== 1) {
                     filter += "brightness(" + this.in.brightness.v0 + ") "
                 }
-                if (this.in.blur && this.in.blur.v0 !== 0) {
-                    filter += "blur(" + this.in.blur.v0 + "px) "
-                }
+            }
+
+            if (effectsEnabled) {
                 if (this.in.greyscale && this.in.greyscale.v0 !== 0) {
                     filter += "grayscale(" + this.in.greyscale.v0 + ") "
                 }
@@ -1496,7 +1507,7 @@ export function addFiltersToVideoNode(videoNode) {
     if (!NodeMan.exists("videoBrightness")) {
         brightness = new CNodeGUIValue({ id: "videoBrightness", value: 1, start: 0, end: 5, step: 0.01, desc: "Brightness" }, guiVideoEffectsFolder),
             contrast = new CNodeGUIValue({ id: "videoContrast", value: 1, start: 0, end: 5, step: 0.01, desc: "Contrast" }, guiVideoEffectsFolder),
-            blur = new CNodeGUIValue({ id: "videoBlur", value: 0, start: 0, end: 200, step: 1, desc: "Blur Px" }, guiVideoEffectsFolder),
+            blur = new CNodeGUIValue({ id: "videoBlur", value: 0, start: 0, end: 200, step: 1, desc: "Blur Src Px" }, guiVideoEffectsFolder),
             greyscale = new CNodeGUIValue({ id: "videoGreyscale", value: 0, start: 0, end: 1, step: 0.01, desc: "Greyscale" }, guiVideoEffectsFolder),
             hue = new CNodeGUIValue({ id: "videoHue", value: 0, start: 0, end: 360, step: 1, desc: "Hue Rotate" }, guiVideoEffectsFolder),
             invert = new CNodeGUIValue({ id: "videoInvert", value: 0, start: 0, end: 1, step: 0.01, desc: "Invert" }, guiVideoEffectsFolder),
@@ -1883,4 +1894,27 @@ function applyConvolutionToImage(image, kernelName, params, videoView) {
     ctx.drawImage(image, 0, 0);
     applyConvolution(ctx, width, height, kernelName, params);
     return videoView._convolutionCanvas;
+}
+
+function applySourcePixelFilterToImage(image, filterString, videoView) {
+    if (!filterString || filterString === 'none') return image;
+
+    const width = image.width;
+    const height = image.height;
+
+    if (!videoView._sourceFilterCanvas ||
+        videoView._sourceFilterCanvas.width !== width ||
+        videoView._sourceFilterCanvas.height !== height) {
+        videoView._sourceFilterCanvas = document.createElement('canvas');
+        videoView._sourceFilterCanvas.width = width;
+        videoView._sourceFilterCanvas.height = height;
+        videoView._sourceFilterCtx = videoView._sourceFilterCanvas.getContext('2d');
+    }
+
+    const ctx = videoView._sourceFilterCtx;
+    ctx.clearRect(0, 0, width, height);
+    ctx.filter = filterString;
+    ctx.drawImage(image, 0, 0, width, height);
+    ctx.filter = 'none';
+    return videoView._sourceFilterCanvas;
 }
