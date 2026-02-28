@@ -6,7 +6,6 @@ import {LineMaterial} from "three/addons/lines/LineMaterial.js";
 
 import {Line2} from "three/addons/lines/Line2.js";
 import {CNode3DGroup} from "./CNode3DGroup";
-import {pointOnSphereBelow} from "../SphericalMath";
 // just import THREE from three
 import * as THREE from "three";
 import {AlwaysDepth, Color, LessDepth} from "three";
@@ -18,6 +17,7 @@ import {par} from "../par";
 import {hexColor, V3} from "../threeUtils";
 import {CNodeGUIValue} from "./CNodeGUIValue";
 import {EUSToLLA, haversineDistanceKM, interpolateGreatCircle, LLAToEUS} from "../LLA-ECEF-ENU";
+import {meanSeaLevelOffset} from "../EGM96Geoid";
 
 export class CNodeDisplayTrack extends CNode3DGroup {
     constructor(v) {
@@ -673,8 +673,9 @@ export class CNodeDisplayTrack extends CNode3DGroup {
 
                 // The top point
                 linePoints.push(A);
-                // The corresponding bottom point on the sphere (assume this function is given)
-                const bottom = pointOnSphereBelow(A);
+                // Fast MSL=0 projection using EGM96 geoid undulation (HAE = N).
+                const lla = EUSToLLA(A);
+                const bottom = LLAToEUS(lla.x, lla.y, meanSeaLevelOffset(lla.x, lla.y));
                 groundPoints.push(bottom);
             }
         }
@@ -819,4 +820,3 @@ export class CNodeDisplayTrack extends CNode3DGroup {
         this.propagateLayerMask();
     }
 }
-
