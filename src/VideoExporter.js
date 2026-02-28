@@ -1,4 +1,5 @@
 import {MediabunnyExporter} from "./MediabunnyExporter";
+import {waitForExportFrameSettled} from "./ExportFrameSettler";
 
 const isFirefox = typeof navigator !== 'undefined' && navigator.userAgent.includes('Firefox');
 const defaultAccelerationOrder = isFirefox 
@@ -210,6 +211,10 @@ export class VideoExportManager {
         this.videoExportView = "lookView";
         this.retinaExport = false;
         this.exportAudio = true;
+        // Export-time quality switch:
+        // false (default) = capture as fast as possible
+        // true            = wait for background terrain/3D tile/video settling per frame
+        this.waitForBackgroundLoading = false;
         this.videoFormat = null;
         this.renderVideoFolder = null;
     }
@@ -258,7 +263,8 @@ export class VideoExportManager {
                 exportVideo: () => {
                     const view = ViewMan.get(this.videoExportView, false);
                     if (view && view.exportVideo) {
-                        view.exportVideo(this.videoFormat, this.exportAudio);
+                        // Keep single-view export behavior in sync with viewport export toggle semantics.
+                        view.exportVideo(this.videoFormat, this.exportAudio, this.waitForBackgroundLoading);
                     }
                 }
             }, "exportVideo").name("Render Single View Video")
@@ -293,6 +299,10 @@ export class VideoExportManager {
         this.renderVideoFolder.add(this, "exportAudio")
             .name("Include Audio")
             .tooltip("Include audio track from source video if available");
+
+        this.renderVideoFolder.add(this, "waitForBackgroundLoading")
+            .name("Wait for background loading")
+            .tooltip("When enabled, rendering waits for terrain/building/background loads before capturing each frame");
 
         this.renderVideoFolder.add({
             exportFrame: () => this.exportVideoFrame()
@@ -417,127 +427,145 @@ export class VideoExportManager {
                 if (progress.shouldStop()) break;
 
                 const frame = startFrame + i;
-                par.frame = frame;
-                GlobalDateTimeNode.update(frame);
+                const visible3DViewIds = [];
+                const renderCompositeFrame = async () => {
+                    par.frame = frame;
+                    GlobalDateTimeNode.update(frame);
 
-                if (Sit.azSlider) {
-                    par.az = Frame2Az(par.frame);
-                    par.el = Frame2El(par.frame);
-                    UpdatePRFromEA();
-                }
-
-                for (const entry of Object.values(NodeMan.list)) {
-                    const node = entry.data;
-                    if (node.update !== undefined) {
-                        node.update(frame);
+                    if (Sit.azSlider) {
+                        par.az = Frame2Az(par.frame);
+                        par.el = Frame2El(par.frame);
+                        UpdatePRFromEA();
                     }
-                    if (node.videoData && node.videoData.waitForFrame) {
-                        await node.videoData.waitForFrame(frame);
-                    }
-                }
 
-                GlobalScene.updateMatrixWorld(true);
-                if (LocalFrame) LocalFrame.updateMatrixWorld(true);
-
-                compositeCtx.fillStyle = '#000000';
-                compositeCtx.fillRect(0, 0, width, height);
-
-                const nonOverlays = [];
-                const overlays = [];
-
-                ViewMan.computeEffectiveVisibility();
-
-                ViewMan.iterate((id, view) => {
-                    if (view._effectivelyVisible) {
-                        if (view.overlayView) {
-                            overlays.push(view);
-                        } else {
-                            nonOverlays.push(view);
-                        }
-                    }
-                });
-
-                for (const view of nonOverlays) {
-                    if (view.camera && view instanceof CNodeView3D) {
-                        view.camera.updateMatrix();
-                        view.camera.updateMatrixWorld();
-                        for (const entry of Object.values(NodeMan.list)) {
-                            const node = entry.data;
-                            if (node.preRender !== undefined) {
-                                node.preRender(view);
-                            }
-                        }
-                    }
-                    view.renderCanvas(frame);
                     for (const entry of Object.values(NodeMan.list)) {
                         const node = entry.data;
-                        if (node.postRender !== undefined) {
-                            node.postRender(view);
+                        if (node.update !== undefined) {
+                            node.update(frame);
+                        }
+                        if (node.videoData && node.videoData.waitForFrame) {
+                            await node.videoData.waitForFrame(frame);
                         }
                     }
-                    if (view.renderer) {
-                        view.renderer.getContext().finish();
-                    }
-                    if (view.canvas) {
-                        const x = view.leftPx * scale;
-                        const y = (view.topPx - ViewMan.topPx) * scale;
-                        compositeCtx.drawImage(view.canvas, x, y, view.widthPx * scale, view.heightPx * scale);
-                    }
-                }
 
-                for (const view of overlays) {
-                    const alpha = view.transparency !== undefined ? view.transparency : 1;
-                    if (alpha <= 0) continue;
+                    GlobalScene.updateMatrixWorld(true);
+                    if (LocalFrame) LocalFrame.updateMatrixWorld(true);
 
-                    if (view.canvas) {
-                        const ctx = view.canvas.getContext('2d');
-                        ctx.clearRect(0, 0, view.canvas.width, view.canvas.height);
-                    }
-                    if (view.camera && view instanceof CNodeView3D) {
-                        view.camera.updateMatrix();
-                        view.camera.updateMatrixWorld();
-                        for (const entry of Object.values(NodeMan.list)) {
-                            const node = entry.data;
-                            if (node.preRender !== undefined) {
-                                node.preRender(view);
+                    compositeCtx.fillStyle = '#000000';
+                    compositeCtx.fillRect(0, 0, width, height);
+
+                    const nonOverlays = [];
+                    const overlays = [];
+
+                    visible3DViewIds.length = 0;
+                    ViewMan.computeEffectiveVisibility();
+
+                    ViewMan.iterate((id, view) => {
+                        if (view._effectivelyVisible) {
+                            if (view.overlayView) {
+                                overlays.push(view);
+                            } else {
+                                nonOverlays.push(view);
+                                if (view instanceof CNodeView3D) {
+                                    visible3DViewIds.push(id);
+                                }
                             }
                         }
-                    }
-                    view.renderCanvas(frame);
-                    for (const entry of Object.values(NodeMan.list)) {
-                        const node = entry.data;
-                        if (node.postRender !== undefined) {
-                            node.postRender(view);
+                    });
+
+                    for (const view of nonOverlays) {
+                        if (view.camera && view instanceof CNodeView3D) {
+                            view.camera.updateMatrix();
+                            view.camera.updateMatrixWorld();
+                            for (const entry of Object.values(NodeMan.list)) {
+                                const node = entry.data;
+                                if (node.preRender !== undefined) {
+                                    node.preRender(view);
+                                }
+                            }
+                        }
+                        view.renderCanvas(frame);
+                        for (const entry of Object.values(NodeMan.list)) {
+                            const node = entry.data;
+                            if (node.postRender !== undefined) {
+                                node.postRender(view);
+                            }
+                        }
+                        if (view.renderer) {
+                            view.renderer.getContext().finish();
+                        }
+                        if (view.canvas) {
+                            const x = view.leftPx * scale;
+                            const y = (view.topPx - ViewMan.topPx) * scale;
+                            compositeCtx.drawImage(view.canvas, x, y, view.widthPx * scale, view.heightPx * scale);
                         }
                     }
-                    if (view.canvas) {
-                        const parentView = view.overlayView;
-                        const x = parentView.leftPx * scale;
-                        const y = (parentView.topPx - ViewMan.topPx) * scale;
-                        compositeCtx.globalAlpha = alpha;
-                        compositeCtx.drawImage(view.canvas, x, y, parentView.widthPx * scale, parentView.heightPx * scale);
-                        compositeCtx.globalAlpha = 1;
-                    }
-                }
 
-                const motionOverlays = getMotionAnalysisOverlays();
-                if (motionOverlays && motionOverlays.videoView) {
-                    const vv = motionOverlays.videoView;
-                    const x = vv.leftPx * scale;
-                    const y = (vv.topPx - ViewMan.topPx) * scale;
-                    if (motionOverlays.overlay) {
-                        compositeCtx.drawImage(motionOverlays.overlay, x, y, vv.widthPx * scale, vv.heightPx * scale);
-                    }
-                    if (motionOverlays.graphCanvas) {
-                        const gw = 200 * scale;
-                        const gh = 80 * scale;
-                        const gx = x + vv.widthPx * scale - gw - 10 * scale;
-                        const gy = y + vv.heightPx * scale - gh - 10 * scale;
-                        compositeCtx.drawImage(motionOverlays.graphCanvas, gx, gy, gw, gh);
-                    }
-                }
+                    for (const view of overlays) {
+                        const alpha = view.transparency !== undefined ? view.transparency : 1;
+                        if (alpha <= 0) continue;
 
-                drawVideoWatermark(compositeCtx, width);
+                        if (view.canvas) {
+                            const ctx = view.canvas.getContext('2d');
+                            ctx.clearRect(0, 0, view.canvas.width, view.canvas.height);
+                        }
+                        if (view.camera && view instanceof CNodeView3D) {
+                            view.camera.updateMatrix();
+                            view.camera.updateMatrixWorld();
+                            for (const entry of Object.values(NodeMan.list)) {
+                                const node = entry.data;
+                                if (node.preRender !== undefined) {
+                                    node.preRender(view);
+                                }
+                            }
+                        }
+                        view.renderCanvas(frame);
+                        for (const entry of Object.values(NodeMan.list)) {
+                            const node = entry.data;
+                            if (node.postRender !== undefined) {
+                                node.postRender(view);
+                            }
+                        }
+                        if (view.canvas) {
+                            const parentView = view.overlayView;
+                            const x = parentView.leftPx * scale;
+                            const y = (parentView.topPx - ViewMan.topPx) * scale;
+                            compositeCtx.globalAlpha = alpha;
+                            compositeCtx.drawImage(view.canvas, x, y, parentView.widthPx * scale, parentView.heightPx * scale);
+                            compositeCtx.globalAlpha = 1;
+                        }
+                    }
+
+                    const motionOverlays = getMotionAnalysisOverlays();
+                    if (motionOverlays && motionOverlays.videoView) {
+                        const vv = motionOverlays.videoView;
+                        const x = vv.leftPx * scale;
+                        const y = (vv.topPx - ViewMan.topPx) * scale;
+                        if (motionOverlays.overlay) {
+                            compositeCtx.drawImage(motionOverlays.overlay, x, y, vv.widthPx * scale, vv.heightPx * scale);
+                        }
+                        if (motionOverlays.graphCanvas) {
+                            const gw = 200 * scale;
+                            const gh = 80 * scale;
+                            const gx = x + vv.widthPx * scale - gw - 10 * scale;
+                            const gy = y + vv.heightPx * scale - gh - 10 * scale;
+                            compositeCtx.drawImage(motionOverlays.graphCanvas, gx, gy, gw, gh);
+                        }
+                    }
+
+                    drawVideoWatermark(compositeCtx, width);
+                };
+
+                await renderCompositeFrame();
+                if (this.waitForBackgroundLoading) {
+                    // Wait for async loading and 3D tile visibility churn to settle before encoding the frame.
+                    await waitForExportFrameSettled({
+                        frame,
+                        viewIds: visible3DViewIds,
+                        renderFrame: renderCompositeFrame,
+                        logPrefix: "Viewport video export",
+                    });
+                }
 
                 await exporter.addFrame(compositeCanvas, frame);
 
@@ -754,8 +782,20 @@ export class VideoExportManager {
                     }
                 }
 
-                setRenderOne(true);
-                await waitForPaint();
+                const renderWindowFrame = async () => {
+                    setRenderOne(true);
+                    await waitForPaint();
+                };
+
+                await renderWindowFrame();
+                if (this.waitForBackgroundLoading) {
+                    // Same settling gate as viewport export, but for captured browser-window frames.
+                    await waitForExportFrameSettled({
+                        frame,
+                        renderFrame: renderWindowFrame,
+                        logPrefix: "Window video export",
+                    });
+                }
 
                 captureCtx.fillStyle = '#000000';
                 captureCtx.fillRect(0, 0, width, height);

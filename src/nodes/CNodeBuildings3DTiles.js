@@ -13,7 +13,7 @@ import {GlobalScene} from "../LocalFrame";
 import {Group, Matrix4} from "three";
 import * as LAYER from "../LayerMasks";
 import {TilesRenderer} from "3d-tiles-renderer";
-import {GLTFExtensionsPlugin} from "3d-tiles-renderer/plugins";
+import {GLTFExtensionsPlugin, TilesFadePlugin} from "3d-tiles-renderer/plugins";
 import {DRACOLoader} from "three/addons/loaders/DRACOLoader.js";
 import {TilesDayNightPlugin} from "../TilesDayNightPlugin";
 import {
@@ -39,8 +39,21 @@ function buildECEFToEUSMatrix4() {
 
 // Per-view state: a TilesRenderer instance, its parent group, and the view it tracks.
 class PerViewTiles {
+    /**
+     * @param {Group} parentGroup
+     * @param {number} layerMask
+     * @param {string} source
+     * @param {string|null} cesiumIonToken
+     * @param {string|null} googleApiKey
+     * @param {Object|null} googleSharedState
+     */
     constructor(parentGroup, layerMask, source, cesiumIonToken, googleApiKey, googleSharedState) {
         this.renderer = new TilesRenderer();
+        // Monotonic counter used by export settling to detect LOD visibility churn.
+        this.visibilityVersion = 0;
+        // Timestamp retained for debugging/diagnostics when tracking transitions.
+        this.lastVisibilityChangeAt = 0;
+
         this.dracoLoader = createDracoLoader();
         this.renderer.registerPlugin(new GLTFExtensionsPlugin({
             dracoLoader: this.dracoLoader,
@@ -60,6 +73,21 @@ class PerViewTiles {
         }
 
         this.renderer.registerPlugin(new TilesDayNightPlugin({source}));
+        // Fade plugin smooths LOD transitions so parent/child tile swaps are less abrupt in exports.
+        this.fadePlugin = new TilesFadePlugin({
+            fadeDuration: 250,
+            fadeRootTiles: true,
+            // Keep high enough to avoid forced "pop" fallback when many tiles transition together.
+            maximumFadeOutTiles: 400,
+        });
+        this.renderer.registerPlugin(this.fadePlugin);
+
+        // Track every tile visibility state change so export settle logic can wait for transition quiescence.
+        this._onTileVisibilityChange = () => {
+            this.visibilityVersion++;
+            this.lastVisibilityChangeAt = performance.now();
+        };
+        this.renderer.addEventListener("tile-visibility-change", this._onTileVisibilityChange);
 
         const ecefToEUS = buildECEFToEUSMatrix4();
         this.renderer.group.applyMatrix4(ecefToEUS);
@@ -87,13 +115,20 @@ class PerViewTiles {
         this.renderer.update();
     }
 
+    /**
+     * Dispose renderer resources and unregister listeners.
+     * @param {Group} parentGroup
+     */
     dispose(parentGroup) {
         parentGroup.remove(this.renderer.group);
+        this.renderer.removeEventListener("tile-visibility-change", this._onTileVisibilityChange);
         this.renderer.dispose();
         if (this.dracoLoader && typeof this.dracoLoader.dispose === "function") {
             this.dracoLoader.dispose();
             this.dracoLoader = null;
         }
+        this.fadePlugin = null;
+        this._onTileVisibilityChange = null;
     }
 }
 
@@ -185,6 +220,59 @@ export class CNodeBuildings3DTiles extends CNode {
             const view = NodeMan.get(viewId, false);
             pv.update(view);
         }
+    }
+
+    /**
+     * Return per-view loading/transition state for export frame settling.
+     *
+     * "Pending" includes both network/parse queue activity and fade transitions.
+     * Visibility version fields are provided so callers can detect LOD churn even
+     * when queue counters are zero.
+     *
+     * @param {string[]|null} viewIds - Optional view filter.
+     * @returns {{hasPending: boolean, perView: Object<string, Object>}}
+     */
+    getPendingLoadState(viewIds = null) {
+        const filter = Array.isArray(viewIds) && viewIds.length > 0 ? new Set(viewIds) : null;
+        const perView = {};
+        let hasPending = false;
+
+        for (const [viewId, pv] of Object.entries(this._perView)) {
+            if (filter && !filter.has(viewId)) continue;
+
+            const renderer = pv?.renderer;
+            if (!renderer) continue;
+
+            const stats = renderer.stats || {};
+            const queued = stats.queued || 0;
+            const downloading = stats.downloading || 0;
+            const parsing = stats.parsing || 0;
+            const isLoading = !!renderer.isLoading;
+            const fadingTiles = pv.fadePlugin?.fadingTiles || 0;
+            const pending = isLoading || queued > 0 || downloading > 0 || parsing > 0 || fadingTiles > 0;
+
+            if (pending) hasPending = true;
+            perView[viewId] = {
+                queued,
+                downloading,
+                parsing,
+                isLoading,
+                fadingTiles,
+                visibilityVersion: pv.visibilityVersion || 0,
+                lastVisibilityChangeAt: pv.lastVisibilityChangeAt || 0,
+            };
+        }
+
+        return {hasPending, perView};
+    }
+
+    /**
+     * Convenience boolean wrapper over getPendingLoadState().
+     * @param {string[]|null} viewIds
+     * @returns {boolean}
+     */
+    hasPendingLoads(viewIds = null) {
+        return this.getPendingLoadState(viewIds).hasPending;
     }
 
     dispose() {

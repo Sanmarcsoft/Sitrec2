@@ -70,6 +70,7 @@ import * as LAYER from "../LayerMasks";
 import {globalProfiler} from "../VisualProfiler";
 import {FeatureManager} from "../CFeatureManager";
 import {fixXRLayerMasks, renderCelestialScene, renderFullscreenQuadStereo} from "../CXRRenderer";
+import {waitForExportFrameSettled} from "../ExportFrameSettler";
 
 
 function linearToSrgb(color) {
@@ -237,8 +238,9 @@ export class CNodeView3D extends CNodeViewCanvas {
      * Export the lookView as a video file
      * @param {string} formatId - Video format ID (e.g., 'mp4-h264', 'webm-vp8')
      * @param {boolean} includeAudio - Whether to include audio track if available
+     * @param {boolean} waitForBackgroundLoading - When true, wait for background loading between captured frames
      */
-    async exportVideo(requestedFormatId = DefaultVideoFormat, includeAudio = true) {
+    async exportVideo(requestedFormatId = DefaultVideoFormat, includeAudio = true, waitForBackgroundLoading = false) {
         const startFrame = Sit.aFrame;
         const endFrame = Sit.bFrame;
         const totalFrames = endFrame - startFrame + 1;
@@ -323,69 +325,82 @@ export class CNodeView3D extends CNodeViewCanvas {
                 if (progress.shouldStop()) break;
                 
                 const frame = startFrame + i;
-                par.frame = frame;
-                GlobalDateTimeNode.update(frame);
-                
-                if (Sit.azSlider) {
-                    par.az = Frame2Az(par.frame);
-                    par.el = Frame2El(par.frame);
-                    UpdatePRFromEA();
+                const renderSingleViewFrame = async () => {
+                    par.frame = frame;
+                    GlobalDateTimeNode.update(frame);
+                    
+                    if (Sit.azSlider) {
+                        par.az = Frame2Az(par.frame);
+                        par.el = Frame2El(par.frame);
+                        UpdatePRFromEA();
+                    }
+                    
+                    for (const entry of Object.values(NodeMan.list)) {
+                        const node = entry.data;
+                        if (node.isController && !node.allowUpdate) {
+                            assert(node.update === CNode.prototype.update,
+                                `Controller ${node.id} has overridden update() - move logic to apply()`);
+                            continue;
+                        }
+                        if (node.update !== undefined) {
+                            node.update(frame);
+                        }
+                        if (node.videoData && node.videoData.waitForFrame) {
+                            await node.videoData.waitForFrame(frame);
+                        }
+                    }
+                    
+                    this.camera.updateMatrix();
+                    this.camera.updateMatrixWorld();
+                    for (const entry of Object.values(NodeMan.list)) {
+                        const node = entry.data;
+                        if (node.preRender !== undefined) {
+                            node.preRender(this);
+                        }
+                    }
+                    
+                    this.renderCanvas(frame);
+
+                    compositeCtx.drawImage(this.canvas, 0, 0);
+
+                    // Also render visible child views (overlays and relativeTo children like compass, MQ9UI)
+                    // Scale from CSS pixels to composite canvas backing pixels
+                    const scaleX = width / this.widthPx;
+                    const scaleY = height / this.heightPx;
+                    ViewMan.computeEffectiveVisibility();
+                    ViewMan.iterate((id, childView) => {
+                        if (childView === this) return;
+                        if (!childView._effectivelyVisible) return;
+                        const isChild = (childView.overlayView === this) ||
+                                        (childView.in.relativeTo === this);
+                        if (!isChild) return;
+
+                        childView.renderCanvas(frame);
+                        if (childView.canvas) {
+                            const dx = (childView.leftPx - this.leftPx) * scaleX;
+                            const dy = (childView.topPx - this.topPx) * scaleY;
+                            const dw = childView.widthPx * scaleX;
+                            const dh = childView.heightPx * scaleY;
+                            const alpha = childView.transparency !== undefined ? childView.transparency : 1;
+                            if (alpha < 1) compositeCtx.globalAlpha = alpha;
+                            compositeCtx.drawImage(childView.canvas, dx, dy, dw, dh);
+                            if (alpha < 1) compositeCtx.globalAlpha = 1;
+                        }
+                    });
+
+                    drawVideoWatermark(compositeCtx, width);
+                };
+
+                await renderSingleViewFrame();
+                if (waitForBackgroundLoading) {
+                    // Gate frame capture on global async settling + 3D tile transition quiescence.
+                    await waitForExportFrameSettled({
+                        frame,
+                        viewIds: [this.id],
+                        renderFrame: renderSingleViewFrame,
+                        logPrefix: `${this.id} video export`,
+                    });
                 }
-                
-                for (const entry of Object.values(NodeMan.list)) {
-                    const node = entry.data;
-                    if (node.isController && !node.allowUpdate) {
-                        assert(node.update === CNode.prototype.update,
-                            `Controller ${node.id} has overridden update() - move logic to apply()`);
-                        continue;
-                    }
-                    if (node.update !== undefined) {
-                        node.update(frame);
-                    }
-                    if (node.videoData && node.videoData.waitForFrame) {
-                        await node.videoData.waitForFrame(frame);
-                    }
-                }
-                
-                this.camera.updateMatrix();
-                this.camera.updateMatrixWorld();
-                for (const entry of Object.values(NodeMan.list)) {
-                    const node = entry.data;
-                    if (node.preRender !== undefined) {
-                        node.preRender(this);
-                    }
-                }
-                
-                this.renderCanvas(frame);
-
-                compositeCtx.drawImage(this.canvas, 0, 0);
-
-                // Also render visible child views (overlays and relativeTo children like compass, MQ9UI)
-                // Scale from CSS pixels to composite canvas backing pixels
-                const scaleX = width / this.widthPx;
-                const scaleY = height / this.heightPx;
-                ViewMan.computeEffectiveVisibility();
-                ViewMan.iterate((id, childView) => {
-                    if (childView === this) return;
-                    if (!childView._effectivelyVisible) return;
-                    const isChild = (childView.overlayView === this) ||
-                                    (childView.in.relativeTo === this);
-                    if (!isChild) return;
-
-                    childView.renderCanvas(frame);
-                    if (childView.canvas) {
-                        const dx = (childView.leftPx - this.leftPx) * scaleX;
-                        const dy = (childView.topPx - this.topPx) * scaleY;
-                        const dw = childView.widthPx * scaleX;
-                        const dh = childView.heightPx * scaleY;
-                        const alpha = childView.transparency !== undefined ? childView.transparency : 1;
-                        if (alpha < 1) compositeCtx.globalAlpha = alpha;
-                        compositeCtx.drawImage(childView.canvas, dx, dy, dw, dh);
-                        if (alpha < 1) compositeCtx.globalAlpha = 1;
-                    }
-                });
-
-                drawVideoWatermark(compositeCtx, width);
                 
                 await exporter.addFrame(compositeCanvas, frame);
                 
@@ -2715,5 +2730,3 @@ export class CNodeView3D extends CNodeViewCanvas {
     }
 
 }
-
-
