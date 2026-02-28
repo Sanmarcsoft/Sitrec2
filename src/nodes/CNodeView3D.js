@@ -26,6 +26,7 @@ import {
     Color,
     FogExp2,
     Group,
+    HalfFloatType,
     LinearFilter,
     Mesh,
     NearestFilter,
@@ -111,6 +112,9 @@ export class CNodeView3D extends CNodeViewCanvas {
         const atmosphereDef = v.atmosphere ?? {};
         this.atmosphereEnabled = atmosphereDef.enabled ?? false;
         this.atmosphereVisibilityKm = atmosphereDef.visibilityKm ?? 250;
+        this.atmosphereHDR = atmosphereDef.hdr ?? true;
+        this.atmosphereExposure = atmosphereDef.exposure ?? 1.0;
+        this.requestLookViewHDR = this.id === "lookView";
 
         this.northUp = v.northUp ?? false;
         if (this.id === "lookView") {
@@ -126,6 +130,14 @@ export class CNodeView3D extends CNodeViewCanvas {
             guiTweaks.add(this, "atmosphereVisibilityKm", 1, 500, 1).name("Atmo Visibility (km)").onChange(() => {
                 setRenderOne(true);
             }).tooltip("Distance where atmospheric contrast drops to about 50% (smaller = thicker atmosphere)");
+
+            guiTweaks.add(this, "atmosphereHDR").name("Atmo HDR").onChange(() => {
+                setRenderOne(true);
+            }).tooltip("Physically-based HDR fog/tone mapping for bright sun reflections through haze");
+
+            guiTweaks.add(this, "atmosphereExposure", 0.1, 5.0, 0.01).name("Atmo Exposure").onChange(() => {
+                setRenderOne(true);
+            }).tooltip("HDR atmosphere tone-mapping exposure multiplier for highlight rolloff");
             
             // Add XR test button if VR is enabled
             if (Globals.canVR) {
@@ -949,21 +961,35 @@ export class CNodeView3D extends CNodeViewCanvas {
         if (Globals.shadowsEnabled) {
             this.renderer.shadowMap.enabled = true;
         }
+
+        this.useLookViewHDR = false;
+        if (this.requestLookViewHDR) {
+            const hasFloatColorBuffer = this.renderer.extensions.has('EXT_color_buffer_float');
+            this.useLookViewHDR = this.renderer.capabilities.isWebGL2 && hasFloatColorBuffer;
+            if (!this.useLookViewHDR) {
+                console.warn("lookView HDR atmosphere disabled: floating-point color buffers are not supported on this GPU/browser");
+            }
+        }
+
+        const renderTargetType = this.useLookViewHDR ? HalfFloatType : UnsignedByteType;
+        const aaSamples = this.useLookViewHDR ? 0 : 4;
+
         // Per-view render targets to avoid thrashing GPU memory in split-screen mode
         // Each view maintains its own render targets instead of sharing globals
         this.renderTargetAntiAliased = new WebGLRenderTarget(256, 256, {
             format: RGBAFormat,
-            type: UnsignedByteType,
+            type: renderTargetType,
             colorSpace: SRGBColorSpace,
             minFilter: NearestFilter,
             magFilter: NearestFilter,
-            samples: 4, // Number of samples for MSAA
+            samples: aaSamples, // Number of samples for MSAA
         });
 
         this.renderTargetA = new WebGLRenderTarget(256, 256, {
             minFilter: NearestFilter,
             magFilter: NearestFilter,
             format: RGBAFormat,
+            type: renderTargetType,
             colorSpace: SRGBColorSpace,
         });
 
@@ -971,6 +997,7 @@ export class CNodeView3D extends CNodeViewCanvas {
             minFilter: NearestFilter,
             magFilter: NearestFilter,
             format: RGBAFormat,
+            type: renderTargetType,
             colorSpace: SRGBColorSpace,
         });
 
@@ -1012,6 +1039,8 @@ export class CNodeView3D extends CNodeViewCanvas {
         // Fullscreen quad for rendering shaders
         const geometry = new PlaneGeometry(2, 2);
         this.fullscreenQuad = new Mesh(geometry, this.copyMaterial);
+
+        this.hdrToneMappingPass = this.useLookViewHDR ? new ShaderPass(ACESFilmicToneMappingShader) : null;
 
         this.effectPasses = {};
 
@@ -1129,7 +1158,7 @@ export class CNodeView3D extends CNodeViewCanvas {
                 if (width !== this.lastRenderTargetWidth || height !== this.lastRenderTargetHeight) {
 
                     this.renderTargetAntiAliased.setSize(width, height);
-                    if (this.effectsEnabled) {
+                    if (this.effectsEnabled || this.useLookViewHDR) {
                         this.renderTargetA.setSize(width, height);
                         this.renderTargetB.setSize(width, height);
                     }
@@ -1146,6 +1175,7 @@ export class CNodeView3D extends CNodeViewCanvas {
 
                 currentRenderTarget = this.renderTargetAntiAliased;
                 this.renderer.setRenderTarget(currentRenderTarget);
+                const useAtmosphereHDR = this.useLookViewHDR && this.atmosphereEnabled && this.atmosphereHDR && this.hdrToneMappingPass !== null;
                 
                 // ALWAYS store render target height for use right before rendering
                 // Must be set every frame, not just on resize, or it will have stale values
@@ -1244,26 +1274,22 @@ export class CNodeView3D extends CNodeViewCanvas {
                     }
 
 
-                    // if tone mapping the sky, insert the tone mapping shader here
+                    // For non-HDR pipelines, tone-map sky now.
+                    // HDR lookView with atmosphere tone-maps once at the end.
+                    if (!useAtmosphereHDR) {
+                        const acesFilmicToneMappingPass = new ShaderPass(ACESFilmicToneMappingShader);
+                        acesFilmicToneMappingPass.uniforms['exposure'].value = NodeMan.get("theSky").effectController.exposure;
+                        acesFilmicToneMappingPass.uniforms['tDiffuse'].value = currentRenderTarget.texture;
 
-                    // create the pass similar to in CNodeEffect.js
-                    // passing in a shader to the ShaderPass
-                    const acesFilmicToneMappingPass = new ShaderPass(ACESFilmicToneMappingShader);
+                        // flip the render targets
+                        const useRenderTarget = currentRenderTarget === this.renderTargetA ? this.renderTargetB : this.renderTargetA;
+                        this.renderer.setRenderTarget(useRenderTarget);
+                        this.fullscreenQuad.material = acesFilmicToneMappingPass.material;
+                        this.renderer.render(this.fullscreenQuadScene, this.fullscreenQuadCamera);
+                        this.renderer.clearDepth();
 
-// Set the exposure value
-                    acesFilmicToneMappingPass.uniforms['exposure'].value = NodeMan.get("theSky").effectController.exposure;
-
-// test patch in the block of code from the effect loop
-                    acesFilmicToneMappingPass.uniforms['tDiffuse'].value = currentRenderTarget.texture;
-                    // flip the render targets
-                    const useRenderTarget = currentRenderTarget === this.renderTargetA ? this.renderTargetB : this.renderTargetA;
-
-                    this.renderer.setRenderTarget(useRenderTarget);
-                    this.fullscreenQuad.material = acesFilmicToneMappingPass.material;  // Set the material to the current effect pass
-                    this.renderer.render(this.fullscreenQuadScene, this.fullscreenQuadCamera);
-                    this.renderer.clearDepth()
-
-                    currentRenderTarget = currentRenderTarget === this.renderTargetA ? this.renderTargetB : this.renderTargetA;
+                        currentRenderTarget = currentRenderTarget === this.renderTargetA ? this.renderTargetB : this.renderTargetA;
+                    }
                 }
                 if (globalProfiler) globalProfiler.pop();
 
@@ -1371,6 +1397,18 @@ export class CNodeView3D extends CNodeViewCanvas {
                 if (globalProfiler) globalProfiler.push('#fdb462', 'copyToScreen');
                 // [DBG] Render the final texture to the screen, id we were using a render target.
                 if (Globals.renderDebugFlags.dbg_copyToScreen && currentRenderTarget !== null) {
+                    if (useAtmosphereHDR) {
+                        const skyExposure = NodeMan.get("theSky", false)?.effectController?.exposure ?? 1.0;
+                        this.hdrToneMappingPass.uniforms['exposure'].value = skyExposure * this.atmosphereExposure;
+                        this.hdrToneMappingPass.uniforms['tDiffuse'].value = currentRenderTarget.texture;
+
+                        const toneMappedTarget = currentRenderTarget === this.renderTargetA ? this.renderTargetB : this.renderTargetA;
+                        this.renderer.setRenderTarget(toneMappedTarget);
+                        this.fullscreenQuad.material = this.hdrToneMappingPass.material;
+                        this.renderer.render(this.fullscreenQuad, this.fullscreenQuadCamera);
+                        currentRenderTarget = toneMappedTarget;
+                    }
+
                     this.copyMaterial.uniforms['tDiffuse'].value = currentRenderTarget.texture;
                     this.fullscreenQuad.material = this.copyMaterial;  // Set the material to the copy material
                     this.renderer.setRenderTarget(null);
@@ -1653,6 +1691,8 @@ export class CNodeView3D extends CNodeViewCanvas {
             effectsEnabled: this.effectsEnabled,
             atmosphereEnabled: this.atmosphereEnabled,
             atmosphereVisibilityKm: this.atmosphereVisibilityKm,
+            atmosphereHDR: this.atmosphereHDR,
+            atmosphereExposure: this.atmosphereExposure,
         }
 
     }
@@ -1664,6 +1704,8 @@ export class CNodeView3D extends CNodeViewCanvas {
         if (v.effectsEnabled !== undefined) this.effectsEnabled = v.effectsEnabled
         if (v.atmosphereEnabled !== undefined) this.atmosphereEnabled = v.atmosphereEnabled
         if (v.atmosphereVisibilityKm !== undefined) this.atmosphereVisibilityKm = v.atmosphereVisibilityKm
+        if (v.atmosphereHDR !== undefined) this.atmosphereHDR = v.atmosphereHDR
+        if (v.atmosphereExposure !== undefined) this.atmosphereExposure = v.atmosphereExposure
     }
 
     dispose() {
@@ -1720,6 +1762,8 @@ export class CNodeView3D extends CNodeViewCanvas {
         // Dispose shader materials and geometry
         if (this.copyMaterial) this.copyMaterial.dispose();
         if (this.skyBrightnessMaterial) this.skyBrightnessMaterial.dispose();
+        if (this.hdrToneMappingPass?.material) this.hdrToneMappingPass.material.dispose();
+        this.hdrToneMappingPass = null;
         if (this.fullscreenQuadGeometry) this.fullscreenQuadGeometry.dispose();
 
         super.dispose();
