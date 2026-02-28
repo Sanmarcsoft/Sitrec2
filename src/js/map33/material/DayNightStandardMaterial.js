@@ -17,10 +17,11 @@ const CACHE_KEY = "DayNightStandardMaterial";
 export class DayNightStandardMaterial extends MeshStandardMaterial {
 
     constructor(parameters) {
-        super(parameters);
+        const {tileOutputGamma = 1.0, ...materialParameters} = parameters ?? {};
+        super(materialParameters);
 
         this.flatShading = true;
-        this.tileOutputGamma = parameters?.tileOutputGamma ?? 1.0;
+        this.tileOutputGamma = tileOutputGamma;
 
         this._dayNightUniforms = {
             sunDirection: {value: Globals.sunLight.position},
