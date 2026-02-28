@@ -1962,29 +1962,32 @@ export class CNodeView3D extends CNodeViewCanvas {
                 }
             }
 
-            // regardless of what we find above, if there's a focusTrackName, then snap to the closest point on that track
-            if (this.focusTrackName !== "default" && NodeMan.exists(this.focusTrackName)) {
-                var focusTrackNode = NodeMan.get(this.focusTrackName)
+            const focusTrackActive = this.focusTrackName !== "default" && NodeMan.exists(this.focusTrackName);
+            let scrubbedFocusTrack = false;
 
-                var closestFrame = focusTrackNode.closestFrameToRay(this.raycaster.ray)
+            // If a focus track is active then keep the cursor snapped to that track.
+            // Avoid hover-driven camera retargeting here because it can temporarily desync
+            // tiles culling from the final camera target for this frame.
+            if (focusTrackActive) {
+                const focusTrackNode = NodeMan.get(this.focusTrackName);
+                const closestFrame = focusTrackNode.closestFrameToRay(this.raycaster.ray);
 
-                target = focusTrackNode.p(closestFrame)
-                this.camera.lookAt(target);
+                target = focusTrackNode.p(closestFrame);
+                targetIsTerrain = false;
 
-                // holding down command/Window let's you scrub along the track
-                if (isKeyHeld('meta')) {
-                    par.frame = closestFrame
+                // Holding command/windows allows explicit scrub along the track.
+                if (isKeyHeld("meta")) {
+                    par.frame = closestFrame;
+                    scrubbedFocusTrack = true;
                     setRenderOne(true);
                 }
-
-
             }
 
 
             if (target !== undefined) {
                 this.cursorSprite.position.copy(target)
 
-                if (this.controls) {
+                if (this.controls && (!focusTrackActive || scrubbedFocusTrack)) {
                     this.controls.target = target
                     this.controls.targetIsTerrain = targetIsTerrain;
                 }
