@@ -1142,6 +1142,9 @@ class CTrackManager extends CManager {
             view: viewID,
             frames: Sit.frames,
             initialPoints: initialPoints,
+            // Synthetic tracks are created in current world coordinates (EUS/ECEF in current model),
+            // not legacy local-tangent EUS from old sitches.
+            legacyEUS: false,
             skipGUI: true, // Don't create GUI in physics menu
             pruneIfUnused: true,
         });
