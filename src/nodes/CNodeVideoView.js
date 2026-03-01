@@ -45,6 +45,12 @@ import {EventManager} from "../CEventManager";
 import {getFlowAlignRotation} from "../FlowAlignment";
 import {VideoLoadingManager} from "../CVideoLoadingManager";
 import {CNodeGridOverlay} from "./CNodeGridOverlay";
+import {
+    checkVideoEncodingSupport,
+    createVideoExporter,
+    getBestFormatForResolution,
+    getVideoExtension
+} from "../VideoExporter";
 
 
 export class CNodeVideoView extends CNodeViewCanvas2D {
@@ -912,7 +918,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
                 sourceImage = applyConvolutionToImage(image, filterType, params, this);
             }
 
-            const hasFullABOverlay = this._fullABEchoResult && this.in.fullABEcho?.value;
+            const hasFullABOverlay = this._fullABEchoResult && (this.in.fullABEcho?.value || this.in.fullABBlend?.value || this.in.fullABExposure?.value);
             if (hasFullABOverlay && this._fullABEchoRunning) {
                 sourceImage = this._fullABEchoResult;
             } else if (!hasFullABOverlay) {
@@ -1027,13 +1033,26 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
 
     restartFullABEchoIfActive() {
-        if (!this.in.fullABEcho?.value) return;
+        const isEcho = this.in.fullABEcho?.value;
+        const isBlend = this.in.fullABBlend?.value;
+        const isExposure = this.in.fullABExposure?.value;
+        if (!isEcho && !isBlend && !isExposure) return;
         if (this._fullABEchoRunning) {
             this._fullABEchoRunning = false;
             Globals.justVideoAnalysis = false;
             par.paused = this._fullABEchoSavedPaused ?? false;
         }
         this._fullABEchoResult = null;
+
+        if (isExposure) {
+            this.startFullABExposure();
+            return;
+        }
+
+        if (isBlend) {
+            this.startFullABBlend();
+            return;
+        }
 
         const wantMin = this.in.echoMin?.value ?? false;
         const wantMax = this.in.echoMax?.value ?? false;
@@ -1199,11 +1218,487 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
     onFullABEchoComplete(bFrame) {
         this._fullABEchoRunning = false;
         Globals.justVideoAnalysis = false;
-        par.paused = this._fullABEchoSavedPaused ?? false;
+        par.paused = true;
         if (bFrame !== undefined) {
             par.frame = bFrame;
         }
         setRenderOne(true);
+    }
+
+    async makeProcessedVideo() {
+        const isEcho = this.in.fullABEcho?.value;
+        const isBlend = this.in.fullABBlend?.value;
+        const isExposure = this.in.fullABExposure?.value;
+
+        if (!isEcho && !isBlend && !isExposure) {
+            alert("No processing active. Enable Full A-B Echo, Blend, or Exposure first.");
+            return;
+        }
+
+        if (!this.videoData) {
+            alert("No video loaded.");
+            return;
+        }
+
+        if (typeof VideoEncoder === 'undefined') {
+            alert("VideoEncoder API not available in this browser.");
+            return;
+        }
+
+        const aFrame = Sit.aFrame ?? 0;
+        const bFrame = Sit.bFrame ?? (Sit.frames - 1);
+        const totalFrames = bFrame - aFrame + 1;
+        const videoData = this.videoData;
+
+        // Determine process type for naming
+        const processType = isEcho ? "echo" : isBlend ? "blend" : "exposure";
+
+        // Get video dimensions from first available frame
+        let width = 0, height = 0;
+        for (let f = aFrame; f <= bFrame; f++) {
+            const img = videoData.getImage(f);
+            if (img && img.width > 0) {
+                width = img.width;
+                height = img.height;
+                break;
+            }
+        }
+        if (width === 0 || height === 0) {
+            alert("Could not determine video dimensions.");
+            return;
+        }
+
+        // Ensure even dimensions for video encoding
+        const encodeWidth = Math.ceil(width / 2) * 2;
+        const encodeHeight = Math.ceil(height / 2) * 2;
+
+        const encodingSupport = await checkVideoEncodingSupport();
+        if (!encodingSupport.supported) {
+            alert("Video encoding not supported: " + (encodingSupport.reason || "unknown"));
+            return;
+        }
+
+        const preferredFormat = encodingSupport.h264 ? 'mp4-h264' : 'webm-vp8';
+        const bestFormat = await getBestFormatForResolution(preferredFormat, encodeWidth, encodeHeight);
+        if (!bestFormat.formatId) {
+            alert("No codec supports this resolution: " + (bestFormat.reason || "unknown"));
+            return;
+        }
+
+        const extension = getVideoExtension(bestFormat.formatId);
+        const fps = Sit.fps || 30;
+
+        let exporter;
+        try {
+            exporter = await createVideoExporter(bestFormat.formatId, {
+                width: encodeWidth,
+                height: encodeHeight,
+                fps,
+                bitrate: 10_000_000,
+                keyFrameInterval: 30,
+                hardwareAcceleration: bestFormat.hardwareAcceleration,
+            });
+            await exporter.initialize();
+        } catch (e) {
+            alert("Failed to create video exporter: " + e.message);
+            return;
+        }
+
+        // Save state
+        const savedPaused = par.paused;
+        const savedFrame = par.frame;
+        par.paused = true;
+        Globals.justVideoAnalysis = true;
+
+        // Set up canvases
+        const canvas = document.createElement('canvas');
+        canvas.width = encodeWidth;
+        canvas.height = encodeHeight;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+        const tmpCanvas = document.createElement('canvas');
+        tmpCanvas.width = width;
+        tmpCanvas.height = height;
+        const tmpCtx = tmpCanvas.getContext('2d', { willReadFrequently: true });
+
+        let pixelCount = width * height * 4;
+        let minPixels = null, maxPixels = null, sumPixels = null;
+        let frameCount = 0;
+        let initialized = false;
+
+        const wantMin = isEcho ? (this.in.echoMin?.value ?? false) : false;
+        const wantMax = isEcho ? (this.in.echoMax?.value ?? true) : false;
+
+        if (isEcho) {
+            if (wantMin) minPixels = new Uint8ClampedArray(pixelCount);
+            if (wantMax) maxPixels = new Uint8ClampedArray(pixelCount);
+            if (wantMin && wantMax) sumPixels = new Float32Array(pixelCount);
+        } else {
+            // blend and exposure both use sumPixels
+            sumPixels = new Float32Array(pixelCount);
+        }
+
+        const targetRenderInterval = 40;
+        let lastRenderTime = performance.now();
+
+        console.log(`[MakeVideo] Starting ${processType} export: ${totalFrames} frames, ${encodeWidth}x${encodeHeight}`);
+
+        try {
+            for (let f = aFrame; f <= bFrame; f++) {
+                par.frame = f;
+
+                videoData.getImage(f);
+                if (videoData.waitForFrame) {
+                    await videoData.waitForFrame(f, 5000);
+                }
+
+                const frameImage = videoData.getImage(f);
+                if (!frameImage || frameImage.width === 0) continue;
+
+                tmpCtx.drawImage(frameImage, 0, 0, width, height);
+                const frameData = tmpCtx.getImageData(0, 0, width, height).data;
+
+                if (!initialized) {
+                    if (isEcho) {
+                        if (minPixels) minPixels.set(frameData);
+                        if (maxPixels) maxPixels.set(frameData);
+                        if (sumPixels) { for (let i = 0; i < pixelCount; i++) sumPixels[i] = frameData[i]; }
+                    } else {
+                        for (let i = 0; i < pixelCount; i++) sumPixels[i] = frameData[i];
+                    }
+                    initialized = true;
+                } else {
+                    if (isEcho) {
+                        for (let i = 0; i < pixelCount; i += 4) {
+                            for (let c = 0; c < 3; c++) {
+                                const idx = i + c;
+                                const val = frameData[idx];
+                                if (minPixels && val < minPixels[idx]) minPixels[idx] = val;
+                                if (maxPixels && val > maxPixels[idx]) maxPixels[idx] = val;
+                                if (sumPixels) sumPixels[idx] += val;
+                            }
+                            if (minPixels) minPixels[i + 3] = 255;
+                            if (maxPixels) maxPixels[i + 3] = 255;
+                        }
+                    } else {
+                        for (let i = 0; i < pixelCount; i += 4) {
+                            for (let c = 0; c < 3; c++) {
+                                sumPixels[i + c] += frameData[i + c];
+                            }
+                        }
+                    }
+                }
+                frameCount++;
+
+                // Build the progressive result image
+                let resultPixels;
+                if (isEcho) {
+                    resultPixels = new Uint8ClampedArray(pixelCount);
+                    if (wantMin && wantMax) {
+                        for (let i = 0; i < pixelCount; i += 4) {
+                            for (let c = 0; c < 3; c++) {
+                                const idx = i + c;
+                                const avg = sumPixels[idx] / frameCount;
+                                const minDev = Math.abs(minPixels[idx] - avg);
+                                const maxDev = Math.abs(maxPixels[idx] - avg);
+                                resultPixels[idx] = (maxDev >= minDev) ? maxPixels[idx] : minPixels[idx];
+                            }
+                            resultPixels[i + 3] = 255;
+                        }
+                    } else if (wantMin) {
+                        resultPixels = new Uint8ClampedArray(minPixels);
+                    } else {
+                        resultPixels = new Uint8ClampedArray(maxPixels);
+                    }
+                } else if (isBlend) {
+                    resultPixels = new Uint8ClampedArray(pixelCount);
+                    for (let i = 0; i < pixelCount; i += 4) {
+                        for (let c = 0; c < 3; c++) {
+                            resultPixels[i + c] = sumPixels[i + c] / frameCount;
+                        }
+                        resultPixels[i + 3] = 255;
+                    }
+                } else {
+                    // exposure: divide by total frames (not frameCount) so it brightens progressively
+                    resultPixels = new Uint8ClampedArray(pixelCount);
+                    for (let i = 0; i < pixelCount; i += 4) {
+                        for (let c = 0; c < 3; c++) {
+                            resultPixels[i + c] = sumPixels[i + c] / totalFrames;
+                        }
+                        resultPixels[i + 3] = 255;
+                    }
+                }
+
+                // Draw result to encoding canvas
+                const outputImageData = new ImageData(resultPixels, width, height);
+                tmpCtx.putImageData(outputImageData, 0, 0);
+                ctx.clearRect(0, 0, encodeWidth, encodeHeight);
+                ctx.drawImage(tmpCanvas, 0, 0, encodeWidth, encodeHeight);
+
+                await exporter.addFrame(canvas, f - aFrame);
+
+                // Periodic render update for progress display
+                const now = performance.now();
+                if ((f - aFrame) % 10 === 0 || f === bFrame || now - lastRenderTime >= targetRenderInterval) {
+                    this._fullABEchoResult = tmpCanvas;
+                    this.renderCanvas(f);
+                    lastRenderTime = performance.now();
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+            }
+
+            console.log(`[MakeVideo] Encoding complete, finalizing...`);
+            const blob = await exporter.finalize();
+
+            // Generate unique name
+            this._makeVideoCounter = (this._makeVideoCounter || 0) + 1;
+            let baseName = this.fileName || "video";
+            if (baseName.includes('/')) baseName = baseName.split('/').pop();
+            if (baseName.includes('.')) baseName = baseName.substring(0, baseName.lastIndexOf('.'));
+            const uniqueName = `${baseName}-${processType}-${this._makeVideoCounter}.${extension}`;
+
+            console.log(`[MakeVideo] Created ${uniqueName}, ${(blob.size / 1024 / 1024).toFixed(1)} MB`);
+
+            // Load as a new video entry
+            const file = new File([blob], uniqueName, { type: blob.type });
+            await this.uploadFile(file, true);
+
+        } catch (e) {
+            console.error("[MakeVideo] Error:", e);
+            alert("Make Video failed: " + e.message);
+        } finally {
+            // Restore state
+            this._fullABEchoResult = null;
+            Globals.justVideoAnalysis = false;
+            par.paused = savedPaused;
+            par.frame = savedFrame;
+            setRenderOne(true);
+        }
+    }
+
+    startFullABBlend() {
+        if (this._fullABEchoRunning) return;
+        if (!this.videoData) return;
+
+        this._fullABEchoRunning = true;
+        this._fullABEchoSavedPaused = par.paused;
+        this._fullABEchoSavedFrame = par.frame;
+        par.paused = true;
+        Globals.justVideoAnalysis = true;
+
+        this.runFullABBlendLoop();
+    }
+
+    stopFullABBlend() {
+        this._fullABEchoRunning = false;
+        Globals.justVideoAnalysis = false;
+        this._fullABEchoResult = null;
+        par.paused = this._fullABEchoSavedPaused ?? false;
+        setRenderOne(true);
+    }
+
+    async runFullABBlendLoop() {
+        const aFrame = Sit.aFrame ?? 0;
+        const bFrame = Sit.bFrame ?? (Sit.frames - 1);
+        const videoData = this.videoData;
+
+        if (!videoData) {
+            this.onFullABEchoComplete();
+            return;
+        }
+
+        let width = 0, height = 0, pixelCount = 0;
+        let sumPixels = null;
+        let frameCount = 0;
+        let initialized = false;
+
+        if (!this._fullABEchoCanvas) {
+            this._fullABEchoCanvas = document.createElement('canvas');
+            this._fullABEchoCtx = this._fullABEchoCanvas.getContext('2d', { willReadFrequently: true });
+        }
+        if (!this._fullABEchoTmpCanvas) {
+            this._fullABEchoTmpCanvas = document.createElement('canvas');
+            this._fullABEchoTmpCtx = this._fullABEchoTmpCanvas.getContext('2d', { willReadFrequently: true });
+        }
+
+        const targetRenderInterval = 40;
+        let lastRenderTime = performance.now();
+
+        for (let f = aFrame; f <= bFrame; f++) {
+            if (!this._fullABEchoRunning) return;
+
+            par.frame = f;
+
+            videoData.getImage(f);
+            if (videoData.waitForFrame) {
+                await videoData.waitForFrame(f, 5000);
+            }
+
+            const frameImage = videoData.getImage(f);
+            if (!frameImage || frameImage.width === 0) continue;
+
+            if (!initialized) {
+                width = frameImage.width;
+                height = frameImage.height;
+                pixelCount = width * height * 4;
+                this._fullABEchoCanvas.width = width;
+                this._fullABEchoCanvas.height = height;
+                this._fullABEchoTmpCanvas.width = width;
+                this._fullABEchoTmpCanvas.height = height;
+                sumPixels = new Float32Array(pixelCount);
+            }
+
+            this._fullABEchoTmpCtx.drawImage(frameImage, 0, 0, width, height);
+            const frameData = this._fullABEchoTmpCtx.getImageData(0, 0, width, height).data;
+
+            if (!initialized) {
+                for (let i = 0; i < pixelCount; i++) sumPixels[i] = frameData[i];
+                initialized = true;
+            } else {
+                for (let i = 0; i < pixelCount; i += 4) {
+                    for (let c = 0; c < 3; c++) {
+                        sumPixels[i + c] += frameData[i + c];
+                    }
+                }
+            }
+            frameCount++;
+
+            const framesProcessed = f - aFrame + 1;
+            const now = performance.now();
+            const shouldRender = (framesProcessed % 10 === 0) || (f === bFrame) || (now - lastRenderTime >= targetRenderInterval);
+
+            if (shouldRender && initialized) {
+                this.buildFullABBlendResult(sumPixels, frameCount, width, height);
+                this.renderCanvas(f);
+                lastRenderTime = performance.now();
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
+        }
+
+        if (initialized) {
+            this.buildFullABBlendResult(sumPixels, frameCount, width, height);
+        }
+
+        this.onFullABEchoComplete(bFrame);
+    }
+
+    buildFullABBlendResult(sumPixels, divisor, width, height) {
+        const pixelCount = width * height * 4;
+        const resultPixels = new Uint8ClampedArray(pixelCount);
+        for (let i = 0; i < pixelCount; i += 4) {
+            for (let c = 0; c < 3; c++) {
+                resultPixels[i + c] = sumPixels[i + c] / divisor;
+            }
+            resultPixels[i + 3] = 255;
+        }
+        const outputData = new ImageData(resultPixels, width, height);
+        this._fullABEchoCtx.putImageData(outputData, 0, 0);
+        this._fullABEchoResult = this._fullABEchoCanvas;
+    }
+
+    startFullABExposure() {
+        if (this._fullABEchoRunning) return;
+        if (!this.videoData) return;
+
+        this._fullABEchoRunning = true;
+        this._fullABEchoSavedPaused = par.paused;
+        this._fullABEchoSavedFrame = par.frame;
+        par.paused = true;
+        Globals.justVideoAnalysis = true;
+
+        this.runFullABExposureLoop();
+    }
+
+    stopFullABExposure() {
+        this._fullABEchoRunning = false;
+        Globals.justVideoAnalysis = false;
+        this._fullABEchoResult = null;
+        par.paused = this._fullABEchoSavedPaused ?? false;
+        setRenderOne(true);
+    }
+
+    async runFullABExposureLoop() {
+        const aFrame = Sit.aFrame ?? 0;
+        const bFrame = Sit.bFrame ?? (Sit.frames - 1);
+        const totalFrames = bFrame - aFrame + 1;
+        const videoData = this.videoData;
+
+        if (!videoData) {
+            this.onFullABEchoComplete();
+            return;
+        }
+
+        let width = 0, height = 0, pixelCount = 0;
+        let sumPixels = null;
+        let initialized = false;
+
+        if (!this._fullABEchoCanvas) {
+            this._fullABEchoCanvas = document.createElement('canvas');
+            this._fullABEchoCtx = this._fullABEchoCanvas.getContext('2d', { willReadFrequently: true });
+        }
+        if (!this._fullABEchoTmpCanvas) {
+            this._fullABEchoTmpCanvas = document.createElement('canvas');
+            this._fullABEchoTmpCtx = this._fullABEchoTmpCanvas.getContext('2d', { willReadFrequently: true });
+        }
+
+        const targetRenderInterval = 40;
+        let lastRenderTime = performance.now();
+
+        for (let f = aFrame; f <= bFrame; f++) {
+            if (!this._fullABEchoRunning) return;
+
+            par.frame = f;
+
+            videoData.getImage(f);
+            if (videoData.waitForFrame) {
+                await videoData.waitForFrame(f, 5000);
+            }
+
+            const frameImage = videoData.getImage(f);
+            if (!frameImage || frameImage.width === 0) continue;
+
+            if (!initialized) {
+                width = frameImage.width;
+                height = frameImage.height;
+                pixelCount = width * height * 4;
+                this._fullABEchoCanvas.width = width;
+                this._fullABEchoCanvas.height = height;
+                this._fullABEchoTmpCanvas.width = width;
+                this._fullABEchoTmpCanvas.height = height;
+                sumPixels = new Float32Array(pixelCount);
+            }
+
+            this._fullABEchoTmpCtx.drawImage(frameImage, 0, 0, width, height);
+            const frameData = this._fullABEchoTmpCtx.getImageData(0, 0, width, height).data;
+
+            if (!initialized) {
+                for (let i = 0; i < pixelCount; i++) sumPixels[i] = frameData[i];
+                initialized = true;
+            } else {
+                for (let i = 0; i < pixelCount; i += 4) {
+                    for (let c = 0; c < 3; c++) {
+                        sumPixels[i + c] += frameData[i + c];
+                    }
+                }
+            }
+
+            const framesProcessed = f - aFrame + 1;
+            const now = performance.now();
+            const shouldRender = (framesProcessed % 10 === 0) || (f === bFrame) || (now - lastRenderTime >= targetRenderInterval);
+
+            if (shouldRender && initialized) {
+                this.buildFullABBlendResult(sumPixels, totalFrames, width, height);
+                this.renderCanvas(f);
+                lastRenderTime = performance.now();
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
+        }
+
+        if (initialized) {
+            this.buildFullABBlendResult(sumPixels, totalFrames, width, height);
+        }
+
+        this.onFullABEchoComplete(bFrame);
     }
 
     // so we need to account for the mouse position, in this fractional system
@@ -1453,6 +1948,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 }
 
 let guiVideoEffectsFolder = null;
+let guiVideoProcessingFolder = null;
 
 export function addFiltersToVideoNode(videoNode) {
 
@@ -1460,9 +1956,13 @@ export function addFiltersToVideoNode(videoNode) {
         guiVideoEffectsFolder = guiMenus.video.addFolder("Video Adjustments").close().perm();
     }
 
+    if (guiVideoProcessingFolder === null) {
+        guiVideoProcessingFolder = guiMenus.video.addFolder("Video Processing").close().perm();
+    }
+
     let brightness, contrast, blur, greyscale, hue, invert, saturate, enableVideoEffects, convolutionFilter;
     let sharpenAmount, edgeDetectThreshold, embossDepth;
-    let echoMin, echoMax, echoFrames, fullABEcho, fullABEchoOpacity;
+    let echoMin, echoMax, echoFrames, fullABEcho, fullABEchoOpacity, fullABBlend, fullABExposure;
     let showCache;
     let convolutionFilterDropdown, sharpenAmountControl, edgeDetectThresholdControl, embossDepthControl;
 
@@ -1497,6 +1997,8 @@ export function addFiltersToVideoNode(videoNode) {
             if (videoNode.inputs.echoMax) videoNode.inputs.echoMax.value = false;
             if (videoNode.inputs.echoFrames) videoNode.inputs.echoFrames.value = 10;
             if (videoNode.inputs.fullABEcho) videoNode.inputs.fullABEcho.value = false;
+            if (videoNode.inputs.fullABBlend) videoNode.inputs.fullABBlend.value = false;
+            if (videoNode.inputs.fullABExposure) videoNode.inputs.fullABExposure.value = false;
             if (videoNode.inputs.fullABEchoOpacity) videoNode.inputs.fullABEchoOpacity.value = 100;
             if (videoNode.inputs.showCache) videoNode.inputs.showCache.value = false;
             updateConvolutionControlVisibility();
@@ -1518,13 +2020,15 @@ export function addFiltersToVideoNode(videoNode) {
             embossDepth = new CNodeGUIValue({ id: "videoEmbossDepth", value: 1, start: 0, end: 3, step: 0.1, desc: "Emboss Depth" }, guiVideoEffectsFolder),
             echoMin = new CNodeGUIFlag({ id: "videoEchoMin", value: false, desc: "Echo Dark", onChange: () => {
                 videoNode.restartFullABEchoIfActive();
-            }}, guiVideoEffectsFolder),
+            }}, guiVideoProcessingFolder),
             echoMax = new CNodeGUIFlag({ id: "videoEchoMax", value: false, desc: "Echo Light", onChange: () => {
                 videoNode.restartFullABEchoIfActive();
-            }}, guiVideoEffectsFolder),
-            echoFrames = new CNodeGUIValue({ id: "videoEchoFrames", value: 10, start: 2, end: 100, step: 1, desc: "Echo Frames" }, guiVideoEffectsFolder),
+            }}, guiVideoProcessingFolder),
+            echoFrames = new CNodeGUIValue({ id: "videoEchoFrames", value: 10, start: 2, end: 100, step: 1, desc: "Echo Frames" }, guiVideoProcessingFolder),
             fullABEcho = new CNodeGUIFlag({ id: "videoFullABEcho", value: false, desc: "Full A-B Echo", onChange: () => {
                 if (fullABEcho.value) {
+                    if (fullABBlend.value) fullABBlend.value = false;
+                    if (fullABExposure.value) fullABExposure.value = false;
                     if (!echoMin.value && !echoMax.value) {
                         echoMax.value = true;
                     }
@@ -1532,9 +2036,27 @@ export function addFiltersToVideoNode(videoNode) {
                 } else {
                     videoNode.stopFullABEcho();
                 }
-            }}, guiVideoEffectsFolder),
-            fullABEchoOpacity = new CNodeGUIValue({ id: "videoFullABEchoOpacity", value: 100, start: 0, end: 100, step: 1, desc: "A-B Echo Opacity %" }, guiVideoEffectsFolder),
-            showCache = new CNodeGUIFlag({ id: "videoShowCache", value: false, desc: "Show Cache" }, guiVideoEffectsFolder),
+            }}, guiVideoProcessingFolder),
+            fullABBlend = new CNodeGUIFlag({ id: "videoFullABBlend", value: false, desc: "Full A-B Blend", onChange: () => {
+                if (fullABBlend.value) {
+                    if (fullABEcho.value) fullABEcho.value = false;
+                    if (fullABExposure.value) fullABExposure.value = false;
+                    videoNode.startFullABBlend();
+                } else {
+                    videoNode.stopFullABBlend();
+                }
+            }}, guiVideoProcessingFolder),
+            fullABExposure = new CNodeGUIFlag({ id: "videoFullABExposure", value: false, desc: "Full A-B Exposure", onChange: () => {
+                if (fullABExposure.value) {
+                    if (fullABEcho.value) fullABEcho.value = false;
+                    if (fullABBlend.value) fullABBlend.value = false;
+                    videoNode.startFullABExposure();
+                } else {
+                    videoNode.stopFullABExposure();
+                }
+            }}, guiVideoProcessingFolder),
+            fullABEchoOpacity = new CNodeGUIValue({ id: "videoFullABEchoOpacity", value: 100, start: 0, end: 100, step: 1, desc: "A-B Echo Opacity %" }, guiVideoProcessingFolder),
+            showCache = new CNodeGUIFlag({ id: "videoShowCache", value: false, desc: "Show Cache" }, guiVideoProcessingFolder),
             convolutionFilter = new CNodeConstant({ id: "videoConvolutionFilter", value: 'none' }),
             convolutionFilterDropdown = guiVideoEffectsFolder.add(filterOptions, "convolutionFilterValue", ['none', 'sharpen', 'edgeDetect', 'emboss']).name("Convolution Filter").onChange(value => {
                 convolutionFilter.value = value;
@@ -1546,6 +2068,9 @@ export function addFiltersToVideoNode(videoNode) {
             embossDepthControl = embossDepth.guiEntry,
             updateConvolutionControlVisibility(),
             guiVideoEffectsFolder.add(reset, "resetFilters").name("Reset Video Adjustments")
+
+        const makeVideoActions = { makeVideo: () => videoNode.makeProcessedVideo() };
+        guiVideoProcessingFolder.add(makeVideoActions, "makeVideo").name("Make Video");
     } else {
         brightness = NodeMan.get("videoBrightness");
         contrast = NodeMan.get("videoContrast");
@@ -1562,6 +2087,8 @@ export function addFiltersToVideoNode(videoNode) {
         echoMax = NodeMan.get("videoEchoMax");
         echoFrames = NodeMan.get("videoEchoFrames");
         fullABEcho = NodeMan.get("videoFullABEcho");
+        fullABBlend = NodeMan.get("videoFullABBlend");
+        fullABExposure = NodeMan.get("videoFullABExposure");
         fullABEchoOpacity = NodeMan.get("videoFullABEchoOpacity");
         showCache = NodeMan.get("videoShowCache");
         convolutionFilter = NodeMan.get("videoConvolutionFilter");
@@ -1592,6 +2119,8 @@ export function addFiltersToVideoNode(videoNode) {
         echoMax: echoMax,
         echoFrames: echoFrames,
         fullABEcho: fullABEcho,
+        fullABBlend: fullABBlend,
+        fullABExposure: fullABExposure,
         fullABEchoOpacity: fullABEchoOpacity,
         showCache: showCache
     });
