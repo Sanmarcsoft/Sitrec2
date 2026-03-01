@@ -2232,8 +2232,15 @@ function openSliderSettingsMenu(controller, event) {
         .name('Max')
         .isLog(true)
         .displayZeroThreshold(LOG_ZERO_THRESHOLD)
+        .allowInputExpandMax(true)
         .onChange(v => {
         const actualValue = v <= LOG_ZERO_THRESHOLD ? 0 : v;
+        if (controller._maxMax !== undefined && actualValue > controller._maxMax) {
+            controller._maxMax = actualValue;
+        }
+        if (controller.object && typeof controller.object === "object" && controller.object.maxMax !== undefined && actualValue > controller.object.maxMax) {
+            controller.object.maxMax = actualValue;
+        }
         controller.max(isLogSlider ? (actualValue === 0 ? -Infinity : Math.log10(actualValue)) : actualValue);
         controller.updateDisplay();
     });

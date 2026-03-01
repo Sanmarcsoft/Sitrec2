@@ -809,6 +809,12 @@ class NumberController extends Controller {
         return this;
     }
 
+    // Allow direct text entry to expand max instead of clamping to the current slider max.
+    allowInputExpandMax( allow = true ) {
+        this._allowInputExpandMax = allow;
+        return this;
+    }
+
     // step size for each increment/decrement with the arrow keys, draggin number up/down or mouse wheel
     step( step, explicit = true ) {
         this._step = step;
@@ -950,6 +956,10 @@ class NumberController extends Controller {
                 }
                 this.setValue( value );
             } else {
+                if ( this._allowInputExpandMax && this._max !== undefined && value > this._max ) {
+                    this._max = value;
+                    this._onUpdateMinMax();
+                }
                 this.setValue( this._clamp( value ) );
             }
 
