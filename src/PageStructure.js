@@ -289,6 +289,8 @@ export function addMenuToLeftSidebar(menuGui) {
     container.style.top = '0px';
     container.style.width = '100%';
     container.style.height = 'auto';
+    // Ensure previously hidden slot containers become visible when moved to a sidebar
+    container.style.display = 'block';
     
     menuGui.domElement.style.position = 'relative';
     menuGui.domElement.style.width = '100%';
@@ -310,6 +312,8 @@ export function addMenuToRightSidebar(menuGui) {
     container.style.top = '0px';
     container.style.width = '100%';
     container.style.height = 'auto';
+    // Ensure previously hidden slot containers become visible when moved to a sidebar
+    container.style.display = 'block';
     
     menuGui.domElement.style.position = 'relative';
     menuGui.domElement.style.width = '100%';

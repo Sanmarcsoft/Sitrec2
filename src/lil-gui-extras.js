@@ -169,6 +169,21 @@ GUI.prototype.addFolder = function (...args) {
     return result;
 };
 
+// Store original show/hide methods and wrap them
+const originalGUIShow = GUI.prototype.show;
+GUI.prototype.show = function (...args) {
+    const result = originalGUIShow.apply(this, args);
+    this._notifyMenuBarChanged();
+    return result;
+};
+
+const originalGUIHide = GUI.prototype.hide;
+GUI.prototype.hide = function (...args) {
+    const result = originalGUIHide.apply(this, args);
+    this._notifyMenuBarChanged();
+    return result;
+};
+
 // Store original destroy method and wrap it
 const originalDestroy = GUI.prototype.destroy;
 GUI.prototype.destroy = function (recursive = true) {
@@ -1065,16 +1080,19 @@ export class CGuiMenuBar {
         })
     }
 
-    // Check if a GUI folder has any actual content (recursively)
-    _hasContent(gui) {
+    // Check if a GUI folder has any visible content (recursively)
+    _hasVisibleContent(gui) {
         if (!gui) return false;
+
+        if (gui._hidden) return false;
 
         for (const child of gui.children) {
             // If it's a folder (GUI), recursively check its content
             if (child instanceof GUI) {
-                if (this._hasContent(child)) return true;
+                if (this._hasVisibleContent(child)) return true;
             } else {
-                // It's a controller, so this GUI has content
+                // It's a controller; only visible controllers count as content
+                if (child._hidden) continue;
                 return true;
             }
         }
@@ -1088,16 +1106,24 @@ export class CGuiMenuBar {
             if (gui) {
                 const div = this.divs[i];
 
-                // Check if the GUI has any actual content (recursively)
-                const hasContent = this._hasContent(gui);
+                // Check if the GUI has any visible content (recursively)
+                const hasContent = this._hasVisibleContent(gui);
+                const inMenuBar = div.parentElement === this.menuBar;
+                // Keep a slot reserved for any visible menu with content, even if detached or sidebar-docked.
+                // Only hidden/empty menus collapse their gap in the top menu bar.
+                const shouldReserveBarSpace = !gui._hidden && hasContent;
 
-                if (!hasContent) {
+                if (!shouldReserveBarSpace) {
                     // Empty menu - close and hide it
                     gui.close();
-                    div.style.display = "none";
+                    if (inMenuBar) {
+                        div.style.display = "none";
+                    }
                 } else {
                     // Has content - make sure it's visible
-                    div.style.display = "block";
+                    if (inMenuBar) {
+                        div.style.display = "block";
+                    }
                     if (gui.mode === "DOCKED") {
                         div.style.left = x + "px";
                         gui.originalLeft = x;
@@ -1298,6 +1324,7 @@ export class CGuiMenuBar {
         newGUI.mode = "DOCKED";
 
         this.applyModeStyles(newGUI);
+        this.hideEmpty();
     }
 
     /**
@@ -1516,6 +1543,7 @@ export class CGuiMenuBar {
                 newGUI.open();
                 newGUI.lockOpenClose = true;
                 this.applyModeStyles(newGUI);
+                this.hideEmpty();
                 event.preventDefault();
                 return;
             }
@@ -1527,6 +1555,7 @@ export class CGuiMenuBar {
                 newGUI.open();
                 newGUI.lockOpenClose = true;
                 this.applyModeStyles(newGUI);
+                this.hideEmpty();
                 event.preventDefault();
                 return;
             }
@@ -1553,6 +1582,7 @@ export class CGuiMenuBar {
                 this.bringToFront(newGUI);
             }
             this.applyModeStyles(newGUI)
+            this.hideEmpty();
 
             event.preventDefault();
         }
@@ -1723,6 +1753,8 @@ export class CGuiMenuBar {
         for (const { gui } of rightSidebarMenusToAdd) {
             addMenuToRightSidebar(gui);
         }
+
+        this.hideEmpty();
     }
 
     // Create a standalone pop-up menu that can be dragged around
@@ -2618,4 +2650,3 @@ export function setupHelpSearch(helpMenu) {
         }
     });
 }
-

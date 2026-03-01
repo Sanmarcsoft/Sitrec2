@@ -3,6 +3,7 @@
  */
 
 import {CGuiMenuBar} from '../src/lil-gui-extras.js';
+import {addMenuToRightSidebar, getRightSidebar, hideLeftSidebar, hideRightSidebar} from '../src/PageStructure';
 
 // Polyfill PointerEvent for jsdom environment
 if (typeof PointerEvent === 'undefined') {
@@ -87,6 +88,8 @@ describe('CGuiMenuBar Z-Index Management', () => {
         if (menuBar) {
             menuBar.destroy();
         }
+        hideLeftSidebar();
+        hideRightSidebar();
         // Clean up DOM
         document.body.innerHTML = '';
     });
@@ -536,5 +539,110 @@ describe('CGuiMenuBar Z-Index Management', () => {
         expect(titleElement.style.getPropertyValue('border-left')).toBe('');
         expect(titleElement.style.getPropertyValue('border-right')).toBe('');
         expect(titleElement.style.getPropertyValue('box-shadow')).toBe('');
+    });
+
+    test('should reflow menu bar when a menu is hidden', () => {
+        const a = menuBar.addFolder('A');
+        const b = menuBar.addFolder('B');
+        const c = menuBar.addFolder('C');
+        const state = { value: true };
+        a.add(state, 'value');
+        b.add(state, 'value');
+        c.add(state, 'value');
+
+        menuBar.hideEmpty();
+        const bLeftBeforeHide = parseInt(b.domElement.parentElement.style.left);
+        const cLeftBeforeHide = parseInt(c.domElement.parentElement.style.left);
+        expect(cLeftBeforeHide).toBeGreaterThan(bLeftBeforeHide);
+
+        b.hide();
+        menuBar.hideEmpty();
+
+        const cLeftAfterHide = parseInt(c.domElement.parentElement.style.left);
+        expect(cLeftAfterHide).toBe(bLeftBeforeHide);
+    });
+
+    test('should keep top-bar gap for detached and sidebar-docked menus', () => {
+        const a = menuBar.addFolder('A');
+        const b = menuBar.addFolder('B');
+        const c = menuBar.addFolder('C');
+        const state = { value: true };
+        a.add(state, 'value');
+        b.add(state, 'value');
+        c.add(state, 'value');
+
+        menuBar.hideEmpty();
+        const bLeft = parseInt(b.domElement.parentElement.style.left);
+        const cLeft = parseInt(c.domElement.parentElement.style.left);
+
+        b.mode = 'DETACHED';
+        menuBar.hideEmpty();
+        const cLeftWhenDetached = parseInt(c.domElement.parentElement.style.left);
+        expect(cLeftWhenDetached).toBe(cLeft);
+
+        addMenuToRightSidebar(b);
+        b.mode = 'SIDEBAR_RIGHT';
+        menuBar.hideEmpty();
+        const cLeftWhenSidebarDocked = parseInt(c.domElement.parentElement.style.left);
+        expect(cLeftWhenSidebarDocked).toBe(cLeft);
+        expect(b.domElement.parentElement.style.display).toBe('block');
+        expect(b.domElement.parentElement.parentElement).toBe(getRightSidebar());
+
+        menuBar.restoreToBar(b);
+        menuBar.hideEmpty();
+        const cLeftAfterRestore = parseInt(c.domElement.parentElement.style.left);
+        expect(cLeftAfterRestore).toBe(cLeft);
+        expect(b.domElement.parentElement.style.left).toBe(bLeft + 'px');
+    });
+
+    test('should treat a menu with only hidden controllers as empty', () => {
+        const gui = menuBar.addFolder('Only Hidden Controls');
+        const state = { value: true };
+        const controller = gui.add(state, 'value');
+        menuBar.hideEmpty();
+        expect(gui.domElement.parentElement.style.display).toBe('block');
+
+        controller.hide();
+        menuBar.hideEmpty();
+
+        expect(gui.domElement.parentElement.style.display).toBe('none');
+    });
+
+    test('should restore right-sidebar menus visibly when deserializing', () => {
+        const a = menuBar.addFolder('A');
+        const b = menuBar.addFolder('B');
+        const state = { value: true };
+        a.add(state, 'value');
+        b.add(state, 'value');
+
+        addMenuToRightSidebar(b);
+        b.mode = 'SIDEBAR_RIGHT';
+        b.lockOpenClose = false;
+        b.open();
+        b.lockOpenClose = true;
+
+        // Simulate stale hidden container state from previous layout pass
+        b.domElement.parentElement.style.display = 'none';
+
+        const serialized = menuBar.modSerialize();
+
+        const newMenuBar = new CGuiMenuBar();
+        const { Globals } = require('../src/Globals');
+        Globals.menuBar = newMenuBar;
+        const a2 = newMenuBar.addFolder('A');
+        const b2 = newMenuBar.addFolder('B');
+        a2.add(state, 'value');
+        b2.add(state, 'value');
+
+        newMenuBar.modDeserialize(serialized);
+
+        const rightSidebar = getRightSidebar();
+        const b2Container = b2.domElement.parentElement;
+        expect(rightSidebar.style.display).toBe('block');
+        expect(b2Container.parentElement).toBe(rightSidebar);
+        expect(b2Container.style.display).toBe('block');
+        expect(b2Container.parentElement).not.toBe(newMenuBar.menuBar);
+
+        newMenuBar.destroy();
     });
 });
