@@ -150,6 +150,13 @@ export class CNodeControllerTrackPosition extends CNodeController {
             updateCameraAndUI(pos, object, objectNode);
         } else {
             object.position.copy(pos)
+            // Orient object so its Y-up aligns with the local geodetic up vector.
+            // In ECEF coordinates, "up" varies with position on Earth's surface.
+            // Tilt controllers that run after this will override if present.
+            const up = getLocalUpVector(pos);
+            const north = getLocalNorthVector(pos);
+            object.up.copy(up);
+            object.lookAt(pos.clone().add(north));
         }
     }
 }
