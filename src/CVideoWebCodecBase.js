@@ -279,6 +279,7 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
             this.requestQueue = [];
         }
         this._activeGroupMap?.clear();
+        this.flushing = false;
 
         if (this.originalVideoWidth && this.originalVideoHeight) {
             const swap = (this.effectiveRotation === 90 || this.effectiveRotation === 270);
@@ -1423,7 +1424,8 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
         this.nextRequest = null;
         this.requestQueue = [];
         this._activeGroupMap?.clear();
-        
+        this.flushing = false;
+
         this.decodeFrameIndex = 0;
     }
 
