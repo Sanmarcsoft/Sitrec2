@@ -10,7 +10,7 @@ import {
     Vector2,
     Vector3
 } from "three";
-import {EUSToLLA, legacyEUSToECEF, LLAToEUS} from "./LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii, legacyEUSToECEF, LLAToECEF} from "./LLA-ECEF-ENU";
 import {assert} from "./assert.js";
 import {V3} from "./threeUtils";
 import {ViewMan} from "./CViewManager";
@@ -162,7 +162,7 @@ export class PointEditor {
             const LLAPoints = []
             for (let i = 0; i < initialPoints.length; i++) {
                 const frame = initialPoints[i][0]
-                const lla = LLAToEUS(initialPoints[i][1],initialPoints[i][2],initialPoints[i][3])
+                const lla = LLAToECEF(initialPoints[i][1],initialPoints[i][2],initialPoints[i][3])
                 LLAPoints.push ([frame,lla.x,lla.y,lla.z])
             }
             console.log(LLAPoints)
@@ -457,7 +457,7 @@ export class PointEditor {
 //        console.log(strplace.join(',\n'));
         strplace = [];
         for (let i = 0; i < this.numPoints; i++) {
-            const p = EUSToLLA(this.splineHelperObjects[i].position);
+            const p = ECEFToLLAVD_radii(this.splineHelperObjects[i].position);
             strplace.push(`[${this.frameNumbers[i]}, ${p.x}, ${p.y}, ${p.z}]`);
         }
 //        console.log(strplace.join(',\n'));

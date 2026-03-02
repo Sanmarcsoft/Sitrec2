@@ -18,7 +18,7 @@ import {metersFromMiles, metersFromNM, radians} from "./utils";
 import {EA2XYZ, EAJP2PR, getLocalNorthVector, getLocalUpVector, PRJ2XYZ} from "./SphericalMath";
 import {DebugArrowAB, dispose, GridHelperWorld, propagateLayerMaskObject, sphereMark} from "./threeExt";
 import * as LAYER from "./LayerMasks";
-import {LLAToEUS} from "./LLA-ECEF-ENU";
+import {LLAToECEF} from "./LLA-ECEF-ENU";
 import {Line2} from "three/addons/lines/Line2.js";
 import {LineGeometry} from "three/addons/lines/LineGeometry.js";
 import {showHider} from "./KeyBoardHandler";
@@ -892,7 +892,7 @@ function ensureGroundFrame() {
         return null;
     }
 
-    const surfacePos = LLAToEUS(Sit.lat, Sit.lon, 0);
+    const surfacePos = LLAToECEF(Sit.lat, Sit.lon, 0);
     const groundUp = getLocalUpVector(surfacePos);
     const groundNorth = getLocalNorthVector(surfacePos);
     const groundEast = V3().crossVectors(groundNorth, groundUp).normalize();

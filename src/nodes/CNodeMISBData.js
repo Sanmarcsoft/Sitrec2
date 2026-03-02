@@ -1,4 +1,4 @@
-import {LLAToEUS} from "../LLA-ECEF-ENU";
+import {LLAToECEF} from "../LLA-ECEF-ENU";
 import {FileManager, NodeMan, Sit} from "../Globals";
 import {MISB, MISBFields} from "../MISBUtils";
 import {CNodeEmptyArray} from "./CNodeArray";
@@ -440,7 +440,7 @@ export class CNodeMISBDataTrack extends CNodeEmptyArray {
         for (var f = 0; f < points; f++) {
             // we only handle rows that have valid data
             if (this.isValid(f)) {
-                var pos = LLAToEUS(this.getLat(f), this.getLon(f), this.getAltHAE(f));
+                var pos = LLAToECEF(this.getLat(f), this.getLon(f), this.getAltHAE(f));
                 this.array.push({position: pos})
             } else if (this.filteredSlots.has(f)) {
                 // Filtered out by g-force filter — skip silently
@@ -480,7 +480,7 @@ export class CNodeMISBDataTrack extends CNodeEmptyArray {
         // so we need to adjust it to be the true altitude
         const lat = this.getLat(i);
         const lon = this.getLon(i);
-       // const position = LLAToEUS(lat, lon, alt);
+       // const position = LLAToECEF(lat, lon, alt);
         // get the base altitude at this position
         const elevation = elevationAtLL(lat, lon);
         alt += elevation;
@@ -546,7 +546,7 @@ export class CNodeMISBDataTrack extends CNodeEmptyArray {
 
     // get EUS position at frame i
     getPosition(i) {
-        return LLAToEUS(this.getLat(i), this.getLon(i), this.getAltHAE(i));
+        return LLAToECEF(this.getLat(i), this.getLon(i), this.getAltHAE(i));
     }
 
     // given a time in ms (UNIX time), return the position at that time

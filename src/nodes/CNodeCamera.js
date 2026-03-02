@@ -1,7 +1,7 @@
 import {Camera, PerspectiveCamera, Vector3} from "three";
 import {f2m, m2f} from "../utils";
 import {GlobalDateTimeNode, guiMenus, NodeMan, Sit} from "../Globals";
-import {EUSToLLA, LLAToEUS, LLAVToEUS} from "../LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii, LLAToECEF, LLAVToECEF} from "../LLA-ECEF-ENU";
 import {
     altitudeAboveSphere,
     getAzElFromPositionAndForward,
@@ -59,9 +59,9 @@ export class CNodeCamera extends CNode3D {
         v.setFromMatrixColumn(this.camera.matrixWorld,2);
         v.multiplyScalar(-1000)
         v.add(p)
-        const posLLA = EUSToLLA(this.camera.position)
-        const atLLA = EUSToLLA(v)
-        const upLLA = EUSToLLA(this.camera.position.clone().add(this.camera.up.clone().multiplyScalar(1000)))
+        const posLLA = ECEFToLLAVD_radii(this.camera.position)
+        const atLLA = ECEFToLLAVD_radii(v)
+        const upLLA = ECEFToLLAVD_radii(this.camera.position.clone().add(this.camera.up.clone().multiplyScalar(1000)))
 
         return {
             ...super.modSerialize(),
@@ -97,17 +97,17 @@ export class CNodeCamera extends CNode3D {
         }
 
         if (this.startPosLLA !== undefined) {
-            this._object.position.copy(LLAVToEUS(MV3(this.startPosLLA)));
+            this._object.position.copy(LLAVToECEF(MV3(this.startPosLLA)));
         }
 
         // If no explicit position was set, default to the surface at Sit origin.
         // In ECEF-based EUS this prevents the camera from being at (0,0,0) = Earth's center.
         if (this.startPos === undefined && this.startPosLLA === undefined && Sit.lat !== undefined) {
-            this._object.position.copy(LLAToEUS(Sit.lat, Sit.lon, 0));
+            this._object.position.copy(LLAToECEF(Sit.lat, Sit.lon, 0));
         }
 
         if (this.upLLA !== undefined) {
-            const upWorld = LLAVToEUS(MV3(this.upLLA));
+            const upWorld = LLAVToECEF(MV3(this.upLLA));
             this._object.up.copy(upWorld.sub(this._object.position).normalize());
         } else {
             const localUp = getLocalUpVector(this._object.position);
@@ -119,7 +119,7 @@ export class CNodeCamera extends CNode3D {
         }
 
         if (this.lookAtLLA !== undefined) {
-            this._object.lookAt(LLAVToEUS(MV3(this.lookAtLLA)));
+            this._object.lookAt(LLAVToECEF(MV3(this.lookAtLLA)));
         }
 
         this.camera.updateMatrix();
@@ -134,9 +134,9 @@ export class CNodeCamera extends CNode3D {
         v.setFromMatrixColumn(this.camera.matrixWorld,2);
         v.multiplyScalar(-1000)
         v.add(p)
-        this.startPosLLA = EUSToLLA(this.camera.position)
-        this.lookAtLLA = EUSToLLA(v)
-        this.upLLA = EUSToLLA(this.camera.position.clone().add(this.camera.up.clone().multiplyScalar(1000)))
+        this.startPosLLA = ECEFToLLAVD_radii(this.camera.position)
+        this.lookAtLLA = ECEFToLLAVD_radii(v)
+        this.upLLA = ECEFToLLAVD_radii(this.camera.position.clone().add(this.camera.up.clone().multiplyScalar(1000)))
     }
 
 
@@ -160,7 +160,7 @@ export class CNodeCamera extends CNode3D {
     updateUIPosition() {
         // propagate the camera position values value to the camera position UI (if there is one)
         if (NodeMan.exists("cameraLat")) {
-            const LLA = EUSToLLA(this.camera.position)
+            const LLA = ECEFToLLAVD_radii(this.camera.position)
             NodeMan.get("cameraLat").value = LLA.x
             NodeMan.get("cameraLon").value = LLA.y
             NodeMan.get("cameraAlt").value = m2f(LLA.z)

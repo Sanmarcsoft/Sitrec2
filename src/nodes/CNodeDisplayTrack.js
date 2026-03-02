@@ -16,7 +16,7 @@ import {convertColorInput} from "../ConvertColorInputs";
 import {par} from "../par";
 import {hexColor, V3} from "../threeUtils";
 import {CNodeGUIValue} from "./CNodeGUIValue";
-import {EUSToLLA, haversineDistanceKM, interpolateGreatCircle, LLAToEUS} from "../LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii, haversineDistanceKM, interpolateGreatCircle, LLAToECEF} from "../LLA-ECEF-ENU";
 import {meanSeaLevelOffset} from "../EGM96Geoid";
 
 export class CNodeDisplayTrack extends CNode3DGroup {
@@ -487,12 +487,12 @@ export class CNodeDisplayTrack extends CNode3DGroup {
                         line_points.push(A.x, A.y, A.z);
                         line_colors.push(color.r, color.g, color.b);
                         lastPos = A.clone();
-                        lastLLA = EUSToLLA(A);
+                        lastLLA = ECEFToLLAVD_radii(A);
                     }
                     continue;
                 }
 
-                const currentLLA = EUSToLLA(A);
+                const currentLLA = ECEFToLLAVD_radii(A);
                 const distKM = haversineDistanceKM(lastLLA.x, lastLLA.y, currentLLA.x, currentLLA.y);
                 const MAX_SEGMENT_KM = 10;
                 
@@ -502,7 +502,7 @@ export class CNodeDisplayTrack extends CNode3DGroup {
                         const t = seg / numSegments;
                         const interpLL = interpolateGreatCircle(lastLLA.x, lastLLA.y, currentLLA.x, currentLLA.y, t);
                         const interpAlt = lastLLA.z + t * (currentLLA.z - lastLLA.z);
-                        const interpEUS = LLAToEUS(interpLL.lat, interpLL.lon, interpAlt);
+                        const interpEUS = LLAToECEF(interpLL.lat, interpLL.lon, interpAlt);
                         line_points.push(interpEUS.x, interpEUS.y, interpEUS.z);
                         line_colors.push(color.r, color.g, color.b);
                     }
@@ -674,8 +674,8 @@ export class CNodeDisplayTrack extends CNode3DGroup {
                 // The top point
                 linePoints.push(A);
                 // Fast MSL=0 projection using EGM96 geoid undulation (HAE = N).
-                const lla = EUSToLLA(A);
-                const bottom = LLAToEUS(lla.x, lla.y, meanSeaLevelOffset(lla.x, lla.y));
+                const lla = ECEFToLLAVD_radii(A);
+                const bottom = LLAToECEF(lla.x, lla.y, meanSeaLevelOffset(lla.x, lla.y));
                 groundPoints.push(bottom);
             }
         }

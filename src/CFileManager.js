@@ -60,7 +60,7 @@ import {isConsole, isLocal, isServerless, SITREC_APP, SITREC_DOMAIN, SITREC_SERV
 import {TSParser} from "./TSParser";
 import {showError} from "./showError";
 import {asyncOperationRegistry} from "./AsyncOperationRegistry";
-import {EUSToLLA} from "./LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii} from "./LLA-ECEF-ENU";
 import {projectedBoundsToWGS84} from "./proj4Loader";
 import {isAudioOnlyFormat} from "./AudioFormats";
 import {extractFeaturesFromFile, isFeaturesCSV} from "./ParseFeaturesCSV";
@@ -188,7 +188,7 @@ export class CFileManager extends CManager {
         const lookCamera = NodeMan.get("lookCamera").camera;
         const pos = lookCamera.position;
 
-        const LLA = EUSToLLA(pos);
+        const LLA = ECEFToLLAVD_radii(pos);
 
         // Now serialize the sitch to capture the new origin (Sit.lat, Sit.lon)
         // and then deserialize it in memory to reload everything with the new origin
@@ -1884,7 +1884,7 @@ export class CFileManager extends CManager {
         
         const lookCamera = NodeMan.get("lookCamera");
         const pos = lookCamera.p(par.frame);
-        const centerLLA = EUSToLLA(pos);
+        const centerLLA = ECEFToLLAVD_radii(pos);
         
         const offset = 0.005;
         

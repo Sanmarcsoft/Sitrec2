@@ -8,7 +8,7 @@ import {CNodeEmptyArray} from "./CNodeArray";
 import {assert} from "../assert.js";
 import {getAzElFromPositionAndForward} from "../SphericalMath";
 import {CNodeLOS} from "./CNodeLOS";
-import {ECEFToLLAVD, EUSToLLA} from "../LLA-ECEF-ENU";
+import {ECEFToLLAVD, ECEFToLLAVD_radii} from "../LLA-ECEF-ENU";
 import {saveAs} from "file-saver";
 
 export class CNodeLOSFromCamera extends CNodeLOS {
@@ -122,7 +122,7 @@ export class CNodeLOSFromCamera extends CNodeLOS {
             const data = this.getValueFrame(sitrecFrame);
             if (!data || !data.position) return;
 
-            const lla = EUSToLLA(data.position);
+            const lla = ECEFToLLAVD_radii(data.position);
             // Also compute ellipsoidal altitude for comparison
             const ecef = data.position;
             const llaEllip = ECEFToLLAVD(ecef);

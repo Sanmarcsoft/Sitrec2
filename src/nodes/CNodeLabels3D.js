@@ -8,7 +8,7 @@ import {CNodeMunge} from "./CNodeMunge";
 import {Globals, guiShowHide, NodeMan, setRenderOne, Units} from "../Globals";
 import {CNode3DGroup} from "./CNode3DGroup";
 import {par} from "../par";
-import {EUSToLLA, LLAToEUS} from "../LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii, LLAToECEF} from "../LLA-ECEF-ENU";
 import {meanSeaLevelOffset} from "../EGM96Geoid";
 
 import {assert} from "../assert.js";
@@ -34,7 +34,7 @@ let featuresControllerMain = null;
 let featuresControllerLook = null;
 
 function altitudeMSLFromEUS(pos) {
-    const lla = EUSToLLA(pos);
+    const lla = ECEFToLLAVD_radii(pos);
     return lla.z - meanSeaLevelOffset(lla.x, lla.y);
 }
 
@@ -185,7 +185,7 @@ export class CNodeLabel3D extends CNode3DGroup {
 
         if (v.positionLLA !== undefined) {
             const lla = v.positionLLA;
-            const pos = LLAToEUS(lla.lat, lla.lon, lla.alt);
+            const pos = LLAToECEF(lla.lat, lla.lon, lla.alt);
             this.position.set(pos.x, pos.y, pos.z);
             this.textPosition.copy(this.position);
         }
@@ -265,7 +265,7 @@ export class CNodeLLALabel extends CNodeLabel3D {
         const text = `${lat.toFixed(4)} ${lon.toFixed(4)}`;
         this.changeText(text);
 
-        const pos = LLAToEUS(lat, lon, this.alt);
+        const pos = LLAToECEF(lat, lon, this.alt);
         this.position.set(pos.x, pos.y, pos.z);
         this.textPosition.copy(this.position);
     }
@@ -532,7 +532,7 @@ export class CNodeFeatureMarker extends CNodeLabel3D {
         if (!this.lla) return;
         
         if (this.lla.alt === 0) {
-            const basePos = LLAToEUS(this.lla.lat, this.lla.lon, 0);
+            const basePos = LLAToECEF(this.lla.lat, this.lla.lon, 0);
             
             if (NodeMan.exists("TerrainModel")) {
                 const terrainNode = NodeMan.get("TerrainModel");
@@ -541,7 +541,7 @@ export class CNodeFeatureMarker extends CNodeLabel3D {
                 this.featurePosition.copy(pointOnSphereBelow(basePos));
             }
         } else {
-            const pos = LLAToEUS(this.lla.lat, this.lla.lon, this.lla.alt);
+            const pos = LLAToECEF(this.lla.lat, this.lla.lon, this.lla.alt);
             this.featurePosition.copy(pos);
         }
         

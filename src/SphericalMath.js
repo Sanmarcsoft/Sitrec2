@@ -152,7 +152,7 @@ function PRJ2EA(pitch, roll, jetPitch) {
  *   - equator (lat=0):  Y = -equatorRadius
  *   - pole (lat=90°):   Y = -polarRadius
  */
-export function earthCenterEUS() {
+export function earthCenterECEF() {
     return V3(0, 0, 0);
 }
 

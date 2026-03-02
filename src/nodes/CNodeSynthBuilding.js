@@ -23,7 +23,7 @@ import {
 } from "three";
 import * as LAYER from "../LayerMasks";
 import {getLocalUpVector} from "../SphericalMath";
-import {EUSToLLA, LLAToEUS} from "../LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii, LLAToECEF} from "../LLA-ECEF-ENU";
 import {screenToNDC} from "../mouseMoveView";
 import {ViewMan} from "../CViewManager";
 import {CustomManager, Globals, guiMenus, setRenderOne, Synth3DManager, UndoManager} from "../Globals";
@@ -181,7 +181,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         this.cornerLatLons = [];
         for (let i = 0; i < 4; i++) {
             if (this.vertices[i] && this.vertices[i].type === 'bottom') {
-                const lla = EUSToLLA(this.vertices[i].position);
+                const lla = ECEFToLLAVD_radii(this.vertices[i].position);
                 this.cornerLatLons.push({lat: lla.x, lon: lla.y});
             }
         }
@@ -533,7 +533,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         const groundCorners = [];
         for (let i = 0; i < 4; i++) {
             const {lat, lon} = this.cornerLatLons[i];
-            const surfacePoint = LLAToEUS(lat, lon, 0);
+            const surfacePoint = LLAToECEF(lat, lon, 0);
             const groundPoint = getPointBelow(surfacePoint);
             groundCorners.push(groundPoint);
         }
@@ -654,7 +654,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         // Convert footprint positions to lat/lon
         this.cornerLatLons = [];
         for (let i = 0; i < 4; i++) {
-            const lla = EUSToLLA(footprint[i]);
+            const lla = ECEFToLLAVD_radii(footprint[i]);
             this.cornerLatLons.push({
                 lat: lla.x,
                 lon: lla.y
@@ -2641,12 +2641,12 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             const verticesEUS = data.vertices.map(v => {
                 if (v.position) {
                     return {
-                        position: LLAToEUS(v.position[0], v.position[1], v.position[2]),
+                        position: LLAToECEF(v.position[0], v.position[1], v.position[2]),
                         type: v.type || 'free'
                     };
                 } else {
                     return {
-                        position: LLAToEUS(v.lat, v.lon, v.alt),
+                        position: LLAToECEF(v.lat, v.lon, v.alt),
                         type: 'free'
                     };
                 }
@@ -2659,7 +2659,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             if (bottomVerts.length === 4 && topVerts.length === 4) {
                 // Extract cornerLatLons from bottom vertices
                 const cornerLatLons = bottomVerts.map(v => {
-                    const lla = EUSToLLA(v.position);
+                    const lla = ECEFToLLAVD_radii(v.position);
                     return {lat: lla.x, lon: lla.y};
                 });
                 

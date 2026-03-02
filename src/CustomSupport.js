@@ -31,7 +31,7 @@ import {
     Units
 } from "./Globals";
 import {isKeyHeld, toggler} from "./KeyBoardHandler";
-import {EUSToLLA, LLAToEUS} from "./LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii, LLAToECEF} from "./LLA-ECEF-ENU";
 import {par} from "./par";
 import {GlobalScene} from "./LocalFrame";
 import {refreshLabelsAfterLoading} from "./nodes/CNodeLabels3D";
@@ -2069,7 +2069,7 @@ export class CCustomManager {
         }
 
         // Convert LLA to EUS coordinates
-        const eusPosition = LLAToEUS(lat, lon, finalAlt);
+        const eusPosition = LLAToECEF(lat, lon, finalAlt);
 
         // Generate unique IDs
         const objectID = `syntheticObject_${Date.now()}`;
@@ -2132,8 +2132,8 @@ export class CCustomManager {
                 console.log(`Camera positioned at: ${cameraLat}, ${cameraLon}, ${cameraAlt}m (100m south and 100m above object)`);
             } else {
                 // Fallback: set camera position directly using EUS coordinates
-                const cameraEUS = LLAToEUS(cameraLat, cameraLon, cameraAlt);
-                const objectEUS = LLAToEUS(lat, lon, alt);
+                const cameraEUS = LLAToECEF(cameraLat, cameraLon, cameraAlt);
+                const objectEUS = LLAToECEF(lat, lon, alt);
 
                 if (cameraNode.camera) {
                     cameraNode.camera.position.copy(cameraEUS);
@@ -2173,7 +2173,7 @@ export class CCustomManager {
         }
 
         // Convert ground point to LLA
-        const groundLLA = EUSToLLA(groundPoint);
+        const groundLLA = ECEFToLLAVD_radii(groundPoint);
         const lat = groundLLA.x;
         const lon = groundLLA.y;
         const altHAE = groundLLA.z;
@@ -4174,7 +4174,7 @@ export class CCustomManager {
                 const cursorPos = getCursorPositionFromTopView();
                 if (cursorPos) {
                     setSitchEstablished(true);
-                    const LLA = EUSToLLA(cursorPos);
+                    const LLA = ECEFToLLAVD_radii(cursorPos);
 
                     if (terrainUI.lat !== LLA.x || terrainUI.lon !== LLA.y) {
                         terrainUI.lat = LLA.x

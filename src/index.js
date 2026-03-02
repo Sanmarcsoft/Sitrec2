@@ -98,7 +98,7 @@ import {EventManager} from "./CEventManager";
 import {checkLocal} from "./configUtils";
 import {CNodeView3D} from "./nodes/CNodeView3D";
 import {getApproximateLocationFromIP} from "./GeoLocation";
-import {LLAToEUS} from "./LLA-ECEF-ENU";
+import {LLAToECEF} from "./LLA-ECEF-ENU";
 import {
     addMotionAnalysisMenu,
     getMotionAnalyzerForTesting,
@@ -1825,7 +1825,7 @@ async function setupFunctions() {
             NodeMan.get("cameraLat").value = Sit.lat;
             NodeMan.get("cameraLon").value = Sit.lon;
         }
-        const EUS = LLAToEUS(Sit.lat, Sit.lon, 0);
+        const EUS = LLAToECEF(Sit.lat, Sit.lon, 0);
         NodeMan.get("mainCamera").goToPoint(EUS,1000000,2000000);
 
         // normally setting the camera positon means we have established the sitch

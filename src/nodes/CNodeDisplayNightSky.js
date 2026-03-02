@@ -25,7 +25,7 @@ import {assert} from "../assert.js";
 import {intersectSphere2, V3} from "../threeUtils";
 import {
     getCelestialDirectionFromRaDec,
-    getGeocentricBodyPositionEUS,
+    getGeocentricBodyPositionECEF,
     getJulianDate,
     getSiderealTime,
     raDecToAltAz
@@ -1068,8 +1068,8 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
     /**
      * Wrapper to get satellite EUS position - delegates to this.satellites
      */
-    calcSatEUS(sat, date) {
-        return this.satellites.calcSatEUS(sat, date);
+    calcSatECEF(sat, date) {
+        return this.satellites.calcSatECEF(sat, date);
     }
 
     /**
@@ -1249,7 +1249,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
         // Handle Sun-specific calculations for flare region
         if (planet === "Sun") {
-            const sunPos = getGeocentricBodyPositionEUS(Astronomy.Body.Sun, date, true);
+            const sunPos = getGeocentricBodyPositionECEF(Astronomy.Body.Sun, date, true);
             const sunDir = sunPos.clone().normalize();
 
             // Store sun direction vectors for flare calculations
@@ -1264,7 +1264,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
         // Handle Moon-specific calculations for shadow
         if (planet === "Moon") {
-            const moonPos = getGeocentricBodyPositionEUS(Astronomy.Body.Moon, date, true);
+            const moonPos = getGeocentricBodyPositionECEF(Astronomy.Body.Moon, date, true);
 
             Globals.toMoon = moonPos.clone().normalize()
             Globals.fromMoon = Globals.toMoon.clone().negate()

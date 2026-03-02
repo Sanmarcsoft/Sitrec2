@@ -1,6 +1,6 @@
 import {Color, Raycaster} from "three";
 import {intersectSphere2, V3} from "../threeUtils";
-import {LLAToEUSRadians} from "../LLA-ECEF-ENU";
+import {LLAToECEFRadians} from "../LLA-ECEF-ENU";
 import {SITREC_SERVER} from "../configUtils";
 import {FileManager, GlobalDateTimeNode, guiMenus, NodeMan, setRenderOne} from "../Globals";
 import {EventManager} from "../CEventManager";
@@ -884,7 +884,7 @@ export class CSatellite {
     /**
      * Calculate satellite EUS position for a given date
      */
-    calcSatEUS(sat, date) {
+    calcSatECEF(sat, date) {
         const positionAndVelocity = satellite.propagate(sat, date);
         if (positionAndVelocity && positionAndVelocity.position) {
             const gmst = satellite.gstime(date);
@@ -903,7 +903,7 @@ export class CSatellite {
                 return null;
             }
 
-            const EUS = LLAToEUSRadians(GD.latitude, GD.longitude, altitude);
+            const EUS = LLAToECEFRadians(GD.latitude, GD.longitude, altitude);
             return EUS;
         } else {
             return null;
@@ -965,7 +965,7 @@ export class CSatellite {
                 } else {
                     // First time or backwards jump or jump fwd more that a second, calculate fresh
                     satData.timeA = timeMS;
-                    satData.eusA = this.calcSatEUS(satrec, date);
+                    satData.eusA = this.calcSatECEF(satrec, date);
                 }
                 if (satData.timeB === undefined) {
                     satData.timeB = satData.timeA + Math.floor(1 + this.timeStep * (i / numSats));
@@ -973,7 +973,7 @@ export class CSatellite {
                     satData.timeB = satData.timeA + this.timeStep;
                 }
                 const dateB = new Date(satData.timeB);
-                satData.eusB = this.calcSatEUS(satrec, dateB);
+                satData.eusB = this.calcSatECEF(satrec, dateB);
             }
 
             if (satData.eusA !== null && satData.eusB !== null) {

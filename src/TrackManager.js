@@ -716,8 +716,8 @@ class CTrackManager extends CManager {
 
 
             // // first get LLA versions of the EUS values cameraTarget and ground
-            // const cameraTargetLLA = EUSToLLA(cameraTarget);
-            // const groundLLA = EUSToLLA(ground);
+            // const cameraTargetLLA = ECEFToLLAVD_radii(cameraTarget);
+            // const groundLLA = ECEFToLLAVD_radii(ground);
             // // then store them in the mainCamera node
             // mainCameraNode.startPosLLA = cameraTargetLLA;
             // mainCameraNode.lookAtLLA = groundLLA;

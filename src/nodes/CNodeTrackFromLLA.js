@@ -1,6 +1,6 @@
 // A track from a lat, lon, alt source
 import {Sit} from "../Globals";
-import {LLAToEUS} from "../LLA-ECEF-ENU";
+import {LLAToECEF} from "../LLA-ECEF-ENU";
 import {CNodeTrack} from "./CNodeTrack";
 import {meanSeaLevelOffset} from "../EGM96Geoid";
 
@@ -11,7 +11,7 @@ export class CNodeTrackFromLLA extends CNodeTrack {
         this.input("lon");
         this.input("alt");
         // altitudeReference: "HAE" (default) or "MSL"
-        // HAE = Height Above Ellipsoid (passed directly to LLAToEUS)
+        // HAE = Height Above Ellipsoid (passed directly to LLAToECEF)
         // MSL = Mean Sea Level (converted to HAE via geoid undulation)
         this.altitudeReference = v.altitudeReference ?? "HAE";
         this.frames = this.in.lat.frames;
@@ -28,7 +28,7 @@ export class CNodeTrackFromLLA extends CNodeTrack {
         if (this.altitudeReference === "MSL") {
             alt += meanSeaLevelOffset(lat, lon);
         }
-        const eus = LLAToEUS(lat, lon, alt);
+        const eus = LLAToECEF(lat, lon, alt);
         return {position: eus}
     }
 }

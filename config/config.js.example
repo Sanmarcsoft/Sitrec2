@@ -1,6 +1,6 @@
 import {SITREC_SERVER} from "../src/configUtils";
 import {GlobalDateTimeNode, NodeMan} from "../src/Globals";
-import {EUSToLLA} from "../src/LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii} from "../src/LLA-ECEF-ENU";
 import {assert} from "../src/assert";
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -309,7 +309,7 @@ function adsbReplay() {
     // get the current camera position from the lookCamera in Lat and Lon
     const lookCamera = NodeMan.get("lookCamera");
     const pos = lookCamera.p(par.frame);
-    const LLA = EUSToLLA(pos);
+    const LLA = ECEFToLLAVD_radii(pos);
 
     // get date and time from the current frame
     const dateString = date.toISOString().slice(0, 16).replace("T", "-");
@@ -330,7 +330,7 @@ function googleMapsLink() {
     // get the current camera position from the lookCamera in Lat and Lon
     const lookCamera = NodeMan.get("lookCamera");
     const pos = lookCamera.p(par.frame);
-    const LLA = EUSToLLA(pos);
+    const LLA = ECEFToLLAVD_radii(pos);
 
     // like:
     // https://www.google.com/maps/place/40%C2%B040'22.8%22N+74%C2%B045'35.3%22W/@40.6728307,-74.794137,12543m/
@@ -345,7 +345,7 @@ function inTheSkyLink() {
     // get the current camera position from the lookCamera in Lat and Lon
     const lookCamera = NodeMan.get("lookCamera");
     const pos = lookCamera.p(par.frame);
-    const LLA = EUSToLLA(pos);
+    const LLA = ECEFToLLAVD_radii(pos);
     // get the current date and time from the GlobalDateTimeNode
     const date = GlobalDateTimeNode.frameToDate(par.frame);
     const year = date.getUTCFullYear();

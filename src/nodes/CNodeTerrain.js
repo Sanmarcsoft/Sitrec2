@@ -2,8 +2,8 @@ import {CNode} from "./CNode";
 import {pointAbove} from "../threeExt";
 import {cos, radians} from "../utils";
 import {Globals, NodeMan, Sit} from "../Globals";
-import {EUSToLLA, RLLAToECEF_radii, RLLAToECEFV_Sphere} from "../LLA-ECEF-ENU";
-import {earthCenterEUS, setAltitudeMSL} from "../SphericalMath";
+import {ECEFToLLAVD_radii, RLLAToECEF_radii, RLLAToECEFV_Sphere} from "../LLA-ECEF-ENU";
+import {earthCenterECEF, setAltitudeMSL} from "../SphericalMath";
 import {Group, Mesh, MeshBasicMaterial, Raycaster, SphereGeometry} from "three";
 import {GlobalScene} from "../LocalFrame";
 import {assert} from "../assert";
@@ -141,7 +141,7 @@ export class CNodeTerrain extends CNode {
         // (In old EUS this was latitude-dependent: Sit.lat * π/180 - π/2)
         this.greySphere.rotation.x = Math.PI / 2;
         // Position at the true Earth centre in EUS (depends on ellipsoid shape and latitude).
-        this.greySphere.position.copy(earthCenterEUS());
+        this.greySphere.position.copy(earthCenterECEF());
         this.greySphere.visible = Globals.dynamicSubdivision === true;
         GlobalScene.add(this.greySphere);
 
@@ -405,7 +405,7 @@ export class CNodeTerrain extends CNode {
                 Globals.equatorRadius - 1000
             );
             this.greySphere.rotation.x = Math.PI / 2;
-            this.greySphere.position.copy(earthCenterEUS());
+            this.greySphere.position.copy(earthCenterECEF());
         }
     }
 
@@ -800,7 +800,7 @@ export class CNodeTerrain extends CNode {
         }
 
 
-        const LLA = EUSToLLA(A)
+        const LLA = ECEFToLLAVD_radii(A)
         let elevation = meanSeaLevelOffset(LLA.x, LLA.y);
         if (this.elevationMap)
             elevation = this.elevationMap.getElevationInterpolated(LLA.x, LLA.y)
@@ -815,7 +815,7 @@ export class CNodeTerrain extends CNode {
     }
 
     getPointBelowWithTileInfo(A, agl = 0) {
-        const LLA = EUSToLLA(A)
+        const LLA = ECEFToLLAVD_radii(A)
         const seaLevel = meanSeaLevelOffset(LLA.x, LLA.y);
         let elevation = seaLevel;
         let tileZ = -1, tileX = -1, tileY = -1;

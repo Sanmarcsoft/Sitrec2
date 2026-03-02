@@ -1,7 +1,7 @@
 import {CNode} from "./CNode";
 import {GlobalDateTimeNode, NodeMan, Sit} from "../Globals";
 import {assert} from "../assert.js";
-import {EUSToLLA, LLAToEUS} from "../LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii, LLAToECEF} from "../LLA-ECEF-ENU";
 import {roundIfClose} from "../utils";
 import {saveAs} from "file-saver";
 
@@ -56,7 +56,7 @@ export class CNodeArray extends CNode {
                     // don't have an LLA, so convert from EUS
                     // this gives us altitude in meters
                     const posEUS = this.array[f].position
-                    const posLLA = EUSToLLA(posEUS);
+                    const posLLA = ECEFToLLAVD_radii(posEUS);
                     LLAm = [posLLA.x, posLLA.y, posLLA.z]
                 } else {
                     // LLA should be in meters
@@ -99,7 +99,7 @@ export class CNodeArray extends CNode {
             const entry = this.array[i];
             if (entry?.lla === undefined) continue;
             const lla = entry.lla;
-            entry.position = LLAToEUS(lla[0], lla[1], lla[2]);
+            entry.position = LLAToECEF(lla[0], lla[1], lla[2]);
         }
     }
 

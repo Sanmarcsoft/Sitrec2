@@ -1,4 +1,4 @@
-import {LLAToEUS} from "./LLA-ECEF-ENU";
+import {LLAToECEF} from "./LLA-ECEF-ENU";
 import {QuadTreeTile} from "./QuadTreeTile";
 import {QuadTreeMap} from "./QuadTreeMap";
 import {setRenderOne} from "./Globals";
@@ -248,7 +248,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
                 const lon2 = this.options.mapProjection.getLeftLongitude(child.x + 1, child.z);
                 const lat = (lat1 + lat2) / 2;
                 const lon = (lon1 + lon2) / 2;
-                const center = LLAToEUS(lat, lon, 0);
+                const center = LLAToECEF(lat, lon, 0);
                 assert(center.x === child.mesh.position.x
                     && center.y === child.mesh.position.y
                     && center.z === child.mesh.position.z,
@@ -460,7 +460,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
         const lon2 = this.options.mapProjection.getLeftLongitude(tile.x + 1, tile.z);
         const lat = (lat1 + lat2) / 2;
         const lon = (lon1 + lon2) / 2;
-        const center = LLAToEUS(lat, lon, 0);
+        const center = LLAToECEF(lat, lon, 0);
 
         tile.setPosition(center);
         tile.geometryReady = false;

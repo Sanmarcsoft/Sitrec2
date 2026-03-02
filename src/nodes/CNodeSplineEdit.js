@@ -4,7 +4,7 @@ import {Vector3} from "three";
 import {getCameraNode} from "./CNodeCamera";
 import {assert} from "../assert.js";
 import {CNodeTrack} from "./CNodeTrack";
-import {EUSToLLA, LLAVToEUS} from "../LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii, LLAVToECEF} from "../LLA-ECEF-ENU";
 import {adjustHeightAboveGround, adjustHeightMSL, pointAbove} from "../threeExt";
 import {EventManager} from "../CEventManager";
 
@@ -107,7 +107,7 @@ export class CNodeSplineEditor extends CNodeTrack {
         for (let i=0;i<this.splineEditor.positions.length;i++) {
             const p = this.splineEditor.positions[i];
             // Convert EUS coordinates to LLA (lat, lon, alt) for storage
-            const lla = EUSToLLA(p);
+            const lla = ECEFToLLAVD_radii(p);
             positions.push([this.splineEditor.frameNumbers[i], lla.x, lla.y, lla.z])
         }
         const result = {
@@ -133,7 +133,7 @@ export class CNodeSplineEditor extends CNodeTrack {
                 const posData = v.positions[i];
                 const frameNumber = posData[0];
                 const lla = new Vector3(posData[1], posData[2], posData[3]);
-                const eus = LLAVToEUS(lla);
+                const eus = LLAVToECEF(lla);
                 eusPositions.push([frameNumber, eus.x, eus.y, eus.z]);
             }
             this.splineEditor.load(eusPositions)
@@ -170,7 +170,7 @@ export class CNodeSplineEditor extends CNodeTrack {
         const positions = this.splineEditor?.positions ?? [];
         const points = [];
         for (let i = 0; i < positions.length; i++) {
-            const lla = EUSToLLA(positions[i]);
+            const lla = ECEFToLLAVD_radii(positions[i]);
             points.push([frameNumbers[i], lla.x, lla.y, lla.z]);
         }
         return points;
@@ -182,7 +182,7 @@ export class CNodeSplineEditor extends CNodeTrack {
         const eusPositions = [];
         for (let i = 0; i < this._controlPointsLLA.length; i++) {
             const [frameNumber, lat, lon, alt] = this._controlPointsLLA[i];
-            const eus = LLAVToEUS(new Vector3(lat, lon, alt));
+            const eus = LLAVToECEF(new Vector3(lat, lon, alt));
             eusPositions.push([frameNumber, eus.x, eus.y, eus.z]);
         }
         this.splineEditor.load(eusPositions);

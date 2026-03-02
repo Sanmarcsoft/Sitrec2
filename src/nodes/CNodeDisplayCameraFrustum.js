@@ -17,8 +17,8 @@ import {
     Sphere,
     Vector3
 } from "three";
-import {earthCenterEUS, getLocalUpVector} from "../SphericalMath";
-import {EUSToLLA} from "../LLA-ECEF-ENU";
+import {earthCenterECEF, getLocalUpVector} from "../SphericalMath";
+import {ECEFToLLAVD_radii} from "../LLA-ECEF-ENU";
 import {CNodeGroundOverlay} from "./CNodeGroundOverlay";
 import * as LAYER from "../LayerMasks";
 import {assert} from "../assert.js";
@@ -260,7 +260,7 @@ export class CNodeDisplayCameraFrustum extends CNode3DGroup {
         }
 
         const llaCorners = worldCorners.map(corner => {
-            const lla = EUSToLLA(corner);
+            const lla = ECEFToLLAVD_radii(corner);
             return {lat: lla.x, lon: lla.y};
         });
 
@@ -437,7 +437,7 @@ export class CNodeDisplayCameraFrustum extends CNode3DGroup {
             // if all corners are nell then radius of the globle is wgs84.radius
             // otherwise it's the average.
             // note the results are in world space
-            const sphereCenter = earthCenterEUS();
+            const sphereCenter = earthCenterECEF();
             // first calculate the radius of the sphere
             let sphereRadius = Globals.equatorRadius;
             // let n = 0;
@@ -595,7 +595,7 @@ export class CNodeDisplayGroundMovement extends CNode3DGroup {
         }
         if (center === null) {
             // if we don't have a terrain model, then we can use the globe
-            center = sphereCollideCameraRelative(new Sphere(earthCenterEUS(), Globals.equatorRadius), this.camera, new Vector3(0, 0, -1000));
+            center = sphereCollideCameraRelative(new Sphere(earthCenterECEF(), Globals.equatorRadius), this.camera, new Vector3(0, 0, -1000));
         }
         if (center === null) {
 //            console.warn("CNodeDisplayGroundMovement: No ground found for camera at "+this.camera.position);

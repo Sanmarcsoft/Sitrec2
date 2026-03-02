@@ -158,7 +158,7 @@ export class CNodeViewEphemeris extends CNodeViewText {
         // Sample at current time first to get accurate starting elevation
         const currentSatrec = bestSat(sat.satrecs, currentDate);
         if (currentSatrec) {
-            const currentSatEus = satellites.calcSatEUS(currentSatrec, currentDate);
+            const currentSatEus = satellites.calcSatECEF(currentSatrec, currentDate);
             if (currentSatEus) {
                 const currentToSat = currentSatEus.clone().sub(cameraPos);
                 const currentForward = currentToSat.clone().normalize();
@@ -174,7 +174,7 @@ export class CNodeViewEphemeris extends CNodeViewText {
             const searchSatrec = bestSat(sat.satrecs, searchTime);
             if (!searchSatrec) continue;
             
-            const satEus = satellites.calcSatEUS(searchSatrec, searchTime);
+            const satEus = satellites.calcSatECEF(searchSatrec, searchTime);
             if (!satEus) continue;
             
             const toSat = satEus.clone().sub(cameraPos);

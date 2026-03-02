@@ -7,7 +7,7 @@
 // EUS is now identical to ECEF (identity mapping), so celestial and scene coords are the same.
 // See: https://en.wikipedia.org/wiki/Equatorial_coordinate_system#Rectangular_coordinates
 import {V3} from "./threeUtils";
-import {EUSToLLA, wgs84} from "./LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii, wgs84} from "./LLA-ECEF-ENU";
 import {Sit} from "./Globals";
 import * as Astronomy from "astronomy-engine";
 import {radians} from "./utils";
@@ -143,7 +143,7 @@ export function getCelestialDirection(body, date, pos) {
     if (pos !== undefined && pos.lengthSq() > 1e12) {
         // Position must be on or above Earth's surface (radius ~6.4e6 m, so lengthSq ~4e13)
         // If too close to origin (e.g. camera not yet positioned), fall back to Sit origin.
-        LLA = EUSToLLA(pos);
+        LLA = ECEFToLLAVD_radii(pos);
     } else {
         // default to the local origin, should be fine for the sun.
         LLA = V3(Sit.lat, Sit.lon, 0)
@@ -168,7 +168,7 @@ export function getCelestialDirectionFromRaDec(ra, dec, date) {
 // Geocentric body vector in ECEF/EUS (meters).
 // Uses astronomy-engine's geocentric EQJ vector, rotates to EQD (of-date),
 // then rotates by GAST into Earth-fixed coordinates.
-export function getGeocentricBodyPositionEUS(body, date, aberration = true) {
+export function getGeocentricBodyPositionECEF(body, date, aberration = true) {
     const time = Astronomy.MakeTime(date);
     const bodyId = typeof body === "string" ? Astronomy.Body[body] : body;
     const eqj = Astronomy.GeoVector(bodyId, time, aberration); // AU, EQJ
@@ -184,6 +184,6 @@ export function getGeocentricBodyPositionEUS(body, date, aberration = true) {
     return ecef;
 }
 
-export function getGeocentricBodyDirectionEUS(body, date, aberration = true) {
-    return getGeocentricBodyPositionEUS(body, date, aberration).normalize();
+export function getGeocentricBodyDirectionECEF(body, date, aberration = true) {
+    return getGeocentricBodyPositionECEF(body, date, aberration).normalize();
 }

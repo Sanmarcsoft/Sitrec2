@@ -2,7 +2,7 @@ import {par} from "../par";
 import {FileManager, guiMenus, guiTweaks, NodeMan, setRenderOne, Sit} from "../Globals";
 import {AlwaysDepth} from "three";
 import {ExpandKeyframes, f2m, scaleF2M} from "../utils";
-import {EUSToLLA, LLAToEUS} from "../LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii, LLAToECEF} from "../LLA-ECEF-ENU";
 import {CNodeSplineEditor} from "../nodes/CNodeSplineEdit";
 import * as LAYER from "../LayerMasks.js"
 import {CNodeSwitch} from "../nodes/CNodeSwitch";
@@ -221,7 +221,7 @@ export const SitAguadilla = {
                var lon = parseFloat(csv[row][lonIndex])
                var alt = altIndex >= 0 ? f2m(parseFloat(csv[row][altIndex])) : -altIndex;
                if (lat !== lastLat || lon !== lastLon) {
-                   var pos = LLAToEUS(lat, lon, alt)
+                   var pos = LLAToECEF(lat, lon, alt)
 
                    if (viaMidpoints) {
                        if (A === undefined) {
@@ -284,7 +284,7 @@ export const SitAguadilla = {
 
            for (row=0;row<csv.length;row++) {
                const position = V3(xExp[row], yExp[row], zExp[row]);
-               const lla = EUSToLLA(position);
+               const lla = ECEFToLLAVD_radii(position);
                points.push({position, lla: [lla.x, lla.y, lla.z]});
            }
 

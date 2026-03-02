@@ -4,7 +4,7 @@ import {assert} from "../assert";
 import {configParams} from "../login";
 import {isLocal, SITREC_APP, SITREC_TERRAIN} from "../configUtils";
 import {CNodeSwitch} from "./CNodeSwitch";
-import {EUSToLLA, LLAToEUS, updateEarthRadii} from "../LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii, LLAToECEF, updateEarthRadii} from "../LLA-ECEF-ENU";
 import {CNodeTerrain} from "./CNodeTerrain";
 import {CNodeBuildings3DTiles} from "./CNodeBuildings3DTiles";
 import {GlobalScene} from "../LocalFrame";
@@ -829,7 +829,7 @@ export class CNodeTerrainUI extends CNode {
 
                 const geoidOffset = meanSeaLevelOffset(lat, lon);
                 const oceanAltitudeHAE = geoidOffset + OCEAN_SURFACE_OFFSET_METERS;
-                const oceanPoint = LLAToEUS(lat, lon, oceanAltitudeHAE);
+                const oceanPoint = LLAToECEF(lat, lon, oceanAltitudeHAE);
 
                 const idx = j * grid + i;
                 const p = idx * 3;
@@ -1101,8 +1101,8 @@ export class CNodeTerrainUI extends CNode {
     // given two Vector3s, zoom to the box they define
     zoomToBox(min, max) {
         // min and max are in EUS, so convert to LLA
-        const minLLA = EUSToLLA(min);
-        const maxLLA = EUSToLLA(max);
+        const minLLA = ECEFToLLAVD_radii(min);
+        const maxLLA = ECEFToLLAVD_radii(max);
         this.zoomToLLABox(minLLA.x, maxLLA.x, minLLA.y, maxLLA.y)
     }
 

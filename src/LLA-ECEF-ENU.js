@@ -303,8 +303,8 @@ export function ECEFToLLAVD_Sphere(V) {
     return new Vector3(a[0] * 180 / Math.PI, a[1] * 180 / Math.PI, a[2])
 }
 
-// EXPERIMENT: EUS is now identical to ECEF, so eus coords are ECEF coords
-export function EUSToLLA(eus) {
+// ECEF to LLA as Vector3 in degrees, using ellipsoid-aware radii conversion.
+export function ECEFToLLAVD_radii(eus) {
     const lla = ECEFToLLA_radii(eus.x, eus.y, eus.z);
     return new Vector3(lla[0] * 180 / Math.PI, lla[1] * 180 / Math.PI, lla[2]);
 }
@@ -463,7 +463,7 @@ export function legacyEUSToECEF(eus, lat, lon) {
     const sphericalECEF = ENU2ECEF(enu, lat, lon, wgs84.RADIUS);
     const lla = ECEFToLLA_Sphere(sphericalECEF.x, sphericalECEF.y, sphericalECEF.z);
     // lla = [lat_rad, lon_rad, alt_m]
-    return LLAToEUSRadians(lla[0], lla[1], lla[2]);
+    return LLAToECEFRadians(lla[0], lla[1], lla[2]);
 }
 
 
@@ -471,7 +471,7 @@ export function legacyEUSToECEF(eus, lat, lon) {
 let _sitLatRad, _sitLonRad, _sitSinLat, _sitCosLat, _sitSinLon, _sitCosLon;
 let _originEcefX, _originEcefY, _originEcefZ;
 let _m00, _m01, _m10, _m11, _m12, _m20, _m21, _m22;
-// Pre-computed per-vertex ellipsoid constants (used in LLAToEUSRadians)
+// Pre-computed per-vertex ellipsoid constants (used in LLAToECEFRadians)
 let _llaeus_e2, _llaeus_ratio;
 let _lastSitLat = null, _lastSitLon = null;
 let _lastEquatorRadius = null, _lastPolarRadius = null;
@@ -524,9 +524,9 @@ function _updateSitConstants() {
 
 // Convert LLA to EUS. Optional earth's radius parameter is deprecated, and should not be used.
 // EXPERIMENT: EUS is now identical to ECEF, so this just does LLA → ECEF.
-export function LLAToEUSRadians(lat, lon, alt=0, radius) {
-    assert(radius === undefined, "undexpected radius in LLAToEUS")
-    assert(Sit.lat !== undefined, "Sit.lat undefined in LLAToEUS")
+export function LLAToECEFRadians(lat, lon, alt=0, radius) {
+    assert(radius === undefined, "undexpected radius in LLAToECEF")
+    assert(Sit.lat !== undefined, "Sit.lat undefined in LLAToECEF")
 
     // Update constants if Sit location or earth model changed (need ellipsoid constants)
     _updateSitConstants();
@@ -548,19 +548,19 @@ export function LLAToEUSRadians(lat, lon, alt=0, radius) {
 
 // Convert LLA to Spherical EUS. Optional earth's radius parameter is deprecated, and should not be used.
 // OPTIMIZED VERSION: Uses constant multiplier for degree to radian conversion
-export function LLAToEUS(lat, lon, alt=0, radius) {
+export function LLAToECEF(lat, lon, alt=0, radius) {
     // Convert degrees to radians using constant multiplier (faster than radians() function)
-    return LLAToEUSRadians(lat * _DEG_TO_RAD, lon * _DEG_TO_RAD, alt, radius);
+    return LLAToECEFRadians(lat * _DEG_TO_RAD, lon * _DEG_TO_RAD, alt, radius);
 }
 
 // vector input version
-export function LLAVToEUS(lla, radius) {
-    assert(radius === undefined, "undexpected radius in LLAVToEUS")
-    return LLAToEUS(lla.x, lla.y, lla.z)
+export function LLAVToECEF(lla, radius) {
+    assert(radius === undefined, "undexpected radius in LLAVToECEF")
+    return LLAToECEF(lla.x, lla.y, lla.z)
 }
 
 // Force update of LLA to EUS constants (call this if you manually change Sit.lat/lon)
-export function updateLLAToEUSConstants() {
+export function updateLLAToECEFConstants() {
     _lastSitLat = null;
     _lastSitLon = null;
     _updateSitConstants();

@@ -1,6 +1,6 @@
 import {atan, degrees, radians, tan} from "../utils";
 import {par} from "../par";
-import {EUSToLLA, LLAToEUS} from "../LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii, LLAToECEF} from "../LLA-ECEF-ENU";
 import {isKeyHeld} from "../KeyBoardHandler";
 import {GlobalDateTimeNode, gui, guiMenus, guiPhysics, NodeMan, setRenderOne, Sit, UndoManager} from "../Globals";
 import {getLocalEastVector, getLocalNorthVector, getLocalUpVector} from "../SphericalMath";
@@ -228,12 +228,12 @@ export class CNodeControllerManualPosition extends CNodeController {
                     this.undoCameraLon = NodeMan.get("cameraLon").value;
                 }
                 this.applying = true;
-                const LLA = EUSToLLA(cursorPos);
+                const LLA = ECEFToLLAVD_radii(cursorPos);
 
                 NodeMan.get("cameraLat").value = LLA.x
                 NodeMan.get("cameraLon").value = LLA.y
 
-                camPos = LLAToEUS(LLA.x, LLA.y, LLA.z)
+                camPos = LLAToECEF(LLA.x, LLA.y, LLA.z)
                 if (this.aboveGround !== undefined) {
                     camPos.y = adjustHeightAboveGround(camPos, this.aboveGround).y
                 }
@@ -346,7 +346,7 @@ export class CNodeControllerLookAtLLA extends CNodeController {
 
     apply(f, objectNode) {
         const camera = objectNode.camera
-        var to = LLAToEUS(
+        var to = LLAToECEF(
             this.in.lat.v(f),
             this.in.lon.v(f),
             this.in.alt.v(f),

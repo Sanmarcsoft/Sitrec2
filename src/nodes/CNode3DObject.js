@@ -58,7 +58,7 @@ import {loadGLTFModel} from "./CNode3DModel";
 import {V3} from "../threeUtils";
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import {CNodeLabel3D, CNodeMeasureAB} from "./CNodeLabels3D";
-import {EUSToLLA} from "../LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii} from "../LLA-ECEF-ENU";
 
 import {findRootTrack} from "../FindRootTrack";
 import {GlobalScene} from "../LocalFrame";
@@ -896,7 +896,7 @@ export class CNode3DObject extends CNode3DGroup {
             const eusPosition = this.group.position.clone();
             
             // Convert EUS position to LLA (Latitude, Longitude, Altitude)
-            const lla = EUSToLLA(eusPosition);
+            const lla = ECEFToLLAVD_radii(eusPosition);
             const latitude = lla.x;   // degrees
             const longitude = lla.y;  // degrees  
             const altitude = lla.z;   // meters above sea level

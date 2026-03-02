@@ -5,7 +5,7 @@
 // and in feet in the GUI
 //
 // Now with optional wind to adjust the position over time
-import {EUSToLLA, LLAToEUS} from "../LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii, LLAToECEF} from "../LLA-ECEF-ENU";
 import {meanSeaLevelOffset} from "../EGM96Geoid";
 import {CNode} from "./CNode";
 import {CNodeTrack} from "./CNodeTrack";
@@ -338,7 +338,7 @@ export class CNodePositionLLA extends CNodeTrack {
                         this.undoLLA = this._LLA.slice();
                     }
                     setSitchEstablished(true);
-                    this.setFromEUS(cursorPos, true);
+                    this.setFromECEF(cursorPos, true);
                 }
             }
             if (!posHeld && this.posKeyWasHeld && this.undoLLA && UndoManager) {
@@ -356,10 +356,10 @@ export class CNodePositionLLA extends CNodeTrack {
         }
     }
 
-    setFromEUS(cursorPos, changeAlt=false) {
+    setFromECEF(cursorPos, changeAlt=false) {
 
         // convert to LLA
-        const LLA = EUSToLLA(cursorPos);
+        const LLA = ECEFToLLAVD_radii(cursorPos);
 
         // we set the values in the UI nodes
         this.guiLat.value = LLA.x
@@ -383,9 +383,9 @@ export class CNodePositionLLA extends CNodeTrack {
                 if (isKeyHeld('Shift')) {
                     const eyeLevel = f2m(7); // ~2.13m
                     // Get the point at eye level above local ground.
-                    // EUSToLLA returns ellipsoid height (HAE), but _LLA[2] stores MSL.
+                    // ECEFToLLAVD_radii returns ellipsoid height (HAE), but _LLA[2] stores MSL.
                     const groundPoint = adjustHeightAboveGround(cursorPos, eyeLevel, true);
-                    const groundPointLLA = EUSToLLA(groundPoint);
+                    const groundPointLLA = ECEFToLLAVD_radii(groundPoint);
                     const geoidOffset = meanSeaLevelOffset(groundPointLLA.x, groundPointLLA.y);
                     const groundAltMSL = groundPointLLA.z - geoidOffset;
                     this._LLA[2] = this.guiAlt.setValueWithUnits(groundAltMSL, "metric", "small", true)
@@ -412,15 +412,15 @@ export class CNodePositionLLA extends CNodeTrack {
 
             if (this.agl && terrainNode) {
                 // Use cached terrain query for ground level
-                const queryPos = LLAToEUS(this._LLA[0], this._LLA[1], 100000);
+                const queryPos = LLAToECEF(this._LLA[0], this._LLA[1], 100000);
                 this.EUS = this.getPointBelowCached(terrainNode, queryPos, aglHeight, 0);
             } else if (this.agl) {
                 // No terrain node, use sphere-based ground level
                 this.updateGroundLevel();
-                this.EUS = LLAToEUS(this._LLA[0], this._LLA[1], aglHeight + this.groundLevel);
+                this.EUS = LLAToECEF(this._LLA[0], this._LLA[1], aglHeight + this.groundLevel);
             } else {
-                // aglHeight is MSL; convert to HAE for LLAToEUS (h = H + N)
-                this.EUS = LLAToEUS(this._LLA[0], this._LLA[1], aglHeight + meanSeaLevelOffset(this._LLA[0], this._LLA[1]));
+                // aglHeight is MSL; convert to HAE for LLAToECEF (h = H + N)
+                this.EUS = LLAToECEF(this._LLA[0], this._LLA[1], aglHeight + meanSeaLevelOffset(this._LLA[0], this._LLA[1]));
             }
 
             for (let f = 0; f < this.frames; f++) {
@@ -437,7 +437,7 @@ export class CNodePositionLLA extends CNodeTrack {
                         }
                     }
                 }
-                const lla = EUSToLLA(pos);
+                const lla = ECEFToLLAVD_radii(pos);
                 const altMSL = lla.z - meanSeaLevelOffset(lla.x, lla.y);
                 this.array.push({
                     position: pos,
@@ -458,7 +458,7 @@ export class CNodePositionLLA extends CNodeTrack {
 
         if (this._LLA !== undefined) {
             assert(this.guiAlt !== undefined, "CNodePositionLLA: no guiAlt defined")
-       //     return LLAToEUS(this._LLA[0], this._LLA[1], this.guiAlt.getValueFrame(f))
+       //     return LLAToECEF(this._LLA[0], this._LLA[1], this.guiAlt.getValueFrame(f))
              let pos = this.EUS.clone();
             if (this.in.wind) {
                 const wind = this.in.wind.v0.multiplyScalar(time);
@@ -479,9 +479,9 @@ export class CNodePositionLLA extends CNodeTrack {
         const lat = this.in.lat.v(f)
         const lon = this.in.lon.v(f)
         let alt = this.in.alt.v(f)
-        // alt is MSL in meters; convert to HAE for LLAToEUS (h = H + N)
+        // alt is MSL in meters; convert to HAE for LLAToECEF (h = H + N)
 
-        return LLAToEUS(lat, lon, alt + meanSeaLevelOffset(lat, lon))
+        return LLAToECEF(lat, lon, alt + meanSeaLevelOffset(lat, lon))
     }
 
 

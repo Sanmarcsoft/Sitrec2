@@ -1,6 +1,6 @@
 import {assert} from "./assert";
 import {boxMark, DebugArrowAB, removeDebugArrow} from "./threeExt";
-import {LLAToEUS, wgs84} from "./LLA-ECEF-ENU";
+import {LLAToECEF, wgs84} from "./LLA-ECEF-ENU";
 import {GlobalScene} from "./LocalFrame";
 import {Globals} from "./Globals";
 import {EventManager} from "./CEventManager";
@@ -129,10 +129,10 @@ export class QuadTreeTile {
 
         // convert to EUS
         const alt = 0;
-        const vertexSW = LLAToEUS(latSW, lonSW, alt)
-        const vertexNW = LLAToEUS(latNW, lonNW, alt)
-        const vertexSE = LLAToEUS(latSE, lonSE, alt)
-        const vertexNE = LLAToEUS(latNE, lonNE, alt)
+        const vertexSW = LLAToECEF(latSW, lonSW, alt)
+        const vertexNW = LLAToECEF(latNW, lonNW, alt)
+        const vertexSE = LLAToECEF(latSE, lonSE, alt)
+        const vertexNE = LLAToECEF(latNE, lonNE, alt)
 
         // find the center of the tile
         const center = vertexSW.clone().add(vertexNW).add(vertexSE).add(vertexNE).multiplyScalar(0.25);
@@ -213,7 +213,7 @@ export class QuadTreeTile {
         const lon2 = this.map.options.mapProjection.getLeftLongitude(this.x + 1, this.z);
         const centerLat = (lat1 + lat2) / 2;
         const centerLon = (lon1 + lon2) / 2;
-        const centerPosition = LLAToEUS(centerLat, centerLon, 0);
+        const centerPosition = LLAToECEF(centerLat, centerLon, 0);
 
         // Get the local down vector for this tile's center position
         const downVector = getLocalDownVector(centerPosition);
@@ -334,7 +334,7 @@ export class QuadTreeTile {
         const lon2 = this.map.options.mapProjection.getLeftLongitude(this.x + 1, this.z);
         const centerLat = (lat1 + lat2) / 2;
         const centerLon = (lon1 + lon2) / 2;
-        const centerPosition = LLAToEUS(centerLat, centerLon, 0);
+        const centerPosition = LLAToECEF(centerLat, centerLon, 0);
 
         // Get the local down vector for this tile's center position
         const downVector = getLocalDownVector(centerPosition);
@@ -509,7 +509,7 @@ export class QuadTreeTile {
             }
 
             // Convert to EUS coordinates
-            const vertexEUS = LLAToEUS(lat, lon, elevation);
+            const vertexEUS = LLAToECEF(lat, lon, elevation);
 
             // Subtract the center of the tile for relative positioning
             const vertex = vertexEUS.sub(tileCenter);
@@ -674,10 +674,10 @@ export class QuadTreeTile {
 
         // convert to EUS
         const alt = 10000 + altitude;
-        const vertexSW = LLAToEUS(latSW, lonSW, alt)
-        const vertexNW = LLAToEUS(latNW, lonNW, alt)
-        const vertexSE = LLAToEUS(latSE, lonSE, alt)
-        const vertexNE = LLAToEUS(latNE, lonNE, alt)
+        const vertexSW = LLAToECEF(latSW, lonSW, alt)
+        const vertexNW = LLAToECEF(latNW, lonNW, alt)
+        const vertexSE = LLAToECEF(latSE, lonSE, alt)
+        const vertexNE = LLAToECEF(latNE, lonNE, alt)
 
         // use these four points to draw debug lines at 10000m above the tile
         //DebugArrowAB("UFO Ground V", jetPosition, groundVelocityEnd, "#00ff00", displayWindArrows, GlobalScene) // green = ground speed
@@ -890,7 +890,7 @@ export class QuadTreeTile {
             // elevation = Math.random()*100000
 
             // convert that to EUS
-            const vertexEUS = LLAToEUS(lat, lon, elevation)
+            const vertexEUS = LLAToECEF(lat, lon, elevation)
 
             // subtract the center of the tile
             const vertex = vertexEUS.sub(tileCenter)
@@ -1076,7 +1076,7 @@ export class QuadTreeTile {
                 this.highestAltitude = elevation;
             }
 
-            const vertexEUS = LLAToEUS(lat, lon, elevation);
+            const vertexEUS = LLAToECEF(lat, lon, elevation);
             const vertex = vertexEUS.sub(tileCenter);
 
             assert(!isNaN(vertex.x), 'vertex.x is NaN in QuadTreeTile.js i=' + i);
@@ -1149,7 +1149,7 @@ export class QuadTreeTile {
             const elevation = 0;
 
             // Convert to EUS coordinates
-            const vertexEUS = LLAToEUS(lat, lon, elevation);
+            const vertexEUS = LLAToECEF(lat, lon, elevation);
 
             // Subtract the center of the tile for relative positioning
             const vertex = vertexEUS.sub(tileCenter);
@@ -2201,7 +2201,7 @@ export class QuadTreeTile {
         // Get tile center coordinates for local up/north calculation
         const tileCenterLat = this.map.options.mapProjection.getNorthLatitude(this.y + 0.5, this.z);
         const tileCenterLon = this.map.options.mapProjection.getLeftLongitude(this.x + 0.5, this.z);
-        const tileCenterEUS = LLAToEUS(tileCenterLat, tileCenterLon, 0);
+        const tileCenterEUS = LLAToECEF(tileCenterLat, tileCenterLon, 0);
 
         // Get local up and north vectors for the tile center
         const localUp = getLocalUpVector(tileCenterEUS);
@@ -2993,7 +2993,7 @@ export class QuadTreeTile {
         const lat = (lat1 + lat2) / 2;
         const lon = (lon1 + lon2) / 2;
 
-        const p = LLAToEUS(lat, lon, 0);
+        const p = LLAToECEF(lat, lon, 0);
 
         this.mesh.position.copy(p)
 

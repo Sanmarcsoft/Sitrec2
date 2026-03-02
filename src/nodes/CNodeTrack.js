@@ -1,6 +1,6 @@
 import {CNodeEmptyArray} from "./CNodeArray";
 import {GlobalDateTimeNode, NodeMan, Sit} from "../Globals";
-import {EUSToLLA, LLAToEUS} from "../LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii, LLAToECEF} from "../LLA-ECEF-ENU";
 import {EventManager} from "../CEventManager";
 import {getAzElFromPositionAndForward, getLocalUpVector, pointOnSphereBelow} from "../SphericalMath";
 import {showError} from "../showError";
@@ -34,7 +34,7 @@ export class CNodeTrack extends CNodeEmptyArray {
             }
         }
 
-        const LLA = EUSToLLA(pos);
+        const LLA = ECEFToLLAVD_radii(pos);
         const info = terrainNode.getPointBelowWithTileInfo(pos, agl);
         this.elevationCache[frame] = {
             lat: LLA.x,
@@ -60,7 +60,7 @@ export class CNodeTrack extends CNodeEmptyArray {
                 needsRefresh = true;
             }
             if (needsRefresh) {
-                const pos = LLAToEUS(entry.lat, entry.lon, 0);
+                const pos = LLAToECEF(entry.lat, entry.lon, 0);
                 const info = terrainNode.getPointBelowWithTileInfo(pos, agl);
                 if (info.tileZ !== entry.tileZ || info.tileX !== entry.tileX || info.tileY !== entry.tileY) {
                     entry.elevation = info.elevation;
@@ -78,7 +78,7 @@ export class CNodeTrack extends CNodeEmptyArray {
     }
 
     _pointFromElevation(lat, lon, elevation, agl) {
-        return LLAToEUS(lat, lon, Math.max(0, elevation) + agl);
+        return LLAToECEF(lat, lon, Math.max(0, elevation) + agl);
     }
 
     serializeElevationCache() {
@@ -146,7 +146,7 @@ export class CNodeTrack extends CNodeEmptyArray {
                 [lat, lon, alt] = frameData.lla;
                 altReference = frameData.altReference ?? "HAE";
             } else if (frameData.position) {
-                const llaVec = EUSToLLA(frameData.position);
+                const llaVec = ECEFToLLAVD_radii(frameData.position);
                 lat = llaVec.x;
                 lon = llaVec.y;
                 alt = llaVec.z;
@@ -209,7 +209,7 @@ export class CNodeTrack extends CNodeEmptyArray {
                 lla = frameData.lla.slice();
                 altReference = frameData.altReference ?? "HAE";
             } else if (frameData.position) {
-                const llaVec = EUSToLLA(frameData.position);
+                const llaVec = ECEFToLLAVD_radii(frameData.position);
                 lla = [llaVec.x, llaVec.y, llaVec.z];
             } else {
                 lla = ["", "", ""];
@@ -305,7 +305,7 @@ export class CNodeTrack extends CNodeEmptyArray {
         let maxAlt = -1000000
         for (let f=0;f<this.frames;f++) {
             pos=this.v(f)
-            const LLA = EUSToLLA(pos.position)
+            const LLA = ECEFToLLAVD_radii(pos.position)
             minLat = Math.min(minLat, LLA.x)
             maxLat = Math.max(maxLat, LLA.x)
             minLon = Math.min(minLon, LLA.y)
@@ -391,7 +391,7 @@ export class CNodeTrackFromLLAArray extends CNodeTrack {
                 alt /= this.frames;
 
                 // get the center of the track
-                const center = LLAToEUS(lat, lon, alt);
+                const center = LLAToECEF(lat, lon, alt);
 
                 // get the ground point below the center (best avaialble from the terrain elevation
                 this.centerGroundPoint = terrainNode.getPointBelow(center, 0, true);
@@ -414,7 +414,7 @@ export class CNodeTrackFromLLAArray extends CNodeTrack {
         if (this.altitudeReference === "MSL") {
             alt += meanSeaLevelOffset(lat, lon);
         }
-        let eus = LLAToEUS(lat, lon, alt);
+        let eus = LLAToECEF(lat, lon, alt);
 
         // while this is sub optimal, it should not be done constantly.
         // it mostly for KML polygons and paths, which have no inputs, so are essentially static
@@ -424,7 +424,7 @@ export class CNodeTrackFromLLAArray extends CNodeTrack {
 
             if (this.showCap) {
                 // use the center elevation for ground level, plus the point's altitude
-                eus = LLAToEUS(lat, lon, this.centerElevation + alt);
+                eus = LLAToECEF(lat, lon, this.centerElevation + alt);
 
 
             } else {
@@ -446,7 +446,7 @@ export class CNodeTrackFromLLAArray extends CNodeTrack {
     //     const lat = v[0]
     //     const lon = v[1];
     //     const alt = v[2];
-    //     const eus = LLAToEUS(lat, lon, alt);
+    //     const eus = LLAToECEF(lat, lon, alt);
     //     return {position: eus}
     // }
 }

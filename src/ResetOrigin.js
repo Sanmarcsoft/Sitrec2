@@ -1,5 +1,5 @@
 import {NodeMan, Sit} from "./Globals";
-import {EUSToLLA} from "./LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii} from "./LLA-ECEF-ENU";
 
 
 export function resetGlobalOrigin() {
@@ -11,7 +11,7 @@ export function resetGlobalOrigin() {
     const lookCamera = NodeMan.get("lookCamera").camera;
     const pos = lookCamera.position;
 
-    const LLA = EUSToLLA(pos);
+    const LLA = ECEFToLLAVD_radii(pos);
     console.log("Resetting Origin to " + LLA.x + ", " + LLA.y + ", " + LLA.z);
     Sit.lat = LLA.x;
     Sit.lon = LLA.y;

@@ -158,7 +158,7 @@ export class CSituation {
     //     // more data-driven stuff that's independent of type of situation
     //
     //     // if (this.marks) this.marks.forEach(mark => {
-    //     //     var enu = LLAToEUS(mark.LL.lat, mark.LL.lon)
+    //     //     var enu = LLAToECEF(mark.LL.lat, mark.LL.lon)
     //     //     GlobalScene.add(boxMark(enu, mark.width, 10000, mark.width, mark.color))
     //     // })
     //

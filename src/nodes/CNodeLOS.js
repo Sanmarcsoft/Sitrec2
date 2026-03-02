@@ -12,7 +12,7 @@ import {CNodeTrack} from "./CNodeTrack";
 import {GlobalDateTimeNode, NodeMan, Sit} from "../Globals";
 import {saveAs} from "file-saver";
 import {Matrix3, Vector3} from "three";
-import {ECEF2ENU_radii, ENU2ECEF_radii, EUSToLLA} from "../LLA-ECEF-ENU";
+import {ECEF2ENU_radii, ECEFToLLAVD_radii, ENU2ECEF_radii} from "../LLA-ECEF-ENU";
 import {extractFOV} from "./CNodeControllerVarious";
 import {elevationAtLL} from "../threeExt";
 import {roundIfClose} from "../utils";
@@ -40,7 +40,7 @@ export class CNodeLOS extends CNodeTrack {
 
         // Get the LLA of the first position to establish the new ENU origin
         const firstPosEUS = firstData.position;
-        const firstLLA = EUSToLLA(firstPosEUS);
+        const firstLLA = ECEFToLLAVD_radii(firstPosEUS);
 
         // The new ENU origin is on the ground (altitude = 0) below the first point
         const originLat = firstLLA.x * Math.PI / 180;  // Convert to radians

@@ -4,11 +4,11 @@ import {Matrix4, Plane, Raycaster, Sphere, Vector2, Vector3} from "three";
 import {degrees, radians, vdump} from "../utils";
 import {clampAboveGround, DebugArrowAB, DebugSphere, getPointBelow, intersectMSL, pointAbove} from "../threeExt";
 import {par} from "../par";
-import {EUSToLLA} from "../LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii} from "../LLA-ECEF-ENU";
 import {
 	altitudeAboveSphere,
 	altitudeMSL,
-	earthCenterEUS,
+	earthCenterECEF,
 	getAzElFromPositionAndForward,
 	getLocalDownVector,
 	getLocalEastVector,
@@ -256,7 +256,7 @@ class CameraMapControls {
 		const raycaster = new Raycaster();
 		raycaster.setFromCamera(ndc, this.camera);
 
-		const earthCenter = earthCenterEUS();
+		const earthCenter = earthCenterECEF();
 		const groundSphere = new Sphere(earthCenter.clone(), earthCenter.distanceTo(this.target));
 		const hitBefore = new Vector3();
 		const hasHit = intersectSphere2(raycaster.ray, groundSphere, hitBefore);
@@ -547,7 +547,7 @@ class CameraMapControls {
 		// Fall back to globe sphere intersection
 		if (!found) {
 			const possibleTarget = new Vector3();
-			const dragSphere = new Sphere(earthCenterEUS(), Globals.equatorRadius);
+			const dragSphere = new Sphere(earthCenterECEF(), Globals.equatorRadius);
 			if (this.view.raycaster.ray.intersectSphere(dragSphere, possibleTarget)) {
 				targetPoint = possibleTarget.clone();
 				this.targetIsTerrain = false;
@@ -756,7 +756,7 @@ class CameraMapControls {
 			this.view.cursorSprite.visible = true;
 		}
 		const cursorPos = this.view.cursorSprite.position.clone();
-		const LLA = EUSToLLA(cursorPos);
+		const LLA = ECEFToLLAVD_radii(cursorPos);
 		//		console.log("Cursor LLA: "+vdump(LLA));
 		if (NodeMan.exists("cursorLLA")) {
 			NodeMan.get("cursorLLA").changeLLA(LLA.x, LLA.y, LLA.z)
@@ -836,8 +836,8 @@ class CameraMapControls {
 		// console.log( "startCameraPosition:"+ vdump(this.camera.position,2,'[',']')+","
 		// + "\nstartCameraTarget:"+vdump(v,2,'[',']'))
 		//
-		// const posLLA = EUSToLLA(this.camera.position)
-		// const atLLA = EUSToLLA(v)
+		// const posLLA = ECEFToLLAVD_radii(this.camera.position)
+		// const atLLA = ECEFToLLAVD_radii(v)
 		//
 		// console.log( "startCameraPositionLLA:"+ vdump(posLLA,6,'[',']')+","
 		// 	+ "\nstartCameraTargetLLA:"+vdump(atLLA,6,'[',']')+",")
@@ -1047,7 +1047,7 @@ class CameraMapControls {
 				const dragPlaneDist = localUpAtTarget.dot(this.target);
 				const dragPlane = new Plane(localUpAtTarget.clone().negate(), dragPlaneDist)
 
-				const dragOrigin = earthCenterEUS();
+				const dragOrigin = earthCenterECEF();
 
 				var dragSphere;
 				//	if (this.useGlobe) {
@@ -1329,7 +1329,7 @@ class CameraMapControls {
 
 		// Convert to LLA and update fixed camera track using gotoLLA
 		const fixedCamera = NodeMan.get("fixedCameraPosition");
-		fixedCamera.setFromEUS(finalPos);
+		fixedCamera.setFromECEF(finalPos);
 
 		// Trigger re-render
 		setRenderOne(true);

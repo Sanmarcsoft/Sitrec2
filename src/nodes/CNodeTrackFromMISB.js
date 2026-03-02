@@ -365,9 +365,9 @@ export class CNodeTrackFromMISB extends CNodeTrack {
             const alt = altMSL + meanSeaLevelOffset(lat, lon);
 
 
-            //const pos = LLAToEUS(lat, lon, alt)
+            //const pos = LLAToECEF(lat, lon, alt)
 
-            // expanded LLAToEUS out for speed (ellipsoid-aware)
+            // expanded LLAToECEF out for speed (ellipsoid-aware)
             const rLat = lat * Math.PI / 180
             const rLon = lon * Math.PI / 180
             const cosLat = Math.cos(rLat)
@@ -396,7 +396,7 @@ export class CNodeTrackFromMISB extends CNodeTrack {
             //const pos = new Vector3(ecef_enu.x, ecef_enu.z, -ecef_enu.y)
 
 
-            // end expanded LLAToEUS
+            // end expanded LLAToECEF
             ///////////////////////////////////////////////////////////////////////
 
 
@@ -406,7 +406,7 @@ export class CNodeTrackFromMISB extends CNodeTrack {
 
             assert(!Number.isNaN(pos.x),"CNodeTrackFromMISB:recalculate(): pos.x NaN " + "lat = " + lat + " lon = " + lon + " alt = " + alt)
 
-            // minumum data that is needed (no clone need as it's done in the expanded LLAToEUS)
+            // minumum data that is needed (no clone need as it's done in the expanded LLAToECEF)
             const product = {position: pos, lla:[lat,lon,alt]}
 
             // // uniterpolated extra fields

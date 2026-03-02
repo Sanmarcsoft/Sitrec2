@@ -25,10 +25,10 @@ import {Globals, NodeMan, setRenderOne, Synth3DManager} from './Globals';
 import {par} from "./par";
 
 
-import {altitudeMSL, drop3, earthCenterEUS, pointOnSphereBelow, raisePoint, setAltitudeMSL} from "./SphericalMath"
+import {altitudeMSL, drop3, earthCenterECEF, pointOnSphereBelow, raisePoint, setAltitudeMSL} from "./SphericalMath"
 import {GlobalScene} from "./LocalFrame";
 import * as LAYER from "./LayerMasks";
-import {LLAToEUS} from "./LLA-ECEF-ENU";
+import {LLAToECEF} from "./LLA-ECEF-ENU";
 import {LineMaterial} from "three/addons/lines/LineMaterial.js";
 import {LineGeometry} from "three/addons/lines/LineGeometry.js";
 import {Line2} from "three/addons/lines/Line2.js";
@@ -623,7 +623,7 @@ export function intersectMSL(point, headingVector) {
     if (Globals.equatorRadius !== Globals.polarRadius) {
         return intersectEllipsoid(point, headingVector);
     }
-    const globe = new Sphere(earthCenterEUS(), Globals.equatorRadius);
+    const globe = new Sphere(earthCenterECEF(), Globals.equatorRadius);
     const ray = new Ray(point, headingVector.clone().normalize());
     const sphereCollision = new Vector3();
     if (intersectSphere2(ray, globe, sphereCollision))
@@ -732,7 +732,7 @@ export function getPointBelow(A, raycast = false) {
 }
 
 export function getPointBelowLL(lat, lon) {
-    const A = LLAToEUS(lat, lon, 100000);
+    const A = LLAToECEF(lat, lon, 100000);
     return getPointBelow(A)
 }
 
@@ -756,7 +756,7 @@ export function clampAboveGround(point, height) {
 
 // get the AGL altitude at a point speciifed by lat/lon
 export function aboveGroundLevelAtLL(lat, lon) {
-    const A = LLAToEUS(lat, lon, 100000);
+    const A = LLAToECEF(lat, lon, 100000);
     return aboveGroundLevelAt(A)
 }
 
@@ -783,7 +783,7 @@ export function calculateAltitude(point) {
 // uses the terrain model if available, otherwise uses the WGS84 sphere
 export function elevationAtLL(lat, lon, raycast = false) {
     // get the point in EUS
-    const point = LLAToEUS(lat, lon, 100000);
+    const point = LLAToECEF(lat, lon, 100000);
     // get the ground point below it
     const groundPoint = getPointBelow(point, raycast);
     // calculate the elevation

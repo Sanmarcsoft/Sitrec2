@@ -11,7 +11,7 @@ import {
 } from "three";
 import {GlobalScene} from "./LocalFrame";
 import {Globals, NodeMan, setRenderOne, Sit} from "./Globals";
-import {earthCenterEUS} from "./SphericalMath";
+import {earthCenterECEF} from "./SphericalMath";
 
 import {SITREC_APP} from "./configUtils";
 import {sharedUniforms} from "./js/map33/material/SharedUniforms";
@@ -226,7 +226,7 @@ export function addAlignedGlobe(globeScale = 1) {
     else
         sphere = createSphere(equatorRadius, polarRadius, 80);
 
-    const center = earthCenterEUS();
+    const center = earthCenterECEF();
     sphere.position.set(center.x, center.y, center.z)
     world.add(sphere)
 
@@ -257,5 +257,5 @@ export function updateAlignedGlobe(globeMesh, globeScale = 1) {
         polarRadius / baseRadius,
         equatorRadius / baseRadius
     );
-    globeMesh.position.copy(earthCenterEUS());
+    globeMesh.position.copy(earthCenterECEF());
 }

@@ -37,7 +37,7 @@ const wgs84 = {
  * Convert LLA to EUS (Earth-Centered Universe System)
  * Based on WGS84 ellipsoid
  */
-function LLAToEUS(lat, lon, alt) {
+function LLAToECEF(lat, lon, alt) {
     const radLat = (lat * Math.PI) / 180;
     const radLon = (lon * Math.PI) / 180;
 
@@ -177,7 +177,7 @@ self.onmessage = function(event) {
             }
 
             // Convert to EUS coordinates
-            const vertexEUS = LLAToEUS(lat, lon, elevation);
+            const vertexEUS = LLAToECEF(lat, lon, elevation);
 
             // Subtract the center of the tile for relative positioning
             const x = vertexEUS.x - tileCenterX;

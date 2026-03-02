@@ -1,4 +1,4 @@
-import {LLAToEUS, RLLAToECEF_radii} from "../LLA-ECEF-ENU";
+import {LLAToECEF, RLLAToECEF_radii} from "../LLA-ECEF-ENU";
 import {f2m, radians} from "../utils";
 import {Sit} from "../Globals";
 
@@ -31,9 +31,9 @@ export class CNodeControllerUIPositionLLA extends CNodeController {
         if (this.in.fromLat) {
             const lat = this.in.fromLat.v(f);
             const lon = this.in.fromLon.v(f);
-            // fromAltFeet is MSL; convert to HAE for LLAToEUS (h = H + N)
+            // fromAltFeet is MSL; convert to HAE for LLAToECEF (h = H + N)
             const altHAE = f2m(this.in.fromAltFeet.v(f)) + meanSeaLevelOffset(lat, lon);
-            from = LLAToEUS(lat, lon, altHAE)
+            from = LLAToECEF(lat, lon, altHAE)
             if (!camera.position.equals(from)) {
                 camera.position.copy(from)
                 changed = true;
@@ -74,7 +74,7 @@ export class CNodeControllerUIPositionLLA extends CNodeController {
 //
 //         var changed = false;
 //
-//         to = LLAToEUS(this.in.toLat.v(f),
+//         to = LLAToECEF(this.in.toLat.v(f),
 //             this.in.toLon.v(f),
 //             this.in.toAlt.v(f),
 //         )

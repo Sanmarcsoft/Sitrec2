@@ -2,7 +2,7 @@
 ///  DRAG AND DROP FILES?
 import {FileManager, Globals, NodeMan, Sit, Synth3DManager} from "./Globals";
 import {cos, isSubdomain, radians} from "./utils";
-import {EUSToLLA, LLAToEUS} from "./LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii, LLAToECEF} from "./LLA-ECEF-ENU";
 import {getLocalSouthVector, getLocalUpVector} from "./SphericalMath";
 import {SITREC_DEV_DOMAIN, SITREC_DOMAIN} from "./configUtils";
 
@@ -439,7 +439,7 @@ class CDragDropHandler {
             // Get ground point at screen center
             const groundPoint = Synth3DManager.getGroundPoint(view, centerX, centerY);
             if (groundPoint) {
-                centerLLA = EUSToLLA(groundPoint);
+                centerLLA = ECEFToLLAVD_radii(groundPoint);
             }
         }
 
@@ -447,7 +447,7 @@ class CDragDropHandler {
         if (!centerLLA) {
             const mainCamera = NodeMan.get("mainCamera").camera;
             const cameraPos = mainCamera.position.clone();
-            centerLLA = EUSToLLA(cameraPos);
+            centerLLA = ECEFToLLAVD_radii(cameraPos);
         }
 
         // Create overlay at the ground point with a reasonable size
@@ -599,9 +599,9 @@ class CDragDropHandler {
 
     droppedLLA(lat, lon, alt) {
         const mainCamera = NodeMan.get("mainCamera").camera;
-        const camPos = LLAToEUS(lat, lon, alt);
+        const camPos = LLAToECEF(lat, lon, alt);
 
-        const target = LLAToEUS(lat, lon, 0);
+        const target = LLAToECEF(lat, lon, 0);
 
         const up = getLocalUpVector(camPos);
         const south = getLocalSouthVector(camPos);

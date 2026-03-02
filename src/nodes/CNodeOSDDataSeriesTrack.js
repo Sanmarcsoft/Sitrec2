@@ -1,6 +1,6 @@
 import {CNodeTrack} from "./CNodeTrack";
 import {NodeMan, Sit} from "../Globals";
-import {LLAToEUS} from "../LLA-ECEF-ENU";
+import {LLAToECEF} from "../LLA-ECEF-ENU";
 import {toPoint as mgrsToPoint} from "mgrs";
 import {parseSingleCoordinate} from "../CoordinateParser";
 import {EventManager} from "../CEventManager";
@@ -16,7 +16,7 @@ export class CNodeOSDDataSeriesTrack extends CNodeTrack {
         this.frames = Sit.frames;
         this.useSitFrames = true;
         this.isGroundRelative = false;
-        // OSD altitudes are typically MSL (barometric); convert to HAE for LLAToEUS
+        // OSD altitudes are typically MSL (barometric); convert to HAE for LLAToECEF
         this.altitudeReference = v.altitudeReference ?? "MSL";
         EventManager.addEventListener("elevationChanged", () => this.onElevationChanged());
         this.recalculate();
@@ -99,7 +99,7 @@ export class CNodeOSDDataSeriesTrack extends CNodeTrack {
     recalculate() {
         super.recalculate();
 
-        const defaultPos = LLAToEUS(0, 0, 0);
+        const defaultPos = LLAToECEF(0, 0, 0);
         this.array = new Array(this.frames);
         for (let f = 0; f < this.frames; f++) {
             this.array[f] = {position: defaultPos.clone()};
@@ -174,7 +174,7 @@ export class CNodeOSDDataSeriesTrack extends CNodeTrack {
             if (this.altitudeReference === "MSL" && alt !== 0) {
                 alt += meanSeaLevelOffset(latArr[f], lonArr[f]);
             }
-            this.array[f] = {position: LLAToEUS(latArr[f], lonArr[f], alt)};
+            this.array[f] = {position: LLAToECEF(latArr[f], lonArr[f], alt)};
         }
 
         this.isGroundRelative = !hasAltitude;

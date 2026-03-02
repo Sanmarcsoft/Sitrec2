@@ -247,7 +247,7 @@ export class CNodeSatelliteTrack extends CNodeTrack {
          for (let i = 0; i < this.frames; i++) {
              const datetime = GlobalDateTimeNode.frameToDate(i);
 
-             const pos = this.nightSky.calcSatEUS(satrec, datetime);
+             const pos = this.nightSky.calcSatECEF(satrec, datetime);
              this.array[i] = {
                  position: pos,
              };

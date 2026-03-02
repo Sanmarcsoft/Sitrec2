@@ -23,7 +23,7 @@ export class QuadTreeMap {
         this.zoom = this.options.zoom
         this.tileSize = this.options.tileSize
         // Web Mercator tile math uses spherical radius — correct for tile indexing.
-        // Vertex positioning uses LLAToEUS() which reads Globals.equatorRadius/polarRadius.
+        // Vertex positioning uses LLAToECEF() which reads Globals.equatorRadius/polarRadius.
         this.radius = wgs84.RADIUS;
         this.loadedCallback = options.loadedCallback; // function to call when map is all loaded
         this.loaded = false; // mick flag to indicate loading is finished

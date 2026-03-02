@@ -23,7 +23,7 @@ import {calculateGlareStartAngle} from "../JetHorizon";
 import {curveChanged, SetupCommon, SetupTrackLOSNodes, SetupTraverseNodes} from "../JetStuff";
 import {GlobalScene, LocalFrame} from "../LocalFrame";
 import {getLocalNorthVector, getLocalUpVector} from "../SphericalMath";
-import {LLAToEUS} from "../LLA-ECEF-ENU";
+import {LLAToECEF} from "../LLA-ECEF-ENU";
 import {V3} from "../threeUtils";
 import {SetupJetGUI} from "../JetGUI";
 import {CNodeFleeter} from "../nodes/CNodeFleeter";
@@ -923,8 +923,8 @@ export function SetupGimbal() {
     // Create a static ground-level frame at the surface below the sitch origin.
     // Grid and clouds use local flat-plane geometry (X=east, Y=up, Z=south)
     // so this frame is positioned at sea level and oriented to match that convention.
-    // LLAToEUS uses Globals.equatorRadius/polarRadius, so it adapts to the active earth model.
-    const surfacePos = LLAToEUS(Sit.lat, Sit.lon, 0);
+    // LLAToECEF uses Globals.equatorRadius/polarRadius, so it adapts to the active earth model.
+    const surfacePos = LLAToECEF(Sit.lat, Sit.lon, 0);
     const groundUp = getLocalUpVector(surfacePos);
     const groundNorth = getLocalNorthVector(surfacePos);
     const groundEast = V3().crossVectors(groundNorth, groundUp).normalize();

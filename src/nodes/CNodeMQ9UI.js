@@ -7,7 +7,7 @@ import {MV3} from "../threeUtils";
 import {Raycaster} from "three";
 import * as LAYER from "../LayerMasks";
 import {getPointBelow, intersectMSL} from "../threeExt";
-import {EUSToLLA, haversineDistanceKM} from "../LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii, haversineDistanceKM} from "../LLA-ECEF-ENU";
 import {forward as mgrsForward} from "mgrs";
 import {degrees} from "../utils";
 import {NodeMan} from "../Globals";
@@ -300,7 +300,7 @@ export class   CNodeMQ9UI extends CNodeViewUI {
 
         // Update ACFT position from camera
         // lla.x = latitude, lla.y = longitude, lla.z = altitude (meters)
-        const lla = EUSToLLA(camera.position);
+        const lla = ECEFToLLAVD_radii(camera.position);
 
         // Format ACFT position based on display mode
         if (this.acftPosMode === 0) {
@@ -371,7 +371,7 @@ export class   CNodeMQ9UI extends CNodeViewUI {
         }
 
         if (targetPos) {
-            const targetLLA = EUSToLLA(targetPos);
+            const targetLLA = ECEFToLLAVD_radii(targetPos);
 
             // Format target position based on display mode
             if (this.targetPosMode === 0) {
@@ -408,8 +408,8 @@ export class   CNodeMQ9UI extends CNodeViewUI {
             const camGroundPos = getPointBelow(camera.position);
             const targetGroundPos = getPointBelow(targetPos);
             // Convert ground positions to lat/lon and use Haversine formula for great-circle distance
-            const camGroundLLA = EUSToLLA(camGroundPos);
-            const targetGroundLLA = EUSToLLA(targetGroundPos);
+            const camGroundLLA = ECEFToLLAVD_radii(camGroundPos);
+            const targetGroundLLA = ECEFToLLAVD_radii(targetGroundPos);
             // haversineDistanceKM returns distance in km, convert to meters
             const groundRangeKM = haversineDistanceKM(camGroundLLA.x, camGroundLLA.y, targetGroundLLA.x, targetGroundLLA.y);
             const groundRange = groundRangeKM * 1000;

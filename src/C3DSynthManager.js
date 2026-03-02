@@ -9,9 +9,9 @@ import {Globals, NodeMan, setRenderOne} from "./Globals";
 import {ViewMan} from "./CViewManager";
 import {screenToNDC} from "./mouseMoveView";
 import {V3} from "./threeUtils";
-import {earthCenterEUS, getLocalUpVector} from "./SphericalMath";
+import {earthCenterECEF, getLocalUpVector} from "./SphericalMath";
 import {Sphere, Vector3} from "three";
-import {EUSToLLA, LLAToEUS} from "./LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii, LLAToECEF} from "./LLA-ECEF-ENU";
 import {f2m} from "./utils";
 
 export class C3DSynthManager extends CManager {
@@ -184,7 +184,7 @@ export class C3DSynthManager extends CManager {
         }
         
         // Fallback: intersect with ellipsoid ground approximation
-        const groundSphere = new Sphere(earthCenterEUS(), Globals.equatorRadius);
+        const groundSphere = new Sphere(earthCenterECEF(), Globals.equatorRadius);
         const intersectPoint = new Vector3();
         
         if (view.raycaster.ray.intersectSphere(groundSphere, intersectPoint)) {
@@ -275,10 +275,10 @@ export class C3DSynthManager extends CManager {
      * @returns {CNodeSynthClouds|null} The clouds at that point, or null if none
      */
     findCloudsAtLatLon(lat, lon) {
-        const clickedEUS = LLAToEUS(lat, lon, 0);
+        const clickedEUS = LLAToECEF(lat, lon, 0);
         for (const id in this.cloudsList) {
             const clouds = this.cloudsList[id];
-            const centerEUS = LLAToEUS(clouds.centerLat, clouds.centerLon, 0);
+            const centerEUS = LLAToECEF(clouds.centerLat, clouds.centerLon, 0);
             const distance = clickedEUS.distanceTo(centerEUS);
             if (distance <= clouds.radius) {
                 return clouds;
@@ -294,7 +294,7 @@ export class C3DSynthManager extends CManager {
      * @returns {CNodeSynthClouds} The created cloud layer
      */
     createCloudsAtPoint(groundPoint, altitude = f2m(10000)) {
-        const lla = EUSToLLA(groundPoint);
+        const lla = ECEFToLLAVD_radii(groundPoint);
         
         const clouds = this.addClouds({
             centerLat: lla.x,
@@ -397,7 +397,7 @@ export class C3DSynthManager extends CManager {
      * @returns {CNodeGroundOverlay} The created overlay
      */
     createOverlayAtPoint(groundPoint) {
-        const lla = EUSToLLA(groundPoint);
+        const lla = ECEFToLLAVD_radii(groundPoint);
         const offset = 0.01;
         
         const overlay = this.addOverlay({

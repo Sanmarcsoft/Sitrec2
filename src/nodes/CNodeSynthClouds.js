@@ -16,7 +16,7 @@ import {
 } from "three";
 import * as LAYER from "../LayerMasks";
 import {dropFromDistance, getLocalNorthVector, getLocalUpVector} from "../SphericalMath";
-import {EUSToLLA, LLAToEUS} from "../LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii, LLAToECEF} from "../LLA-ECEF-ENU";
 import {screenToNDC} from "../mouseMoveView";
 import {ViewMan} from "../CViewManager";
 import {CustomManager, Globals, guiMenus, NodeMan, setRenderOne, Sit, Synth3DManager, UndoManager} from "../Globals";
@@ -127,7 +127,7 @@ export class CNodeSynthClouds extends CNode3DGroup {
     }
     
     updateGroupPosition() {
-        const centerEUS = LLAToEUS(this.centerLat, this.centerLon, this.altitude);
+        const centerEUS = LLAToECEF(this.centerLat, this.centerLon, this.altitude);
         this.basePosition = centerEUS.clone();
         this.group.position.copy(centerEUS);
         this.localUp = getLocalUpVector(centerEUS);
@@ -140,7 +140,7 @@ export class CNodeSynthClouds extends CNode3DGroup {
             if (this.cloudMesh.material) this.cloudMesh.material.dispose();
         }
         
-        const centerEUS = LLAToEUS(this.centerLat, this.centerLon, this.altitude);
+        const centerEUS = LLAToECEF(this.centerLat, this.centerLon, this.altitude);
         this.basePosition = centerEUS.clone();
         this.localUp = getLocalUpVector(centerEUS);
         this.group.position.copy(centerEUS);
@@ -541,7 +541,7 @@ export class CNodeSynthClouds extends CNode3DGroup {
             this.dragInitialLat = this.centerLat;
             this.dragInitialLon = this.centerLon;
             
-            const centerEUS = LLAToEUS(this.centerLat, this.centerLon, this.altitude);
+            const centerEUS = LLAToECEF(this.centerLat, this.centerLon, this.altitude);
             this.dragLocalUp = getLocalUpVector(centerEUS);
             this.dragInitialCenterEUS = centerEUS.clone();
             
@@ -629,7 +629,7 @@ export class CNodeSynthClouds extends CNode3DGroup {
                 } else if (this.draggingHandle === 'move') {
                     // Move center by displacement
                     const newCenterEUS = this.dragInitialCenterEUS.clone().add(displacement);
-                    const lla = EUSToLLA(newCenterEUS);
+                    const lla = ECEFToLLAVD_radii(newCenterEUS);
                     this.centerLat = lla.x;
                     this.centerLon = lla.y;
                     this.updateGroupPosition();
@@ -742,7 +742,7 @@ export class CNodeSynthClouds extends CNode3DGroup {
         
         if (!this.editMode) return;
         
-        const centerEUS = LLAToEUS(this.centerLat, this.centerLon, this.altitude);
+        const centerEUS = LLAToECEF(this.centerLat, this.centerLon, this.altitude);
         const localUp = getLocalUpVector(centerEUS);
         const east = new Vector3(1, 0, 0).cross(localUp).normalize();
         
