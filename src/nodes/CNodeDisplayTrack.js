@@ -18,6 +18,7 @@ import {hexColor, V3} from "../threeUtils";
 import {CNodeGUIValue} from "./CNodeGUIValue";
 import {ECEFToLLAVD_radii, haversineDistanceKM, interpolateGreatCircle, LLAToECEF} from "../LLA-ECEF-ENU";
 import {meanSeaLevelOffset} from "../EGM96Geoid";
+import {CNodeContrail} from "./CNodeContrail";
 
 export class CNodeDisplayTrack extends CNode3DGroup {
     constructor(v) {
@@ -106,6 +107,9 @@ export class CNodeDisplayTrack extends CNode3DGroup {
         this.lineColor = this.in.color.v0
         this.polyColor = this.in.dropColor?.v0 ?? new Color(this.in.color.v0.r * 0.75, this.in.color.v0.g * 0.75, this.in.color.v0.b * 0.75)
         this.visible = true
+        this.contrail = false;
+        this.contrailDuration = 100;
+        this.contrailNode = null;
 
         if (!v.skipGUI) {
             this.gui = v.gui ?? "contents";
@@ -188,6 +192,19 @@ export class CNodeDisplayTrack extends CNode3DGroup {
                 this.recalculate()
                 setRenderOne(true)
             })
+
+            // Contrail toggle and duration
+            this.guiFolder.add(this, "contrail").name("Contrail").listen().onChange(() => {
+                this.updateContrail();
+                setRenderOne(true);
+            })
+            this.guiContrailDuration = this.guiFolder.add(this, "contrailDuration", 2, 1000, 1)
+                .name("Contrail Secs").listen().onChange(() => {
+                    if (this.contrailNode) {
+                        this.contrailNode.duration = this.contrailDuration;
+                    }
+                    setRenderOne(true);
+                })
 
             // color picker for the line color, with optional linked data track
             this.guiLineColor = this.guiFolder.addColor(this, "lineColor").name("Line Color").onChange(() => {
@@ -295,6 +312,8 @@ export class CNodeDisplayTrack extends CNode3DGroup {
 
         this.simpleSerials.push("extendToGround")
         this.simpleSerials.push("trackDisplayStep")
+        this.simpleSerials.push("contrail")
+        this.simpleSerials.push("contrailDuration")
 
         this.recalculate()
     }
@@ -313,15 +332,37 @@ export class CNodeDisplayTrack extends CNode3DGroup {
 
 
 
-    update() {
-        // recalculate, so we
-      //  this.recalculate()
+    updateContrail() {
+        if (this.contrail && !this.contrailNode) {
+            const inputs = {track: this.in.track};
+            if (NodeMan.exists("targetWind")) {
+                inputs.wind = NodeMan.get("targetWind");
+            }
+            this.contrailNode = new CNodeContrail({
+                id: this.id + "_contrail",
+                ...inputs,
+                duration: this.contrailDuration,
+                container: this.container,
+            });
+        } else if (!this.contrail && this.contrailNode) {
+            this.contrailNode.dispose();
+            NodeMan.remove(this.contrailNode);
+            this.contrailNode = null;
+        }
+    }
+
+    update(f) {
     }
 
     dispose() {
         this.group.remove(this.trackLine)
         dispose(this.trackGeometry)
         this.removeTrackWall();
+        if (this.contrailNode) {
+            this.contrailNode.dispose();
+            NodeMan.remove(this.contrailNode);
+            this.contrailNode = null;
+        }
         super.dispose();
     }
 
@@ -389,6 +430,13 @@ export class CNodeDisplayTrack extends CNode3DGroup {
 
         if (v.altitudeLockAGL !== undefined && this.in.dataTrack !== undefined) {
             this.in.dataTrack.altitudeLockAGL = v.altitudeLockAGL;
+        }
+
+        // Restore contrail state
+        if (v.contrail !== undefined) {
+            this.contrail = v.contrail;
+            this.contrailDuration = v.contrailDuration ?? 100;
+            this.updateContrail();
         }
     }
 
