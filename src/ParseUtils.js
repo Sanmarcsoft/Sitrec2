@@ -109,13 +109,23 @@ export function parseISODate(dateStr) {
     if (typeof dateStr !== 'string') {
         return new Date(NaN);
     }
-    
-    let isoStr = dateStr;
-    
+
+    let isoStr = dateStr.trim();
+    if (isoStr === "") {
+        return new Date(NaN);
+    }
+
+    // Normalize common UTC CSV timestamp form: "YYYY-MM-DD HH:mm[:ss[.sss]]"
+    // into strict ISO-8601 before timezone normalization.
+    const spaceSeparatedDateTime = /^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?)$/;
+    if (spaceSeparatedDateTime.test(isoStr)) {
+        isoStr = isoStr.replace(/\s+/, "T");
+    }
+
     if (isoStr && !/Z$|[+-]\d{2}:\d{2}$/.test(isoStr)) {
         isoStr += "Z";
     }
-    
+
     const date = new Date(isoStr);
     return date
 }

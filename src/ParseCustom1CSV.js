@@ -148,6 +148,104 @@ function extendOrbitalMISBTrack(misbArray) {
     return added;
 }
 
+// Parse a numeric string that may contain commas as thousands separators (e.g. "12,520" → 12520)
+function parseNumericWithCommas(value) {
+    if (value === null || value === undefined || value === '') return NaN;
+    if (typeof value === 'number') return value;
+    return Number(value.replace(/,/g, ''));
+}
+
+function parseNullableNumber(value) {
+    if (value === null || value === undefined) return NaN;
+    if (typeof value === "number") return value;
+    const trimmed = String(value).trim();
+    if (trimmed === "") return NaN;
+    return Number(trimmed);
+}
+
+function normalizeGridValue(value) {
+    if (typeof value !== "string") {
+        return "";
+    }
+    return value.trim().replace(/\s+/g, "").toUpperCase();
+}
+
+function isLikelyMaidenhead(grid) {
+    return /^[A-R]{2}\d{2}([A-X]{2})?$/.test(grid);
+}
+
+function maidenheadToLatLon(grid) {
+    const normalized = normalizeGridValue(grid);
+    if (!/^[A-R]{2}\d{2}([A-X]{2})?$/.test(normalized)) {
+        return null;
+    }
+
+    let lon = (normalized.charCodeAt(0) - 65) * 20 - 180;
+    let lat = (normalized.charCodeAt(1) - 65) * 10 - 90;
+    lon += Number(normalized[2]) * 2;
+    lat += Number(normalized[3]);
+
+    if (normalized.length >= 6) {
+        lon += (normalized.charCodeAt(4) - 65) * (5 / 60);
+        lat += (normalized.charCodeAt(5) - 65) * (2.5 / 60);
+        lon += 5 / 120;     // center of subsquare
+        lat += 2.5 / 120;   // center of subsquare
+    } else {
+        lon += 1;   // center of 2-degree square
+        lat += 0.5; // center of 1-degree square
+    }
+
+    return {lat, lon};
+}
+
+function parseGridCoordinate(gridValue, regGridValue, grid56Value, row) {
+    const grid = normalizeGridValue(gridValue);
+    const regGrid = normalizeGridValue(regGridValue);
+    const grid56 = normalizeGridValue(grid56Value);
+
+    const mgrsCandidates = [];
+    if (grid) {
+        mgrsCandidates.push(grid);
+    }
+    if (regGrid && grid56) {
+        mgrsCandidates.push(`${regGrid}${grid56}`);
+    }
+    if (regGrid) {
+        mgrsCandidates.push(regGrid);
+    }
+
+    for (const candidate of mgrsCandidates) {
+        const coords = parseMGRS(candidate);
+        if (coords) {
+            return coords;
+        }
+    }
+
+    const maidenheadCandidates = [];
+    if (isLikelyMaidenhead(grid)) {
+        maidenheadCandidates.push(grid);
+    }
+    if (isLikelyMaidenhead(`${regGrid}${grid56}`)) {
+        maidenheadCandidates.push(`${regGrid}${grid56}`);
+    }
+    if (isLikelyMaidenhead(regGrid)) {
+        maidenheadCandidates.push(regGrid);
+    }
+
+    for (const candidate of maidenheadCandidates) {
+        const coords = maidenheadToLatLon(candidate);
+        if (coords) {
+            return coords;
+        }
+    }
+
+    if (grid || regGrid || grid56) {
+        console.warn(`Invalid grid value at row ${row}: grid='${gridValue}' regGrid='${regGridValue}' grid56='${grid56Value}'`);
+    }
+
+    return null;
+}
+
 export function isPBAFile(text) {
     return text.startsWith("---Pico Balloon Archive");
 }
@@ -176,10 +274,12 @@ export function extractPBACSV(text) {
 const CustomCSVFormats = {
     CUSTOM1: {
         trackID:  ["THRESHERID", "TRACK_ID", "STAGENUMBER"],
-        time:     ["TIME", "TIMESTAMP", "DATE", "UTC", "DATETIME", "DATE_TIME", "DATETIME_UTC", "DTG", "DT", "FRAME"],
+        time:     ["DATETIMEUTC", "DATETIME_UTC", "DATE_TIME_UTC", "DATETIME UTC", "UTC", "DATETIME", "DATE_TIME", "TIMESTAMP", "TIME", "DATE", "DTG", "DT", "FRAME"],
         lat:      ["LAT", "LATITUDE", "TPLAT", "LATITUDEDEGS"],
         lon:      ["LON", "LONG", "LONGITUDE", "TPLON", "LONGITUDEDEGS"],
-        mgrs:     ["MGRS", "GRID", "GRIDREF", "GRID_REF"],
+        mgrs:     ["MGRS", "GRID", "GRIDREF", "GRID_REF", "REGGRID"],
+        maidenheadRegGrid: ["REGGRID", "REG_GRID"],
+        maidenheadGrid56: ["GRID56", "GRID_56"],
         alt:      ["ALTITUDE", "ALT", "ALTITUDE (m)*", "TPHAE", "alt_m"],
         agl:      ["AGL", "ALT (m/agl)"],
         altFeet:  ["ALTITUDE (FT)", "ALT (FT)", "ALTITUDE(FT)", "ALT(FT)"],
@@ -203,8 +303,9 @@ export function isCustom1(csv) {
     const hasLatLon = findColumn(csv, headerValues.lat, true) !== -1
         && findColumn(csv, headerValues.lon, true) !== -1;
     const hasMGRS = findColumn(csv, headerValues.mgrs, true) !== -1;
+    const hasRegGrid = findColumn(csv, headerValues.maidenheadRegGrid, true) !== -1;
 
-    if (hasTime && (hasLatLon || hasMGRS)) {
+    if (hasTime && (hasLatLon || hasMGRS || hasRegGrid)) {
         return true;
     }
 
@@ -226,6 +327,8 @@ export function parseCustom1CSV(csv) {
     const latCol =      findColumn(csv, headerValues.lat, true)
     const lonCol =      findColumn(csv, headerValues.lon, true)
     const mgrsCol =     findColumn(csv, headerValues.mgrs, true)
+    const regGridCol =  findColumn(csv, headerValues.maidenheadRegGrid, true)
+    const grid56Col =   findColumn(csv, headerValues.maidenheadGrid56, true)
     const altCol =      findColumn(csv, headerValues.alt, true)
     const altFeet =     findColumn(csv, headerValues.altFeet, true)
     const altKmCol =    findColumn(csv, headerValues.altKm, true)
@@ -234,13 +337,15 @@ export function parseCustom1CSV(csv) {
     const aircraftCol = findColumn(csv, headerValues.aircraft, true)
     const callsignCol = findColumn(csv, headerValues.callsign, true)
 
-    const useMGRS = mgrsCol !== -1 && (latCol === -1 || lonCol === -1);
+    const useGridCoordinates = (latCol === -1 || lonCol === -1) && (mgrsCol !== -1 || regGridCol !== -1 || grid56Col !== -1);
 
     const timeColHeader = csv[0][dateCol];
     console.log("Detected Custom1 CSV format with columns: " +
         "trackIDCol=" + trackIDCol + ", " +
     "dateCol=" + dateCol + " (\"" + timeColHeader + "\"), latCol=" + latCol +
-        ", lonCol=" + lonCol + ", mgrsCol=" + mgrsCol + (useMGRS ? " (using MGRS)" : "") +
+        ", lonCol=" + lonCol + ", mgrsCol=" + mgrsCol +
+        ", regGridCol=" + regGridCol +
+        ", grid56Col=" + grid56Col + (useGridCoordinates ? " (using grid coordinates)" : "") +
         ", altCol=" + altCol +
         ", aglCol=" + aglCol +
         ", altFeet=" + altFeet +
@@ -313,20 +418,21 @@ export function parseCustom1CSV(csv) {
         // at this point date is in milliseconds or microseconds since epoch
         MISBArray[i - 1][MISB.UnixTimeStamp] = date;
 
-        if (useMGRS) {
-            const mgrsValue = csv[i][mgrsCol];
-            const coords = parseMGRS(mgrsValue);
+        if (useGridCoordinates) {
+            const gridValue = mgrsCol !== -1 ? csv[i][mgrsCol] : "";
+            const regGridValue = regGridCol !== -1 ? csv[i][regGridCol] : "";
+            const grid56Value = grid56Col !== -1 ? csv[i][grid56Col] : "";
+            const coords = parseGridCoordinate(gridValue, regGridValue, grid56Value, i);
             if (coords) {
                 MISBArray[i - 1][MISB.SensorLatitude] = coords.lat;
                 MISBArray[i - 1][MISB.SensorLongitude] = coords.lon;
             } else {
-                console.warn(`Invalid MGRS value at row ${i}: ${mgrsValue}`);
-                MISBArray[i - 1][MISB.SensorLatitude] = null;
-                MISBArray[i - 1][MISB.SensorLongitude] = null;
+                MISBArray[i - 1][MISB.SensorLatitude] = NaN;
+                MISBArray[i - 1][MISB.SensorLongitude] = NaN;
             }
         } else {
-            MISBArray[i - 1][MISB.SensorLatitude] = Number(csv[i][latCol])
-            MISBArray[i - 1][MISB.SensorLongitude] = Number(csv[i][lonCol])
+            MISBArray[i - 1][MISB.SensorLatitude] = parseNullableNumber(csv[i][latCol]);
+            MISBArray[i - 1][MISB.SensorLongitude] = parseNullableNumber(csv[i][lonCol]);
         }
 
         if (trackIDCol !== -1) {
@@ -340,7 +446,8 @@ export function parseCustom1CSV(csv) {
         // and then altFeet takes precedence over both
         // (this is to support some datasets that have alt in feet)
         if (altCol !== -1) {
-            MISBArray[i - 1][MISB.SensorTrueAltitude] = Number(csv[i][altCol]);
+            const altitude = parseNumericWithCommas(csv[i][altCol]);
+            MISBArray[i - 1][MISB.SensorTrueAltitude] = isNaN(altitude) ? null : altitude;
         }
 
         if (aglCol !== -1) {
@@ -349,7 +456,7 @@ export function parseCustom1CSV(csv) {
 
         // altFeet takes precedence over alt in meters
         if (altFeet !== -1) {
-            const altitude = f2m(Number(csv[i][altFeet]));
+            const altitude = f2m(parseNumericWithCommas(csv[i][altFeet]));
             MISBArray[i - 1][MISB.SensorTrueAltitude] = isNaN(altitude) ? null : altitude;
         }
 
@@ -372,6 +479,27 @@ export function parseCustom1CSV(csv) {
         // NO FOV
         //MISBArray[i - 1][MISB.SensorVerticalFieldofView] = 0
 
+    }
+
+    // Remove rows that have no valid position.
+    // These are useless for track display and can trigger asserts downstream.
+    const before = MISBArray.length;
+    MISBArray = MISBArray.filter(row =>
+        Number.isFinite(Number(row[MISB.SensorLatitude]))
+        && Number.isFinite(Number(row[MISB.SensorLongitude]))
+    );
+    if (MISBArray.length < before) {
+        console.log(`Filtered out ${before - MISBArray.length} rows with no position data`);
+    }
+
+    // Ensure rows are sorted by ascending timestamp (some sources like WSPR are newest-first)
+    if (MISBArray.length >= 2) {
+        const t0 = Number(MISBArray[0][MISB.UnixTimeStamp]);
+        const tN = Number(MISBArray[MISBArray.length - 1][MISB.UnixTimeStamp]);
+        if (t0 > tN) {
+            MISBArray.sort((a, b) => Number(a[MISB.UnixTimeStamp]) - Number(b[MISB.UnixTimeStamp]));
+            console.log("Sorted track data into chronological order");
+        }
     }
 
     const extensionCount = extendOrbitalMISBTrack(MISBArray);
