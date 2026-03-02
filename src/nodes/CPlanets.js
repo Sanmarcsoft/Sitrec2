@@ -196,7 +196,7 @@ export class CPlanets {
      * @param {Scene} [dayScene] Optional day sky scene for Sun/Moon during daylight
      * @param {Object} params Configuration object
      * @param {Date} params.date Current simulation date/time
-     * @param {Vector3} params.cameraPos Camera position in EUS coordinates
+     * @param {Vector3} params.cameraPos Camera position in ECEF coordinates
      * @param {Function} params.ecefToLla Function to convert ECEF to LLA coordinates
      */
     addPlanets(scene, dayScene = null, params = {}) {

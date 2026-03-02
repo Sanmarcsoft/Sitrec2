@@ -1066,7 +1066,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
     }
 
     /**
-     * Wrapper to get satellite EUS position - delegates to this.satellites
+     * Wrapper to get satellite ECEF position - delegates to this.satellites
      */
     calcSatECEF(sat, date) {
         return this.satellites.calcSatECEF(sat, date);
@@ -1332,7 +1332,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                 // try a simple iteration for now
                 for (var angle = start; angle <= end; angle += step) {
                     // the point needs rotating about the globe origin
-                    // (which is not 0,0,0, as we are in EUS)
+                    // Earth center is at ECEF origin (0,0,0)
                     // so sub O, rotate about the axis, then add O back
                     const X = X0.clone().sub(O).applyAxisAngle(axis, radians(angle)).add(O)
 

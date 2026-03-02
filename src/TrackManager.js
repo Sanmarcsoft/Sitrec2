@@ -715,7 +715,7 @@ class CTrackManager extends CManager {
             mainCameraNode.snapshotCamera();
 
 
-            // // first get LLA versions of the EUS values cameraTarget and ground
+            // // first get LLA versions of the ECEF values cameraTarget and ground
             // const cameraTargetLLA = ECEFToLLAVD_radii(cameraTarget);
             // const groundLLA = ECEFToLLAVD_radii(ground);
             // // then store them in the mainCamera node
@@ -1080,7 +1080,7 @@ class CTrackManager extends CManager {
     /**
      * Add a synthetic (user-created) track to the TrackManager
      * @param {Object} options - Track creation options
-     * @param {Vector3} options.startPoint - Starting point in EUS coordinates
+     * @param {Vector3} options.startPoint - Starting point in ECEF coordinates
      * @param {string} options.name - Optional name for the track
      * @param {string} options.objectID - Optional 3D object to associate with track
      * @param {boolean} options.editMode - Whether to start in edit mode (default: true)

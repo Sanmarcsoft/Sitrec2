@@ -1163,7 +1163,7 @@ class CameraMapControls {
 				this.camera.position.applyAxisAngle(rotationAxis, angle) // rotate the position
 				//				console.log("Camera position "+ vdump(this.camera.position))
 
-				this.camera.position.add(origin) 						// position back to EUS
+				this.camera.position.add(origin) 						// position back to ECEF
 				this.camera.updateMatrix();
 				this.camera.updateMatrixWorld();
 

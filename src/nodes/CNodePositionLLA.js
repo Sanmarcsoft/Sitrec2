@@ -1,4 +1,4 @@
-// A node that returns a EUS vector position based on LLA input
+// A node that returns an ECEF vector position based on LLA input
 // Can be defined by a lat, lon, and alt
 // or a LLA array of three values
 // Note that the altitude is in meters in the LLA array
@@ -448,7 +448,7 @@ export class CNodePositionLLA extends CNodeTrack {
         }
     }
 
-    // return vector3 EUS for the specified LLA (animateabel)
+    // return vector3 ECEF for the specified LLA (animateabel)
     getValueFrame(f) {
 
         // f is the frame niumber in the video
@@ -489,7 +489,7 @@ export class CNodePositionLLA extends CNodeTrack {
 
 // an XYZ position node that can be defined by x, y, and z
 // or a XYZ array of three values
-// in the EUS space
+// in ECEF space
 // mostly for debugging
 export class CNodePositionXYZ extends CNode {
     constructor(v) {

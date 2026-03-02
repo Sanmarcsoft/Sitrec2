@@ -125,7 +125,7 @@ export class CNodeTerrain extends CNode {
         // Semi-axes are 1 km smaller than the earth model radii to prevent z-fighting.
         // A unit sphere is scaled non-uniformly: equatorial (a) on X/Z, polar (b) on Y.
         // The local Y axis (polar) is then rotated so it points along the actual Earth
-        // rotation axis in EUS space: R_x(lat − 90°) maps Y → (0, sin(lat), −cos(lat)).
+        // rotation axis in ECEF space: R_x(lat − 90°) maps Y → (0, sin(lat), −cos(lat)).
         // Degenerates to a sphere when polarRadius === equatorRadius.
         // Only visible when Globals.dynamicSubdivision is true.
         const greySphereGeometry = new SphereGeometry(1, 32, 32);
@@ -140,7 +140,7 @@ export class CNodeTerrain extends CNode {
         // In ECEF the polar axis is always Z, so rotate Y→+Z with +π/2 about X.
         // (In old EUS this was latitude-dependent: Sit.lat * π/180 - π/2)
         this.greySphere.rotation.x = Math.PI / 2;
-        // Position at the true Earth centre in EUS (depends on ellipsoid shape and latitude).
+        // Position at the true Earth centre (ECEF origin).
         this.greySphere.position.copy(earthCenterECEF());
         this.greySphere.visible = Globals.dynamicSubdivision === true;
         GlobalScene.add(this.greySphere);
@@ -773,7 +773,7 @@ export class CNodeTerrain extends CNode {
     }
 
     getPointBelow(A, agl = 0, raycast = false) {
-        // given a point in EUS, return the point on the terrain (or agl meters above it, if not zero)
+        // given a point in ECEF, return the point on the terrain (or agl meters above it, if not zero)
         // We use the terrain map to get the elevation
         // we use LL (Lat and Lon) to get the data from the terrain maps
         // using LL ensure the results are consistent with the display of the map

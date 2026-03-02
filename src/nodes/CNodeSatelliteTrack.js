@@ -242,7 +242,7 @@ export class CNodeSatelliteTrack extends CNodeTrack {
          const satrec = bestSat(this.satData.satrecs, startTime);
 
 
-         // fill the array with the EUS positions of the satellite
+         // fill the array with the ECEF positions of the satellite
          // for the correct time at each frame
          for (let i = 0; i < this.frames; i++) {
              const datetime = GlobalDateTimeNode.frameToDate(i);

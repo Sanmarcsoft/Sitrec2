@@ -892,10 +892,10 @@ export class CNode3DObject extends CNode3DGroup {
     // Export the 3D object as a KML file for Google Earth
     async exportToKML() {
         try {
-            // Get the current position of the object in EUS coordinates
+            // Get the current position of the object in ECEF coordinates
             const ecefPosition = this.group.position.clone();
             
-            // Convert EUS position to LLA (Latitude, Longitude, Altitude)
+            // Convert ECEF position to LLA (Latitude, Longitude, Altitude)
             const lla = ECEFToLLAVD_radii(ecefPosition);
             const latitude = lla.x;   // degrees
             const longitude = lla.y;  // degrees  

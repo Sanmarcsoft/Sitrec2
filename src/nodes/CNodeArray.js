@@ -53,7 +53,7 @@ export class CNodeArray extends CNode {
                 let pos = this.array[f].lla
                 let LLAm = []
                 if (pos === undefined) {
-                    // don't have an LLA, so convert from EUS
+                    // don't have an LLA, so convert from ECEF
                     // this gives us altitude in meters
                     const posECEF = this.array[f].position
                     const posLLA = ECEFToLLAVD_radii(posECEF);

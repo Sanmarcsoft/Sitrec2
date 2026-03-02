@@ -522,8 +522,7 @@ function _updateSitConstants() {
     _m22 = _sitSinLat;
 }
 
-// Convert LLA to EUS. Optional earth's radius parameter is deprecated, and should not be used.
-// EXPERIMENT: EUS is now identical to ECEF, so this just does LLA → ECEF.
+// Convert LLA (degrees) to ECEF. The radius parameter is deprecated.
 export function LLAToECEFRadians(lat, lon, alt=0, radius) {
     assert(radius === undefined, "undexpected radius in LLAToECEF")
     assert(Sit.lat !== undefined, "Sit.lat undefined in LLAToECEF")
@@ -542,12 +541,11 @@ export function LLAToECEFRadians(lat, lon, alt=0, radius) {
     const ecef_y = (N + alt) * cos_lat * sin_lon;
     const ecef_z = (_llaecef_ratio * N + alt) * sin_lat;
 
-    // EUS = ECEF (no origin subtraction, no rotation)
+    // Return ECEF directly (no origin subtraction, no rotation)
     return new Vector3(ecef_x, ecef_y, ecef_z);
 }
 
-// Convert LLA to Spherical EUS. Optional earth's radius parameter is deprecated, and should not be used.
-// OPTIMIZED VERSION: Uses constant multiplier for degree to radian conversion
+// Convert LLA (degrees) to ECEF. Uses constant multiplier for deg→rad.
 export function LLAToECEF(lat, lon, alt=0, radius) {
     // Convert degrees to radians using constant multiplier (faster than radians() function)
     return LLAToECEFRadians(lat * _DEG_TO_RAD, lon * _DEG_TO_RAD, alt, radius);
@@ -559,7 +557,7 @@ export function LLAVToECEF(lla, radius) {
     return LLAToECEF(lla.x, lla.y, lla.z)
 }
 
-// Force update of LLA to EUS constants (call this if you manually change Sit.lat/lon)
+// Force update of LLA to ECEF constants (call this if you manually change Sit.lat/lon)
 export function updateLLAToECEFConstants() {
     _lastSitLat = null;
     _lastSitLon = null;

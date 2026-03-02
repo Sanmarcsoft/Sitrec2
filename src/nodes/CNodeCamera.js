@@ -101,7 +101,7 @@ export class CNodeCamera extends CNode3D {
         }
 
         // If no explicit position was set, default to the surface at Sit origin.
-        // In ECEF-based EUS this prevents the camera from being at (0,0,0) = Earth's center.
+        // In ECEF this prevents the camera from being at (0,0,0) = Earth's center.
         if (this.startPos === undefined && this.startPosLLA === undefined && Sit.lat !== undefined) {
             this._object.position.copy(LLAToECEF(Sit.lat, Sit.lon, 0));
         }

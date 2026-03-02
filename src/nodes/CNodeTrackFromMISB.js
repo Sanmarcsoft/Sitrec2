@@ -360,7 +360,7 @@ export class CNodeTrackFromMISB extends CNodeTrack {
 
             const lat = interpolate(this.latArray[slot], this.latArray[slot +1], fraction);
             const lon = interpolate(this.lonArray[slot], this.lonArray[slot +1], fraction);
-            // SensorTrueAltitude is MSL (orthometric); convert to HAE for EUS (h = H + N)
+            // SensorTrueAltitude is MSL (orthometric); convert to HAE for ECEF (h = H + N)
             const altMSL = misb.adjustAlt(interpolate(this.rawAltArray[slot], this.rawAltArray[slot +1], fraction), lat, lon);
             const alt = altMSL + meanSeaLevelOffset(lat, lon);
 
@@ -384,7 +384,7 @@ export class CNodeTrackFromMISB extends CNodeTrack {
             // convert ECEF to ENU
             // const ecef = new Vector3(ecefX, ecefY, ecefZ);
             // const enu = ecef.clone().sub((originECEF)).applyMatrix3(mECEF2ENU)
-            // // and store as EUS
+            // // and store as ECEF
             // const pos = new Vector3(enu.x, enu.z, -enu.y)
 
             // Final transformation in one step

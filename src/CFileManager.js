@@ -176,12 +176,12 @@ export class CFileManager extends CManager {
 
     /**
      * Resets the origin to the current camera position.
-     * Updates Sit.lat and Sit.lon, recalculates the EUS coordinate system,
+     * Updates Sit.lat and Sit.lon, recalculates ECEF positions,
      * and reloads the situation to apply changes.
      */
     resetOrigin() {
         // First, reset the origin to the current camera position
-        // This updates Sit.lat and Sit.lon and recalculates the EUS coordinate system
+        // This updates Sit.lat and Sit.lon and recalculates ECEF positions
         // resetGlobalOrigin();
 
 

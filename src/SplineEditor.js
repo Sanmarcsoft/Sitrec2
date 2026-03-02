@@ -17,8 +17,8 @@ export class   SplineEditor extends PointEditor{
         this.minimumPoints = (curveType === 'linear') ? 2 : 4;
 
         // Note: positions are already loaded by the parent PointEditor constructor
-        // (which handles LLA→EUS conversion when isLLA=true).
-        // Do NOT re-load here — that would overwrite correct EUS coords with raw LLA values.
+        // (which handles LLA→ECEF conversion when isLLA=true).
+        // Do NOT re-load here — that would overwrite correct ECEF coords with raw LLA values.
 
         // Local origin for precision: use the first point as the origin
         // This prevents floating-point precision issues when coordinates are far from world origin

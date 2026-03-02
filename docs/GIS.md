@@ -62,7 +62,7 @@ These elevations are **orthometric heights** — heights above the EGM96 geoid (
 
 ### The Geoid Correction
 
-Sitrec's internal coordinate system (EUS) is based on the WGS84 ellipsoid, so all positions are ultimately ellipsoid-relative. When loading Terrarium elevation tiles, Sitrec must convert orthometric heights to ellipsoid heights by adding the geoid undulation:
+Sitrec works internally in ECEF — a Cartesian coordinate system (x, y, z meters from the Earth's center) that is not itself tied to any ellipsoid. However, converting LLA positions to ECEF requires knowing the altitude's reference surface. When the altitude is HAE (height above the WGS84 ellipsoid), the LLA-to-ECEF conversion is straightforward. When terrain tiles provide orthometric heights (MSL), Sitrec must first convert to HAE by adding the geoid undulation:
 
 ```
 h_ellipsoid = h_terrarium + N
@@ -79,7 +79,7 @@ elevation[ij] = R * 256 + G + B / 256 - 32768
 
 The same correction is applied to Mapbox terrain tiles (`computeElevationFromRGBA_MB`), which also provide orthometric heights.
 
-Without this correction, terrain would be displaced vertically by up to ~100 m depending on location, causing visible misalignment with GPS tracks, satellite imagery, and 3D building tiles (which use ellipsoid coordinates).
+Without this correction, terrain would be displaced vertically by up to ~100 m depending on location, causing visible misalignment with GPS tracks, satellite imagery, and 3D building tiles (all of which derive their positions from HAE, not MSL).
 
 ## Coordinate Systems
 
@@ -90,13 +90,12 @@ Sitrec uses several coordinate systems internally:
 | **LLA** | Latitude, Longitude, Altitude (geodetic, WGS84) |
 | **ECEF** | Earth-Centered Earth-Fixed (Cartesian, origin at Earth's center) |
 | **ENU** | East-North-Up (local tangent plane) |
-| **EUS** | East-Up-South (Sitrec's rendering frame — a rotation of ENU to match Three.js conventions where Y is up) |
 
-The conversion chain is: **LLA <-> ECEF <-> ENU <-> EUS**, implemented in `LLA-ECEF-ENU.js`. All conversions support both the spherical and ellipsoidal Earth models.
+The conversion chain is: **LLA <-> ECEF <-> ENU**, implemented in `LLA-ECEF-ENU.js`. The LLA-to-ECEF conversion depends on the Earth model (sphere or WGS84 ellipsoid) because geodetic latitude and altitude are defined relative to that surface. ECEF itself is just Cartesian — no ellipsoid needed to interpret the coordinates.
 
 ## 3D Tiles (Cesium / Google)
 
-Cesium Ion and Google Photorealistic 3D Tiles are delivered in ECEF coordinates on the WGS84 ellipsoid. Sitrec transforms them into EUS using a precomputed ECEF-to-EUS matrix (`CNodeBuildings3DTiles.js`, `buildECEFToEUSMatrix4`). No geoid correction is needed here because the tile positions are already ellipsoid-relative.
+Cesium Ion and Google Photorealistic 3D Tiles are delivered directly in ECEF Cartesian coordinates. Sitrec uses these as-is since it works in ECEF internally (`CNodeBuildings3DTiles.js`). No geoid correction is needed — the tile vertices are already absolute Cartesian positions with no altitude ambiguity.
 
 
 # (In Depth) Altitude Naming Conventions & the MSL Confusion Problem

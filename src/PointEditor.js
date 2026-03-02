@@ -158,7 +158,7 @@ export class PointEditor {
             // points already in current coordinate system (ECEF)
             this.load(initialPoints)
         } else {
-            // convert from LLA to EUS, accounting for any new map coordinate system
+            // convert from LLA to ECEF, accounting for any new map coordinate system
             const LLAPoints = []
             for (let i = 0; i < initialPoints.length; i++) {
                 const frame = initialPoints[i][0]

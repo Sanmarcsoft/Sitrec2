@@ -719,7 +719,7 @@ export class CDisplayLine {
     }
 }
 
-// get the point on the ground below a point in EUS
+// get the point on the ground below a point in ECEF
 // if the terrain model is loaded, use that, otherwise use the sphere
 export function getPointBelow(A, raycast = false) {
     if (NodeMan.exists("TerrainModel")) {
@@ -735,14 +735,14 @@ export function getPointBelowLL(lat, lon) {
     return getPointBelow(A)
 }
 
-// get the above ground altitude a point in EUS
+// get the above ground altitude a point in ECEF
 export function aboveGroundLevelAt(A) {
     const B = getPointBelow(A);
     const altitude = A.clone().sub(B).length();
     return altitude;
 }
 
-// given a point in EUS, ensure it is at least "height" meters above the ground
+// given a point in ECEF, ensure it is at least "height" meters above the ground
 // accounting for terrain.
 export function clampAboveGround(point, height) {
     const ground = getPointBelow(point);
@@ -759,7 +759,7 @@ export function aboveGroundLevelAtLL(lat, lon) {
     return aboveGroundLevelAt(A)
 }
 
-// given a point in EUS, return a point above (or below) it by a given additional height
+// given a point in ECEF, return a point above (or below) it by a given additional height
 export function pointAbove(point, height) {
     return raisePoint(point, height);
 }
@@ -781,7 +781,7 @@ export function calculateAltitude(point) {
 // (i.e. the MSL altitude of the ground below that point)
 // uses the terrain model if available, otherwise uses the WGS84 sphere
 export function elevationAtLL(lat, lon, raycast = false) {
-    // get the point in EUS
+    // get the point in ECEF
     const point = LLAToECEF(lat, lon, 100000);
     // get the ground point below it
     const groundPoint = getPointBelow(point, raycast);

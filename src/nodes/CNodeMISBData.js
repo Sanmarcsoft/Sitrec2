@@ -431,7 +431,7 @@ export class CNodeMISBDataTrack extends CNodeEmptyArray {
 
 
     // to display the full length track of original source data, (like, for a KML)
-    // we need to make an array of EUS positions for each point in the track
+    // we need to make an array of ECEF positions for each point in the track
     // NOTE: this is a DATA track, not a camera/position
     // and this array is just to display the shape of the track,
     makeArrayForTrackDisplay() {
@@ -512,7 +512,7 @@ export class CNodeMISBDataTrack extends CNodeEmptyArray {
         return this.adjustAlt(a, this.getLat(i), this.getLon(i));
     }
 
-    // Returns HAE altitude (h = H + N). Use for EUS/ECEF conversions.
+    // Returns HAE altitude (h = H + N). Use for ECEF conversions.
     getAltHAE(i) {
         const lat = this.getLat(i);
         const lon = this.getLon(i);
@@ -544,7 +544,7 @@ export class CNodeMISBDataTrack extends CNodeEmptyArray {
         return 0
     }
 
-    // get EUS position at frame i
+    // get ECEF position at frame i
     getPosition(i) {
         return LLAToECEF(this.getLat(i), this.getLon(i), this.getAltHAE(i));
     }

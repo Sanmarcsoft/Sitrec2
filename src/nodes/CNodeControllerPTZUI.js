@@ -35,7 +35,7 @@ export class CNodeControllerAzElZoom extends CNodeController {
 
     apply(f, objectNode ) {
 
-        // Since we are in EUS, and the origin is at some arbritary point
+        // Since we are in ECEF, the origin is at Earth's center
         // we need to get the LOCAL up
 
         const camera = objectNode.camera

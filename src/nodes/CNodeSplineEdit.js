@@ -106,7 +106,7 @@ export class CNodeSplineEditor extends CNodeTrack {
         let positions = [];
         for (let i=0;i<this.splineEditor.positions.length;i++) {
             const p = this.splineEditor.positions[i];
-            // Convert EUS coordinates to LLA (lat, lon, alt) for storage
+            // Convert ECEF coordinates to LLA (lat, lon, alt) for storage
             const lla = ECEFToLLAVD_radii(p);
             positions.push([this.splineEditor.frameNumbers[i], lla.x, lla.y, lla.z])
         }
@@ -127,7 +127,7 @@ export class CNodeSplineEditor extends CNodeTrack {
     modDeserialize(v) {
         super.modDeserialize(v);
         if (v.positions !== undefined) {
-            // Convert LLA coordinates back to EUS before loading into spline editor
+            // Convert LLA coordinates back to ECEF before loading into spline editor
             let ecefPositions = [];
             for (let i = 0; i < v.positions.length; i++) {
                 const posData = v.positions[i];

@@ -2,14 +2,14 @@
  * Web Worker for async elevation interpolation and vertex position calculation
  * 
  * This worker processes elevation data from tiles with bilinear interpolation
- * and converts vertices from lat/lon/elevation to EUS coordinates.
+ * and converts vertices from lat/lon/elevation to ECEF coordinates.
  * 
  * This is computationally expensive (10K+ vertices per tile) and moving it to a worker
  * prevents blocking the main thread during terrain tile recalculation.
  */
 
 /**
- * Convert LLA (Latitude, Longitude, Altitude) to EUS (Earth-Centered Universe System)
+ * Convert LLA (Latitude, Longitude, Altitude) to ECEF (Earth-Centered Earth-Fixed)
  * This is imported from LLA-ECEF-ENU in the main thread, but we need a copy here
  */
 class Vector3 {
@@ -34,7 +34,7 @@ const wgs84 = {
 };
 
 /**
- * Convert LLA to EUS (Earth-Centered Universe System)
+ * Convert LLA to ECEF (Earth-Centered Earth-Fixed)
  * Based on WGS84 ellipsoid
  */
 function LLAToECEF(lat, lon, alt) {
@@ -176,7 +176,7 @@ self.onmessage = function(event) {
                 highestAltitude = elevation;
             }
 
-            // Convert to EUS coordinates
+            // Convert to ECEF coordinates
             const vertexECEF = LLAToECEF(lat, lon, elevation);
 
             // Subtract the center of the tile for relative positioning

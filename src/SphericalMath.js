@@ -6,9 +6,8 @@ import {assert} from "./assert.js";
 import {MV3, V3} from "./threeUtils";
 
 
-// Scene coordinates are now ECEF (Earth-Centered Earth-Fixed).
-// EUS is an identity mapping to ECEF. The old local tangent plane (East, Up, South)
-// convention is no longer used for coordinate transforms, but some variable names persist.
+// Scene coordinates are ECEF (Earth-Centered Earth-Fixed).
+// The old EUS (East-Up-South) local tangent plane convention is no longer used.
 // See: https://en.wikipedia.org/wiki/Local_tangent_plane_coordinates
 //
 // the Az=0 and El=0 is always along the -Z axis (horizontal, North)
@@ -145,19 +144,14 @@ function PRJ2EA(pitch, roll, jetPitch) {
 ////////////////////////////////////////////////////////////////////////////////
 
 /**
- * Earth centre in EUS (East-Up-South) rendering coordinates.
- * Computed as the EUS position of the ECEF origin (0,0,0) using the active earth model.
- * In sphere mode (polarRadius === equatorRadius) this returns V3(0, -equatorRadius, 0).
- * In ellipsoid mode the Y component depends on latitude:
- *   - equator (lat=0):  Y = -equatorRadius
- *   - pole (lat=90°):   Y = -polarRadius
+ * Earth centre in ECEF coordinates. Returns V3(0,0,0) since scene coordinates are Earth-centered.
  */
 export function earthCenterECEF() {
     return V3(0, 0, 0);
 }
 
 /**
- * Geodetic ellipsoid height (HAE) of a point in EUS coordinates.
+ * Geodetic ellipsoid height (HAE) of a point in ECEF coordinates.
  *
  * Historical note: this function name predates geoid-aware MSL handling and is
  * still used broadly in geometry code. User-facing MSL should be computed as:
@@ -179,7 +173,7 @@ export function setAltitudeMSL(point, altitude) {
 }
 
 /**
- * Point on the WGS84 ellipsoid (HAE=0) directly below a given EUS point.
+ * Point on the WGS84 ellipsoid (HAE=0) directly below a given ECEF point.
  */
 export function pointOnSurface(point) {
     return setAltitudeMSL(point, 0);
@@ -214,7 +208,7 @@ export function hiddenBelowHorizon(h, d, r = Globals.equatorRadius) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// How much is the ground below the EUS plane
+// How much is the ground below the tangent plane
 // x, y are in meters
 // Note there two Pythagorean ways you can derive drop
 // Either the distance straight down, or the distance towards the center of the Earth
@@ -231,7 +225,7 @@ export function dropFromDistance(dist, radius=Globals.equatorRadius) {
 }
 
 
-// get altitude of a point in EUS coordinates above MSL
+// get altitude of a point in ECEF coordinates above MSL
 // for full terrain use altitudeAt(position) or altitudeAtLL(lat, lon)
 export function pointAltitude(position) {
     return altitudeMSL(position);
@@ -254,8 +248,7 @@ function drop3(x,y) {
 export {drop, drop3, CueAz,PRJ2EA,EAJP2PR,XYZJ2PR,XYZ2EA,EA2XYZ,PRJ2XYZ}
 
 
-// position is in EUS (East, Up, South) coordinates relative to an arbitary origin
-// origin might be above the surface (in Gimbal it's the start of the jet track, so that is passed in
+// position is in ECEF coordinates
 export function getLocalUpVector(position) {
     // Compute the geodetic normal for the current earth model.
     // The outward normal to the ellipsoid x²/a² + y²/a² + z²/b² = 1
@@ -280,7 +273,7 @@ export function getNorthPole() {
 export function getLocalNorthVector(position) {
     assert(Sit.lat !== undefined && Sit.lon !== undefined, "Sit.lat and Sit.lon must be defined for getLocalNorthVector() to work.");
     // to get a northish direction we get the vector from here to the north pole.
-    // to get the north pole in EUS, we take the north pole's position in ECEF
+    // to get the north pole in ECEF, we take the north pole's position in ECEF
     const northPoleECEF = getNorthPole();
     const toNorth = northPoleECEF.clone().sub(position).normalize()
     // take only the component perpendicular to the local up vector
@@ -401,18 +394,18 @@ export function getAzElFromPositionAndForward(position, forward) {
     // same with the north vector (should already be horizontal, but ensure it)
     const northH = north.clone().sub(up.clone().multiplyScalar(north.dot(up))).normalize();
 
-    // get the east vector (north × up gives east in EUS coordinates)
+    // get the east vector (north × up gives east in ECEF coordinates)
     const east = north.clone().cross(up);
 
     // calculate the heading using atan2 for proper quadrant handling
     // project forwardH onto north and east axes
     const forwardNorth = forwardH.dot(northH);
     const forwardEast = forwardH.dot(east);
-    
+
     // atan2(east, north) gives angle clockwise from north
     // atan2(y, x) where x=north component, y=east component
     let heading = Math.atan2(forwardEast, forwardNorth);
-    
+
     // convert to degrees and normalize to 0-360
     const headingDeg = heading * 180 / Math.PI;
     const headingPos = (headingDeg + 360) % 360;
@@ -441,7 +434,7 @@ export function getCompassHeading(position, forward, camera) {
     // same with the north vector (should already be horizontal, but ensure it)
     const northH = north.clone().sub(up.clone().multiplyScalar(north.dot(up))).normalize();
 
-    // get the east vector (north × up gives east in EUS coordinates)
+    // get the east vector (north × up gives east in ECEF coordinates)
     const east = north.clone().cross(up);
 
     // calculate the heading using atan2 for proper quadrant handling

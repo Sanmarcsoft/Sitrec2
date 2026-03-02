@@ -127,7 +127,7 @@ export class QuadTreeTile {
         const latNE = this.map.options.mapProjection.getNorthLatitude(yTile + 1, zoomTile);
         const lonNE = this.map.options.mapProjection.getLeftLongitude(xTile + 1, zoomTile);
 
-        // convert to EUS
+        // convert to ECEF
         const alt = 0;
         const vertexSW = LLAToECEF(latSW, lonSW, alt)
         const vertexNW = LLAToECEF(latNW, lonNW, alt)
@@ -508,7 +508,7 @@ export class QuadTreeTile {
                 this.highestAltitude = elevation;
             }
 
-            // Convert to EUS coordinates
+            // Convert to ECEF coordinates
             const vertexECEF = LLAToECEF(lat, lon, elevation);
 
             // Subtract the center of the tile for relative positioning
@@ -672,7 +672,7 @@ export class QuadTreeTile {
         const latNE = this.map.options.mapProjection.getNorthLatitude(yTile + 1, zoomTile);
         const lonNE = this.map.options.mapProjection.getLeftLongitude(xTile + 1, zoomTile);
 
-        // convert to EUS
+        // convert to ECEF
         const alt = 10000 + altitude;
         const vertexSW = LLAToECEF(latSW, lonSW, alt)
         const vertexNW = LLAToECEF(latNW, lonNW, alt)
@@ -833,7 +833,7 @@ export class QuadTreeTile {
 
         assert(geometry !== undefined, 'Geometry not defined in QuadTreeMap.js')
 
-        // we will be calculating the tile vertex positions in EUS
+        // we will be calculating the tile vertex positions in ECEF
         // but they will be relative to the tileCenter
         //
         const tileCenter = this.mesh.position;
@@ -889,7 +889,7 @@ export class QuadTreeTile {
 
             // elevation = Math.random()*100000
 
-            // convert that to EUS
+            // convert that to ECEF
             const vertexECEF = LLAToECEF(lat, lon, elevation)
 
             // subtract the center of the tile
@@ -1148,7 +1148,7 @@ export class QuadTreeTile {
             // Use flat elevation (0)
             const elevation = 0;
 
-            // Convert to EUS coordinates
+            // Convert to ECEF coordinates
             const vertexECEF = LLAToECEF(lat, lon, elevation);
 
             // Subtract the center of the tile for relative positioning

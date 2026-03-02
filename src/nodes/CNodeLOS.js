@@ -1,7 +1,7 @@
 // Base class for the various sources of LOS information.
 // LOS = Lines of Sight, which is a track with heading vectors
 // getValueFrame(f) will return
-// {position: position, // ECEF position in meters (EUS=ECEF),
+// {position: position, // ECEF position in meters,
 // heading: fwd,        // unit vector pointing along the LOS (ECEF)
 // up: up,              // (optional) up unit vector for LOS, e.g. camera orientation
 // right:               // (optional) right unit vector
@@ -46,7 +46,7 @@ export class CNodeLOS extends CNodeTrack {
         const originLat = firstLLA.x * Math.PI / 180;  // Convert to radians
         const originLon = firstLLA.y * Math.PI / 180;  // Convert to radians
 
-        // EUS is now identical to ECEF, so data.heading is already an ECEF vector.
+        // data.heading is an ECEF vector.
         // We just need the ECEF→ENU rotation at the export origin.
         const mECEF2ENU_Origin = new Matrix3().set(
             -Math.sin(originLon), Math.cos(originLon), 0,
@@ -86,7 +86,7 @@ export class CNodeLOS extends CNodeTrack {
             const py = roundIfClose(posENU.y, 1e-6);
             const pz = roundIfClose(posENU.z, 1e-6);
 
-            // data.heading is ECEF (EUS=ECEF). Convert directly to ENU at origin.
+            // data.heading is ECEF. Convert directly to ENU at origin.
             const headingENU = data.heading.clone().applyMatrix3(mECEF2ENU_Origin);
             
             // Normalize to ensure it's a unit vector
@@ -201,11 +201,11 @@ export class CNodeLOS extends CNodeTrack {
                 continue;
             }
             
-            // Convert position from ENU back to EUS (EUS=ECEF)
+            // Convert position from ENU back to ECEF
             const posENU = new Vector3(x, y, z);
             const posECEF = ENU2ECEF_radii(posENU, originLat, originLon, false);
 
-            // Convert heading from ENU back to ECEF (=EUS)
+            // Convert heading from ENU back to ECEF
             const headingENU = new Vector3(dx, dy, dz);
             const headingECEF = headingENU.clone().applyMatrix3(mENU2ECEF_Origin);
             headingECEF.normalize();

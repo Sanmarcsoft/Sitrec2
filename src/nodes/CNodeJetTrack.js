@@ -69,7 +69,7 @@ export class CNodeJetTrack extends CNodeTrack {
         // Get terrain node for AGL mode
         const terrainNode = this.agl ? (this.in.terrain ?? NodeMan.get("TerrainModel", false) ?? null) : null;
 
-        //  new code, jet is at jetOrigin, an arbitrary point in EUS
+        //  new code, jet is at jetOrigin, an arbitrary point in ECEF
         const jetFwd = getLocalNorthVector(jetPos)
         const jetUp = getLocalUpVector(jetPos)
 

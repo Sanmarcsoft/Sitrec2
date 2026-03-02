@@ -1100,7 +1100,7 @@ export class CNodeTerrainUI extends CNode {
 
     // given two Vector3s, zoom to the box they define
     zoomToBox(min, max) {
-        // min and max are in EUS, so convert to LLA
+        // min and max are in ECEF, so convert to LLA
         const minLLA = ECEFToLLAVD_radii(min);
         const maxLLA = ECEFToLLAVD_radii(max);
         this.zoomToLLABox(minLLA.x, maxLLA.x, minLLA.y, maxLLA.y)

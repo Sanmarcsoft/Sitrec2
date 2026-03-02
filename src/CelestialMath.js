@@ -4,7 +4,7 @@
 // X axis - To vernal equinox
 // Y Axis - right angles to this, in the equatorial plane
 // Z Axis - Up through the North pole
-// EUS is now identical to ECEF (identity mapping), so celestial and scene coords are the same.
+// Celestial and scene coordinates are both ECEF.
 // See: https://en.wikipedia.org/wiki/Equatorial_coordinate_system#Rectangular_coordinates
 import {V3} from "./threeUtils";
 import {ECEFToLLAVD_radii, wgs84} from "./LLA-ECEF-ENU";
@@ -132,7 +132,7 @@ export function celestialToECEF(ra, dec, dist, gst) {
     return V3(x_ecef, y_ecef, z_ecef);
 }
 
-// get a vector in EUS coordinates to a celestial body from a EUS position (like a camera or object)
+// get a vector in ECEF coordinates to a celestial body from an ECEF position (like a camera or object)
 // - body = (e.g "Sun", "Venus", "Moon", etc)
 // - date = date of observation (Date object)
 export function getCelestialDirection(body, date, pos) {
@@ -165,7 +165,7 @@ export function getCelestialDirectionFromRaDec(ra, dec, date) {
     return ecef.normalize();
 }
 
-// Geocentric body vector in ECEF/EUS (meters).
+// Geocentric body vector in ECEF (meters).
 // Uses astronomy-engine's geocentric EQJ vector, rotates to EQD (of-date),
 // then rotates by GAST into Earth-fixed coordinates.
 export function getGeocentricBodyPositionECEF(body, date, aberration = true) {

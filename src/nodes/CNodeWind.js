@@ -29,7 +29,7 @@ export class CNodeWind extends CNode {
         }
 
        // this.optionalInputs(["originTrack"])
-        // wind defaults to being in the frame of reference of the EUS origin (0,0,0)
+        // wind defaults to being in the frame of reference of the ECEF origin (Earth center)
         this.position=V3(0,0,0);
 
 
@@ -94,7 +94,7 @@ export class CNodeWind extends CNode {
     }
 
     // returns a pre-frame wind vector, indicating wind motion for that frame
-    // in EUS coordinates
+    // in ECEF coordinates
     // optionally supply a position to get the wind at that position
     // with reference to local north and up vectors
     getValueFrame(f, position) {

@@ -7,7 +7,7 @@
  * This handles:
  * - Coordinate mapping and projection calculations
  * - Bilinear elevation interpolation
- * - LLA to EUS coordinate conversion
+ * - LLA to ECEF coordinate conversion
  * - Tile center relative positioning
  */
 

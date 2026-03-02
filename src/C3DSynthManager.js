@@ -103,7 +103,7 @@ export class C3DSynthManager extends CManager {
     
     /**
      * Create a 15x15x4 meter building centered at the given point
-     * @param {Vector3} centerPoint - The center point on the ground (in EUS coordinates)
+     * @param {Vector3} centerPoint - The center point on the ground (in ECEF coordinates)
      * @returns {CNodeSynthBuilding} The created building
      */
     createBuildingAtPoint(centerPoint) {
@@ -289,7 +289,7 @@ export class C3DSynthManager extends CManager {
     
     /**
      * Create a cloud disk at the given ground point
-     * @param {Vector3} groundPoint - The ground point (in EUS coordinates)
+     * @param {Vector3} groundPoint - The ground point (in ECEF coordinates)
      * @param {number} altitude - Altitude in meters (default 10,000 ft)
      * @returns {CNodeSynthClouds} The created cloud layer
      */
@@ -393,7 +393,7 @@ export class C3DSynthManager extends CManager {
     
     /**
      * Create a ground overlay at the given ground point
-     * @param {Vector3} groundPoint - The ground point (in EUS coordinates)
+     * @param {Vector3} groundPoint - The ground point (in ECEF coordinates)
      * @returns {CNodeGroundOverlay} The created overlay
      */
     createOverlayAtPoint(groundPoint) {

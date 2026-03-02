@@ -2068,7 +2068,7 @@ export class CCustomManager {
             console.log(`Using terrain elevation: ${finalAlt}m at ${lat}, ${lon}`);
         }
 
-        // Convert LLA to EUS coordinates
+        // Convert LLA to ECEF coordinates
         const ecefPosition = LLAToECEF(lat, lon, finalAlt);
 
         // Generate unique IDs
@@ -2131,7 +2131,7 @@ export class CCustomManager {
                 cameraNode.setLLA(cameraLat, cameraLon, cameraAlt);
                 console.log(`Camera positioned at: ${cameraLat}, ${cameraLon}, ${cameraAlt}m (100m south and 100m above object)`);
             } else {
-                // Fallback: set camera position directly using EUS coordinates
+                // Fallback: set camera position directly using ECEF coordinates
                 const cameraECEF = LLAToECEF(cameraLat, cameraLon, cameraAlt);
                 const objectECEF = LLAToECEF(lat, lon, alt);
 
@@ -2152,7 +2152,7 @@ export class CCustomManager {
      * Show a context menu for ground clicks with camera/target positioning options
      * @param {number} mouseX - Screen X coordinate
      * @param {number} mouseY - Screen Y coordinate
-     * @param {Vector3} groundPoint - The 3D point where the ground was clicked (in EUS coordinates)
+     * @param {Vector3} groundPoint - The 3D point where the ground was clicked (in ECEF coordinates)
      */
     showGroundContextMenu(mouseX, mouseY, groundPoint) {
         // Check if we're in track editing mode
@@ -2578,7 +2578,7 @@ export class CCustomManager {
      * Show a context menu for track editing when in edit mode
      * @param {number} mouseX - Screen X coordinate
      * @param {number} mouseY - Screen Y coordinate
-     * @param {Vector3} groundPoint - The 3D point where the ground was clicked (in EUS coordinates)
+     * @param {Vector3} groundPoint - The 3D point where the ground was clicked (in ECEF coordinates)
      */
     showTrackEditingMenu(mouseX, mouseY, groundPoint) {
         const trackOb = Globals.editingTrack;
