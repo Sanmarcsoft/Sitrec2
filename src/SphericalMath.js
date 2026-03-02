@@ -281,8 +281,8 @@ export function getLocalNorthVector(position) {
     assert(Sit.lat !== undefined && Sit.lon !== undefined, "Sit.lat and Sit.lon must be defined for getLocalNorthVector() to work.");
     // to get a northish direction we get the vector from here to the north pole.
     // to get the north pole in EUS, we take the north pole's position in ECEF
-    const northPoleEUS = getNorthPole();
-    const toNorth = northPoleEUS.clone().sub(position).normalize()
+    const northPoleECEF = getNorthPole();
+    const toNorth = northPoleECEF.clone().sub(position).normalize()
     // take only the component perpendicular to the local up vector
     const up = getLocalUpVector(position);
     const dot = toNorth.dot(up)

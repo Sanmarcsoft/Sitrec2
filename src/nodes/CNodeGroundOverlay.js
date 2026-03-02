@@ -304,7 +304,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         
         const centerLat = (this.north + this.south) / 2;
         const centerLon = (this.east + this.west) / 2;
-        const centerEUS = LLAToECEF(centerLat, centerLon, 0);
+        const centerECEF = LLAToECEF(centerLat, centerLon, 0);
 
         const corners = [
             {lat: this.north, lon: this.west},
@@ -317,11 +317,11 @@ export class CNodeGroundOverlay extends CNode3DGroup {
             let pos = LLAToECEF(corner.lat, corner.lon, 0);
 
             if (this.rotation !== 0) {
-                const offset = pos.clone().sub(centerEUS);
-                const up = getLocalUpVector(centerEUS);
+                const offset = pos.clone().sub(centerECEF);
+                const up = getLocalUpVector(centerECEF);
                 const rotationRad = radians(this.rotation);
                 const rotatedOffset = offset.clone().applyAxisAngle(up, rotationRad);
-                pos = centerEUS.clone().add(rotatedOffset);
+                pos = centerECEF.clone().add(rotatedOffset);
             }
 
             return pos;
@@ -344,15 +344,15 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         ];
 
         if (this.rotation !== 0) {
-            const centerEUS = LLAToECEF(centerLat, centerLon, 0);
-            const up = getLocalUpVector(centerEUS);
+            const centerECEF = LLAToECEF(centerLat, centerLon, 0);
+            const up = getLocalUpVector(centerECEF);
             const rotationRad = radians(this.rotation);
             
             return corners.map(corner => {
                 const pos = LLAToECEF(corner.lat, corner.lon, 0);
-                const offset = pos.clone().sub(centerEUS);
+                const offset = pos.clone().sub(centerECEF);
                 const rotatedOffset = offset.clone().applyAxisAngle(up, rotationRad);
-                const rotatedPos = centerEUS.clone().add(rotatedOffset);
+                const rotatedPos = centerECEF.clone().add(rotatedOffset);
                 const lla = ECEFToLLAVD_radii(rotatedPos);
                 return {lat: lla.x, lon: lla.y};
             });
@@ -408,14 +408,14 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         let relLon = lon - centerLon;
 
         if (this.rotation !== 0) {
-            const centerEUS = LLAToECEF(centerLat, centerLon, 0);
+            const centerECEF = LLAToECEF(centerLat, centerLon, 0);
             const pos = LLAToECEF(lat, lon, 0);
-            const offset = pos.clone().sub(centerEUS);
+            const offset = pos.clone().sub(centerECEF);
 
-            const up = getLocalUpVector(centerEUS);
+            const up = getLocalUpVector(centerECEF);
             const rotationRad = radians(-this.rotation);
             const rotatedOffset = offset.clone().applyAxisAngle(up, rotationRad);
-            const rotatedPos = centerEUS.clone().add(rotatedOffset);
+            const rotatedPos = centerECEF.clone().add(rotatedOffset);
 
             const rotatedLLA = ECEFToLLAVD_radii(rotatedPos);
             relLat = rotatedLLA.x - centerLat;
@@ -577,8 +577,8 @@ export class CNodeGroundOverlay extends CNode3DGroup {
     updateGroupPosition() {
         const centerLat = (this.north + this.south) / 2;
         const centerLon = (this.east + this.west) / 2;
-        const centerEUS = LLAToECEF(centerLat, centerLon, 0);
-        const groundCenter = getPointBelow(centerEUS);
+        const centerECEF = LLAToECEF(centerLat, centerLon, 0);
+        const groundCenter = getPointBelow(centerECEF);
         this.group.position.copy(groundCenter);
     }
     
@@ -660,8 +660,8 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         
         const centerLat = (this.north + this.south) / 2;
         const centerLon = (this.east + this.west) / 2;
-        const centerEUS = LLAToECEF(centerLat, centerLon, altitudeMeters);
-        this.group.position.copy(centerEUS);
+        const centerECEF = LLAToECEF(centerLat, centerLon, altitudeMeters);
+        this.group.position.copy(centerECEF);
         
         const positions = [];
         const uvs = [];
@@ -698,7 +698,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
                 }
                 
                 const pos = LLAToECEF(lat, lon, altitudeMeters);
-                positions.push(pos.x - centerEUS.x, pos.y - centerEUS.y, pos.z - centerEUS.z);
+                positions.push(pos.x - centerECEF.x, pos.y - centerECEF.y, pos.z - centerECEF.z);
                 uvs.push(u, v);
             }
         }
@@ -920,21 +920,21 @@ export class CNodeGroundOverlay extends CNode3DGroup {
 
         const centerLat = (this.north + this.south) / 2;
         const centerLon = (this.east + this.west) / 2;
-        const centerEUS = LLAToECEF(centerLat, centerLon, 0);
+        const centerECEF = LLAToECEF(centerLat, centerLon, 0);
 
-        const northMidEUS = this.freeTransform && this.corners
+        const northMidECEF = this.freeTransform && this.corners
             ? LLAToECEF((this.corners[0].lat + this.corners[1].lat) / 2, (this.corners[0].lon + this.corners[1].lon) / 2, 0)
             : LLAToECEF(this.north, centerLon, 0);
-        let rotHandleEUS = northMidEUS.clone();
+        let rotHandleECEF = northMidECEF.clone();
         if (!this.freeTransform && this.rotation !== 0) {
-            const offset = northMidEUS.clone().sub(centerEUS);
-            const up = getLocalUpVector(centerEUS);
+            const offset = northMidECEF.clone().sub(centerECEF);
+            const up = getLocalUpVector(centerECEF);
             const rotatedOffset = offset.clone().applyAxisAngle(up, radians(this.rotation));
-            rotHandleEUS = centerEUS.clone().add(rotatedOffset);
+            rotHandleECEF = centerECEF.clone().add(rotatedOffset);
         }
 
-        const toNorthMid = rotHandleEUS.clone().sub(centerEUS);
-        const rotHandlePos = centerEUS.clone().add(toNorthMid.multiplyScalar(0.9));
+        const toNorthMid = rotHandleECEF.clone().sub(centerECEF);
+        const rotHandlePos = centerECEF.clone().add(toNorthMid.multiplyScalar(0.9));
         const adjustedRotHandle = pointAbove(getPointBelow(rotHandlePos), 5);
 
         this.rotationHandle = new Mesh(handleGeometry.clone(), this.createHandleMaterial(0x00ffff));
@@ -1163,7 +1163,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
                     worldLLA: {lat: lp.worldLLA.lat, lon: lp.worldLLA.lon}
                 }));
                 if (this.freeTransform && this.corners) {
-                    this.dragInitialCornersEUS = this.corners.map(c => LLAToECEF(c.lat, c.lon, 0));
+                    this.dragInitialCornersECEF = this.corners.map(c => LLAToECEF(c.lat, c.lon, 0));
                 }
             }
 
@@ -1172,10 +1172,10 @@ export class CNodeGroundOverlay extends CNode3DGroup {
                 this.dragInitialLockPoints = this.lockPoints.map(lp => ({
                     uv: {u: lp.uv.u, v: lp.uv.v},
                     worldLLA: {lat: lp.worldLLA.lat, lon: lp.worldLLA.lon},
-                    worldEUS: LLAToECEF(lp.worldLLA.lat, lp.worldLLA.lon, 0)
+                    worldECEF: LLAToECEF(lp.worldLLA.lat, lp.worldLLA.lon, 0)
                 }));
                 if (this.freeTransform && this.corners) {
-                    this.dragInitialCornersEUS = this.corners.map(c => LLAToECEF(c.lat, c.lon, 0));
+                    this.dragInitialCornersECEF = this.corners.map(c => LLAToECEF(c.lat, c.lon, 0));
                 }
             }
 
@@ -1188,12 +1188,12 @@ export class CNodeGroundOverlay extends CNode3DGroup {
                 this.dragInitialLockPoints = this.lockPoints.map(lp => ({
                     uv: {u: lp.uv.u, v: lp.uv.v},
                     worldLLA: {lat: lp.worldLLA.lat, lon: lp.worldLLA.lon},
-                    worldEUS: LLAToECEF(lp.worldLLA.lat, lp.worldLLA.lon, 0)
+                    worldECEF: LLAToECEF(lp.worldLLA.lat, lp.worldLLA.lon, 0)
                 }));
                 if (this.freeTransform && this.corners) {
                     this.dragInitialCorners = this.corners.map(c => ({lat: c.lat, lon: c.lon}));
-                    this.dragInitialCornersEUS = this.corners.map(c => LLAToECEF(c.lat, c.lon, 0));
-                    this.dragCenterEUS = this.dragInitialCornersEUS.reduce(
+                    this.dragInitialCornersECEF = this.corners.map(c => LLAToECEF(c.lat, c.lon, 0));
+                    this.dragCenterECEF = this.dragInitialCornersECEF.reduce(
                         (acc, p) => acc.add(p), new Vector3()
                     ).multiplyScalar(0.25);
                 }
@@ -1211,13 +1211,13 @@ export class CNodeGroundOverlay extends CNode3DGroup {
                         const lla = ECEFToLLAVD_radii(intersect.point);
                         this.dragInitialClickLat = lla.x;
                         this.dragInitialClickLon = lla.y;
-                        this.dragInitialClickEUS = intersect.point.clone();
+                        this.dragInitialClickECEF = intersect.point.clone();
                         
-                        if (this.freeTransform && this.dragCenterEUS) {
-                            const up = getLocalUpVector(this.dragCenterEUS);
-                            const toClick = intersect.point.clone().sub(this.dragCenterEUS);
+                        if (this.freeTransform && this.dragCenterECEF) {
+                            const up = getLocalUpVector(this.dragCenterECEF);
+                            const toClick = intersect.point.clone().sub(this.dragCenterECEF);
                             const toClickFlat = toClick.clone().sub(up.clone().multiplyScalar(toClick.dot(up)));
-                            this.dragInitialAngleEUS = Math.atan2(toClickFlat.z, toClickFlat.x);
+                            this.dragInitialAngleECEF = Math.atan2(toClickFlat.z, toClickFlat.x);
                         } else {
                             const centerLat = (this.north + this.south) / 2;
                             const centerLon = (this.east + this.west) / 2;
@@ -1328,17 +1328,17 @@ export class CNodeGroundOverlay extends CNode3DGroup {
                     if (this.draggingHandle.type === 'corner') {
                         this.updateCorner(this.draggingHandle.index, lla.x, lla.y);
                     } else if (this.draggingHandle.type === 'rotation') {
-                        if (this.freeTransform && this.dragInitialCornersEUS && this.dragCenterEUS) {
-                            const up = getLocalUpVector(this.dragCenterEUS);
-                            const toMouse = intersect.point.clone().sub(this.dragCenterEUS);
+                        if (this.freeTransform && this.dragInitialCornersECEF && this.dragCenterECEF) {
+                            const up = getLocalUpVector(this.dragCenterECEF);
+                            const toMouse = intersect.point.clone().sub(this.dragCenterECEF);
                             const toMouseFlat = toMouse.clone().sub(up.clone().multiplyScalar(toMouse.dot(up)));
                             const currentAngle = Math.atan2(toMouseFlat.z, toMouseFlat.x);
-                            const angleDelta = currentAngle - this.dragInitialAngleEUS;
+                            const angleDelta = currentAngle - this.dragInitialAngleECEF;
 
-                            this.corners = this.dragInitialCornersEUS.map(pos => {
-                                const offset = pos.clone().sub(this.dragCenterEUS);
+                            this.corners = this.dragInitialCornersECEF.map(pos => {
+                                const offset = pos.clone().sub(this.dragCenterECEF);
                                 const rotatedOffset = offset.clone().applyAxisAngle(up, -angleDelta);
-                                const rotatedPos = this.dragCenterEUS.clone().add(rotatedOffset);
+                                const rotatedPos = this.dragCenterECEF.clone().add(rotatedOffset);
                                 const groundPos = getPointBelow(rotatedPos);
                                 const finalLLA = ECEFToLLAVD_radii(groundPos);
                                 return {lat: finalLLA.x, lon: finalLLA.y};
@@ -1349,9 +1349,9 @@ export class CNodeGroundOverlay extends CNode3DGroup {
                             // Rotate lock points around the same center
                             this.lockPoints = this.dragInitialLockPoints.map(lp => {
                                 const lpWorld = LLAToECEF(lp.worldLLA.lat, lp.worldLLA.lon, 0);
-                                const offset = lpWorld.clone().sub(this.dragCenterEUS);
+                                const offset = lpWorld.clone().sub(this.dragCenterECEF);
                                 const rotatedOffset = offset.clone().applyAxisAngle(up, -angleDelta);
-                                const rotatedPos = this.dragCenterEUS.clone().add(rotatedOffset);
+                                const rotatedPos = this.dragCenterECEF.clone().add(rotatedOffset);
                                 const groundPos = getPointBelow(rotatedPos);
                                 const finalLLA = ECEFToLLAVD_radii(groundPos);
                                 return {
@@ -1368,13 +1368,13 @@ export class CNodeGroundOverlay extends CNode3DGroup {
                             this.rotation = this.dragInitialRotation - degrees(angleDelta);
 
                             // Rotate lock points around center
-                            const centerEUS = LLAToECEF(centerLat, centerLon, 0);
-                            const up = getLocalUpVector(centerEUS);
+                            const centerECEF = LLAToECEF(centerLat, centerLon, 0);
+                            const up = getLocalUpVector(centerECEF);
                             this.lockPoints = this.dragInitialLockPoints.map(lp => {
-                                const lpWorld = lp.worldEUS.clone();
-                                const offset = lpWorld.clone().sub(centerEUS);
+                                const lpWorld = lp.worldECEF.clone();
+                                const offset = lpWorld.clone().sub(centerECEF);
                                 const rotatedOffset = offset.clone().applyAxisAngle(up, angleDelta);
-                                const rotatedPos = centerEUS.clone().add(rotatedOffset);
+                                const rotatedPos = centerECEF.clone().add(rotatedOffset);
                                 const groundPos = getPointBelow(rotatedPos);
                                 const finalLLA = ECEFToLLAVD_radii(groundPos);
                                 return {
@@ -1385,10 +1385,10 @@ export class CNodeGroundOverlay extends CNode3DGroup {
                             this.updateLockPointHandles();
                         }
                     } else if (this.draggingHandle.type === 'move') {
-                        if (this.freeTransform && this.dragInitialCornersEUS && this.dragInitialClickEUS) {
-                            const displacement = intersect.point.clone().sub(this.dragInitialClickEUS);
+                        if (this.freeTransform && this.dragInitialCornersECEF && this.dragInitialClickECEF) {
+                            const displacement = intersect.point.clone().sub(this.dragInitialClickECEF);
 
-                            this.corners = this.dragInitialCornersEUS.map(pos => {
+                            this.corners = this.dragInitialCornersECEF.map(pos => {
                                 const movedPos = pos.clone().add(displacement);
                                 const groundPos = getPointBelow(movedPos);
                                 const finalLLA = ECEFToLLAVD_radii(groundPos);
@@ -1399,7 +1399,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
 
                             // Move lock points by same displacement
                             this.lockPoints = this.dragInitialLockPoints.map(lp => {
-                                const movedPos = lp.worldEUS.clone().add(displacement);
+                                const movedPos = lp.worldECEF.clone().add(displacement);
                                 const groundPos = getPointBelow(movedPos);
                                 const finalLLA = ECEFToLLAVD_radii(groundPos);
                                 return {
@@ -1476,8 +1476,8 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         const displacement = newDraggedCorner.clone().sub(oldDraggedCorner);
 
         // Get local up vector for horizontal projection
-        const centerEUS = fixedCorner.clone().add(newDraggedCorner).multiplyScalar(0.5);
-        const localUp = getLocalUpVector(centerEUS);
+        const centerECEF = fixedCorner.clone().add(newDraggedCorner).multiplyScalar(0.5);
+        const localUp = getLocalUpVector(centerECEF);
 
         // Project displacement to horizontal plane
         const horizontalDisp = displacement.clone().sub(
@@ -1594,8 +1594,8 @@ export class CNodeGroundOverlay extends CNode3DGroup {
      * Combined with the quad constraint (4th corner derivable), this fully determines the corners.
      */
     solveCornersFrom3LockPoints() {
-        // Convert lock points to EUS for computation
-        const lockEUS = this.lockPoints.map(lp => ({
+        // Convert lock points to ECEF for computation
+        const lockECEF = this.lockPoints.map(lp => ({
             uv: lp.uv,
             world: LLAToECEF(lp.worldLLA.lat, lp.worldLLA.lon, 0)
         }));
@@ -1606,11 +1606,11 @@ export class CNodeGroundOverlay extends CNode3DGroup {
 
         // Compute the homography from 3 points using a projective approach
         // Since we have 3 points, we can solve for an affine transform (6 DOF)
-        // which maps UV to world (lon, lat proxy using local EUS x, z)
+        // which maps UV to world (lon, lat proxy using local ECEF x, z)
 
-        const uv1 = lockEUS[0].uv, w1 = lockEUS[0].world;
-        const uv2 = lockEUS[1].uv, w2 = lockEUS[1].world;
-        const uv3 = lockEUS[2].uv, w3 = lockEUS[2].world;
+        const uv1 = lockECEF[0].uv, w1 = lockECEF[0].world;
+        const uv2 = lockECEF[1].uv, w2 = lockECEF[1].world;
+        const uv3 = lockECEF[2].uv, w3 = lockECEF[2].world;
 
         // Solve affine transform: world = A * uv + b
         // Using 3 points gives us exactly 6 equations for 6 unknowns (a11, a12, a21, a22, bx, bz)
@@ -1659,7 +1659,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
      * and scale perpendicular to it. Corner dragging will be constrained accordingly.
      */
     solveCornersFrom2LockPoints() {
-        // Get the two lock points in EUS
+        // Get the two lock points in ECEF
         const lp1 = this.lockPoints[0];
         const lp2 = this.lockPoints[1];
         const w1 = LLAToECEF(lp1.worldLLA.lat, lp1.worldLLA.lon, 0);
@@ -1740,12 +1740,12 @@ export class CNodeGroundOverlay extends CNode3DGroup {
     /**
      * Convert UV to world position using bilinear interpolation of corners.
      */
-    uvToWorldFromCorners(uv, cornersEUS) {
+    uvToWorldFromCorners(uv, cornersECEF) {
         // Bilinear interpolation
         // corners: 0=NW(0,0), 1=NE(1,0), 2=SE(1,1), 3=SW(0,1)
         const u = uv.u, v = uv.v;
-        const top = cornersEUS[0].clone().lerp(cornersEUS[1], u);
-        const bottom = cornersEUS[3].clone().lerp(cornersEUS[2], u);
+        const top = cornersECEF[0].clone().lerp(cornersECEF[1], u);
+        const bottom = cornersECEF[3].clone().lerp(cornersECEF[2], u);
         return top.clone().lerp(bottom, v);
     }
 
@@ -1811,7 +1811,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
             this.rotation = 0;
         }
 
-        if (!this.dragInitialCornersEUS || !this.dragInitialLockPoints) {
+        if (!this.dragInitialCornersECEF || !this.dragInitialLockPoints) {
             this.corners[cornerIndex] = {lat, lon};
             this._cachedHomography = null;
             this.updateBoundsFromCorners();
@@ -1881,7 +1881,7 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         }
 
         // Apply transformation to all 4 corner UVs to get new world positions
-        const refY = this.dragInitialCornersEUS[0].y;
+        const refY = this.dragInitialCornersECEF[0].y;
         this.corners = cornerUVs.map(uv => {
             const world = transform(uv.u, uv.v);
             const pos = new Vector3(world.x, refY, world.z);
@@ -2284,16 +2284,16 @@ export class CNodeGroundOverlay extends CNode3DGroup {
     gotoOverlay() {
         const centerLat = (this.north + this.south) / 2;
         const centerLon = (this.east + this.west) / 2;
-        const centerEUS = LLAToECEF(centerLat, centerLon, 0);
-        const groundPos = getPointBelow(centerEUS);
+        const centerECEF = LLAToECEF(centerLat, centerLon, 0);
+        const groundPos = getPointBelow(centerECEF);
         
-        const northEUS = LLAToECEF(this.north, centerLon, 0);
-        const southEUS = LLAToECEF(this.south, centerLon, 0);
-        const eastEUS = LLAToECEF(centerLat, this.east, 0);
-        const westEUS = LLAToECEF(centerLat, this.west, 0);
+        const northECEF = LLAToECEF(this.north, centerLon, 0);
+        const southECEF = LLAToECEF(this.south, centerLon, 0);
+        const eastECEF = LLAToECEF(centerLat, this.east, 0);
+        const westECEF = LLAToECEF(centerLat, this.west, 0);
         
-        const nsDistance = northEUS.distanceTo(southEUS);
-        const ewDistance = eastEUS.distanceTo(westEUS);
+        const nsDistance = northECEF.distanceTo(southECEF);
+        const ewDistance = eastECEF.distanceTo(westECEF);
         const longestEdge = Math.max(nsDistance, ewDistance);
         
         const above = longestEdge * 5;

@@ -2452,10 +2452,10 @@ export class CNodeView3D extends CNodeViewCanvas {
             const satRayDirection = this.raycaster.ray.direction.clone();
             
             for (const satData of nightSkyNode.TLEData.satData) {
-                if (!satData.visible || !satData.eus) continue;
+                if (!satData.visible || !satData.ecef) continue;
 
                 // Get satellite direction from actual camera position
-                const satPos = satData.eus.clone();
+                const satPos = satData.ecef.clone();
                 const satDir = satPos.clone().sub(this.camera.position).normalize();
 
                 // Calculate angle between ray and satellite direction

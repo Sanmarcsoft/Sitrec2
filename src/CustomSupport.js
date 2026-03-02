@@ -2069,7 +2069,7 @@ export class CCustomManager {
         }
 
         // Convert LLA to EUS coordinates
-        const eusPosition = LLAToECEF(lat, lon, finalAlt);
+        const ecefPosition = LLAToECEF(lat, lon, finalAlt);
 
         // Generate unique IDs
         const objectID = `syntheticObject_${Date.now()}`;
@@ -2082,12 +2082,12 @@ export class CCustomManager {
             radius: 5,
             color: 0x808080,
             material: "phong",
-            position: eusPosition,
+            position: ecefPosition,
         });
 
         // Create track and associate with object
         const trackOb = TrackManager.addSyntheticTrack({
-            startPoint: eusPosition,
+            startPoint: ecefPosition,
             name: name,
             objectID: objectID,
             editMode: true,
@@ -2132,15 +2132,15 @@ export class CCustomManager {
                 console.log(`Camera positioned at: ${cameraLat}, ${cameraLon}, ${cameraAlt}m (100m south and 100m above object)`);
             } else {
                 // Fallback: set camera position directly using EUS coordinates
-                const cameraEUS = LLAToECEF(cameraLat, cameraLon, cameraAlt);
-                const objectEUS = LLAToECEF(lat, lon, alt);
+                const cameraECEF = LLAToECEF(cameraLat, cameraLon, cameraAlt);
+                const objectECEF = LLAToECEF(lat, lon, alt);
 
                 if (cameraNode.camera) {
-                    cameraNode.camera.position.copy(cameraEUS);
-                    cameraNode.camera.lookAt(objectEUS);
+                    cameraNode.camera.position.copy(cameraECEF);
+                    cameraNode.camera.lookAt(objectECEF);
                     console.log(`Camera positioned and looking at object`);
                 } else if (cameraNode.position) {
-                    cameraNode.position.copy(cameraEUS);
+                    cameraNode.position.copy(cameraECEF);
                 }
             }
         } else {

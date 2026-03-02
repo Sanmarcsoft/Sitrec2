@@ -633,14 +633,14 @@ export function intersectMSL(point, headingVector) {
 
 // get intersection of a point/heading ray with the WGS84 ellipsoid
 // More accurate than intersectMSL for high-latitude locations
-export function intersectEllipsoid(pointEUS, headingVectorEUS) {
+export function intersectEllipsoid(point, headingVector) {
     const a = Globals.equatorRadius;
     const b = Globals.polarRadius;
-    
-    const dirECEF = headingVectorEUS.clone().normalize();
-    
-    const ox = pointEUS.x, oy = pointEUS.y, oz = pointEUS.z;
-    const dx = dirECEF.x, dy = dirECEF.y, dz = dirECEF.z;
+
+    const dir = headingVector.clone().normalize();
+
+    const ox = point.x, oy = point.y, oz = point.z;
+    const dx = dir.x, dy = dir.y, dz = dir.z;
     
     const a2 = a * a, b2 = b * b;
     
@@ -667,8 +667,7 @@ export function intersectEllipsoid(pointEUS, headingVectorEUS) {
         return null;
     }
     
-    const intersectionECEF = pointEUS.clone().add(dirECEF.clone().multiplyScalar(t));
-    return intersectionECEF;
+    return point.clone().add(dir.clone().multiplyScalar(t));
 }
 
 export class CDisplayLine {

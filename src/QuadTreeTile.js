@@ -509,10 +509,10 @@ export class QuadTreeTile {
             }
 
             // Convert to EUS coordinates
-            const vertexEUS = LLAToECEF(lat, lon, elevation);
+            const vertexECEF = LLAToECEF(lat, lon, elevation);
 
             // Subtract the center of the tile for relative positioning
-            const vertex = vertexEUS.sub(tileCenter);
+            const vertex = vertexECEF.sub(tileCenter);
 
             assert(!isNaN(vertex.x), 'vertex.x is NaN in QuadTreeTile.js i=' + i);
             assert(!isNaN(vertex.y), 'vertex.y is NaN in QuadTreeTile.js');
@@ -890,10 +890,10 @@ export class QuadTreeTile {
             // elevation = Math.random()*100000
 
             // convert that to EUS
-            const vertexEUS = LLAToECEF(lat, lon, elevation)
+            const vertexECEF = LLAToECEF(lat, lon, elevation)
 
             // subtract the center of the tile
-            const vertex = vertexEUS.sub(tileCenter)
+            const vertex = vertexECEF.sub(tileCenter)
 
             assert(!isNaN(vertex.x), 'vertex.x is NaN in QuadTreeMap.js i=' + i)
             assert(!isNaN(vertex.y), 'vertex.y is NaN in QuadTreeMap.js')
@@ -1076,8 +1076,8 @@ export class QuadTreeTile {
                 this.highestAltitude = elevation;
             }
 
-            const vertexEUS = LLAToECEF(lat, lon, elevation);
-            const vertex = vertexEUS.sub(tileCenter);
+            const vertexECEF = LLAToECEF(lat, lon, elevation);
+            const vertex = vertexECEF.sub(tileCenter);
 
             assert(!isNaN(vertex.x), 'vertex.x is NaN in QuadTreeTile.js i=' + i);
             assert(!isNaN(vertex.y), 'vertex.y is NaN in QuadTreeTile.js');
@@ -1149,10 +1149,10 @@ export class QuadTreeTile {
             const elevation = 0;
 
             // Convert to EUS coordinates
-            const vertexEUS = LLAToECEF(lat, lon, elevation);
+            const vertexECEF = LLAToECEF(lat, lon, elevation);
 
             // Subtract the center of the tile for relative positioning
-            const vertex = vertexEUS.sub(tileCenter);
+            const vertex = vertexECEF.sub(tileCenter);
 
             assert(!isNaN(vertex.x), 'vertex.x is NaN in QuadTreeTile.js i=' + i);
             assert(!isNaN(vertex.y), 'vertex.y is NaN in QuadTreeTile.js');
@@ -2201,11 +2201,11 @@ export class QuadTreeTile {
         // Get tile center coordinates for local up/north calculation
         const tileCenterLat = this.map.options.mapProjection.getNorthLatitude(this.y + 0.5, this.z);
         const tileCenterLon = this.map.options.mapProjection.getLeftLongitude(this.x + 0.5, this.z);
-        const tileCenterEUS = LLAToECEF(tileCenterLat, tileCenterLon, 0);
+        const tileCenterECEF = LLAToECEF(tileCenterLat, tileCenterLon, 0);
 
         // Get local up and north vectors for the tile center
-        const localUp = getLocalUpVector(tileCenterEUS);
-        const localNorth = getLocalNorthVector(tileCenterEUS);
+        const localUp = getLocalUpVector(tileCenterECEF);
+        const localNorth = getLocalNorthVector(tileCenterECEF);
 
         // Process each pixel in the canvas
         for (let y = 0; y < canvas.height; y++) {

@@ -237,11 +237,11 @@ export class CNodeViewEphemeris extends CNodeViewText {
         for (let i = 0; i < tleData.satData.length; i++) {
             const sat = tleData.satData[i];
             
-            if (!sat.visible || !sat.eus) {
+            if (!sat.visible || !sat.ecef) {
                 continue;
             }
 
-            const satPos = sat.eus;
+            const satPos = sat.ecef;
             const toSat = satPos.clone().sub(cameraPos);
             const range = toSat.length();
             const forward = toSat.clone().normalize();

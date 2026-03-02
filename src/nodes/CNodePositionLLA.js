@@ -262,7 +262,7 @@ export class CNodePositionLLA extends CNodeTrack {
 //     }
 
     goTo() {
-        NodeMan.get("mainCamera").goToPoint(this.EUS,100000,100);
+        NodeMan.get("mainCamera").goToPoint(this.ecef,100000,100);
     }
 
 
@@ -276,7 +276,7 @@ export class CNodePositionLLA extends CNodeTrack {
         this.agl = true; // set AGL to true, so we adjust the altitude above ground level
 
         this.recalculateCascade();
-        NodeMan.get("mainCamera").goToPoint(this.EUS,2300000,100000);
+        NodeMan.get("mainCamera").goToPoint(this.ecef,2300000,100000);
 
 
         if (NodeMan.exists("terrainUI")) {
@@ -413,19 +413,19 @@ export class CNodePositionLLA extends CNodeTrack {
             if (this.agl && terrainNode) {
                 // Use cached terrain query for ground level
                 const queryPos = LLAToECEF(this._LLA[0], this._LLA[1], 100000);
-                this.EUS = this.getPointBelowCached(terrainNode, queryPos, aglHeight, 0);
+                this.ecef = this.getPointBelowCached(terrainNode, queryPos, aglHeight, 0);
             } else if (this.agl) {
                 // No terrain node, use sphere-based ground level
                 this.updateGroundLevel();
-                this.EUS = LLAToECEF(this._LLA[0], this._LLA[1], aglHeight + this.groundLevel);
+                this.ecef = LLAToECEF(this._LLA[0], this._LLA[1], aglHeight + this.groundLevel);
             } else {
                 // aglHeight is MSL; convert to HAE for LLAToECEF (h = H + N)
-                this.EUS = LLAToECEF(this._LLA[0], this._LLA[1], aglHeight + meanSeaLevelOffset(this._LLA[0], this._LLA[1]));
+                this.ecef = LLAToECEF(this._LLA[0], this._LLA[1], aglHeight + meanSeaLevelOffset(this._LLA[0], this._LLA[1]));
             }
 
             for (let f = 0; f < this.frames; f++) {
                 const time = f * Sit.simSpeed;
-                let pos = this.EUS.clone();
+                let pos = this.ecef.clone();
                 if (this.in.wind) {
                     const wind = this.in.wind.v0.multiplyScalar(time);
                     pos.add(wind);
@@ -459,7 +459,7 @@ export class CNodePositionLLA extends CNodeTrack {
         if (this._LLA !== undefined) {
             assert(this.guiAlt !== undefined, "CNodePositionLLA: no guiAlt defined")
        //     return LLAToECEF(this._LLA[0], this._LLA[1], this.guiAlt.getValueFrame(f))
-             let pos = this.EUS.clone();
+             let pos = this.ecef.clone();
             if (this.in.wind) {
                 const wind = this.in.wind.v0.multiplyScalar(time);
                 pos.add(wind);

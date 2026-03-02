@@ -39,8 +39,8 @@ export class CNodeLOS extends CNodeTrack {
         }
 
         // Get the LLA of the first position to establish the new ENU origin
-        const firstPosEUS = firstData.position;
-        const firstLLA = ECEFToLLAVD_radii(firstPosEUS);
+        const firstPosECEF = firstData.position;
+        const firstLLA = ECEFToLLAVD_radii(firstPosECEF);
 
         // The new ENU origin is on the ground (altitude = 0) below the first point
         const originLat = firstLLA.x * Math.PI / 180;  // Convert to radians
@@ -78,8 +78,7 @@ export class CNodeLOS extends CNodeTrack {
                 continue;
             }
 
-            const posEUS = data.position;
-            const posECEF = posEUS;
+            const posECEF = data.position;
             const posENU = ECEF2ENU_radii(posECEF, originLat, originLon, false);
 
             // Round ENU position components if very close to whole numbers
@@ -205,16 +204,15 @@ export class CNodeLOS extends CNodeTrack {
             // Convert position from ENU back to EUS (EUS=ECEF)
             const posENU = new Vector3(x, y, z);
             const posECEF = ENU2ECEF_radii(posENU, originLat, originLon, false);
-            const posEUS = posECEF;
 
             // Convert heading from ENU back to ECEF (=EUS)
             const headingENU = new Vector3(dx, dy, dz);
-            const headingEUS = headingENU.clone().applyMatrix3(mENU2ECEF_Origin);
-            headingEUS.normalize();
+            const headingECEF = headingENU.clone().applyMatrix3(mENU2ECEF_Origin);
+            headingECEF.normalize();
             
             // Compare with original
-            const posError = posEUS.distanceTo(originalData.position);
-            const headingError = Math.acos(Math.min(1, Math.max(-1, headingEUS.dot(originalData.heading)))) * 180 / Math.PI;
+            const posError = posECEF.distanceTo(originalData.position);
+            const headingError = Math.acos(Math.min(1, Math.max(-1, headingECEF.dot(originalData.heading)))) * 180 / Math.PI;
             
             maxPosError = Math.max(maxPosError, posError);
             maxHeadingError = Math.max(maxHeadingError, headingError);
@@ -228,9 +226,9 @@ export class CNodeLOS extends CNodeTrack {
                 console.log(`  Position error: ${posError.toFixed(6)} meters`);
                 console.log(`  Heading error: ${headingError.toFixed(6)} degrees`);
                 console.log(`  Original pos: (${originalData.position.x.toFixed(3)}, ${originalData.position.y.toFixed(3)}, ${originalData.position.z.toFixed(3)})`);
-                console.log(`  Recovered pos: (${posEUS.x.toFixed(3)}, ${posEUS.y.toFixed(3)}, ${posEUS.z.toFixed(3)})`);
+                console.log(`  Recovered pos: (${posECEF.x.toFixed(3)}, ${posECEF.y.toFixed(3)}, ${posECEF.z.toFixed(3)})`);
                 console.log(`  Original heading: (${originalData.heading.x.toFixed(6)}, ${originalData.heading.y.toFixed(6)}, ${originalData.heading.z.toFixed(6)})`);
-                console.log(`  Recovered heading: (${headingEUS.x.toFixed(6)}, ${headingEUS.y.toFixed(6)}, ${headingEUS.z.toFixed(6)})`);
+                console.log(`  Recovered heading: (${headingECEF.x.toFixed(6)}, ${headingECEF.y.toFixed(6)}, ${headingECEF.z.toFixed(6)})`);
             }
         }
         

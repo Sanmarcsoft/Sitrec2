@@ -1825,8 +1825,8 @@ async function setupFunctions() {
             NodeMan.get("cameraLat").value = Sit.lat;
             NodeMan.get("cameraLon").value = Sit.lon;
         }
-        const EUS = LLAToECEF(Sit.lat, Sit.lon, 0);
-        NodeMan.get("mainCamera").goToPoint(EUS,1000000,2000000);
+        const ecef = LLAToECEF(Sit.lat, Sit.lon, 0);
+        NodeMan.get("mainCamera").goToPoint(ecef,1000000,2000000);
 
         // normally setting the camera positon means we have established the sitch
         // however if it's ust geolocating the camera, then we don't want to set the sitch established

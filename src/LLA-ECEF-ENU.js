@@ -304,8 +304,8 @@ export function ECEFToLLAVD_Sphere(V) {
 }
 
 // ECEF to LLA as Vector3 in degrees, using ellipsoid-aware radii conversion.
-export function ECEFToLLAVD_radii(eus) {
-    const lla = ECEFToLLA_radii(eus.x, eus.y, eus.z);
+export function ECEFToLLAVD_radii(ecef) {
+    const lla = ECEFToLLA_radii(ecef.x, ecef.y, ecef.z);
     return new Vector3(lla[0] * 180 / Math.PI, lla[1] * 180 / Math.PI, lla[2]);
 }
 
@@ -472,7 +472,7 @@ let _sitLatRad, _sitLonRad, _sitSinLat, _sitCosLat, _sitSinLon, _sitCosLon;
 let _originEcefX, _originEcefY, _originEcefZ;
 let _m00, _m01, _m10, _m11, _m12, _m20, _m21, _m22;
 // Pre-computed per-vertex ellipsoid constants (used in LLAToECEFRadians)
-let _llaeus_e2, _llaeus_ratio;
+let _llaecef_e2, _llaecef_ratio;
 let _lastSitLat = null, _lastSitLon = null;
 let _lastEquatorRadius = null, _lastPolarRadius = null;
 
@@ -501,14 +501,14 @@ function _updateSitConstants() {
     // Pre-compute ellipsoid constants for vertex ECEF conversion
     const a = Globals.equatorRadius;
     const b = Globals.polarRadius;
-    _llaeus_e2    = (a*a - b*b) / (a*a);
-    _llaeus_ratio = (b*b) / (a*a);
+    _llaecef_e2    = (a*a - b*b) / (a*a);
+    _llaecef_ratio = (b*b) / (a*a);
 
     // Pre-compute origin ECEF using the current earth model (ellipsoid or degenerate sphere)
-    const N_origin = a / Math.sqrt(1 - _llaeus_e2 * _sitSinLat * _sitSinLat);
+    const N_origin = a / Math.sqrt(1 - _llaecef_e2 * _sitSinLat * _sitSinLat);
     _originEcefX = N_origin * _sitCosLat * _sitCosLon;
     _originEcefY = N_origin * _sitCosLat * _sitSinLon;
-    _originEcefZ = _llaeus_ratio * N_origin * _sitSinLat;
+    _originEcefZ = _llaecef_ratio * N_origin * _sitSinLat;
     
     // Pre-compute transformation matrix elements
     _m00 = -_sitSinLon;
@@ -537,10 +537,10 @@ export function LLAToECEFRadians(lat, lon, alt=0, radius) {
     const sin_lon = Math.sin(lon);
 
     // Convert LLA to ECEF using the current earth model (ellipsoid or degenerate sphere)
-    const N = Globals.equatorRadius / Math.sqrt(1 - _llaeus_e2 * sin_lat * sin_lat);
+    const N = Globals.equatorRadius / Math.sqrt(1 - _llaecef_e2 * sin_lat * sin_lat);
     const ecef_x = (N + alt) * cos_lat * cos_lon;
     const ecef_y = (N + alt) * cos_lat * sin_lon;
-    const ecef_z = (_llaeus_ratio * N + alt) * sin_lat;
+    const ecef_z = (_llaecef_ratio * N + alt) * sin_lat;
 
     // EUS = ECEF (no origin subtraction, no rotation)
     return new Vector3(ecef_x, ecef_y, ecef_z);

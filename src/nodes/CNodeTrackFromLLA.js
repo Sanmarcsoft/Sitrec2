@@ -28,7 +28,7 @@ export class CNodeTrackFromLLA extends CNodeTrack {
         if (this.altitudeReference === "MSL") {
             alt += meanSeaLevelOffset(lat, lon);
         }
-        const eus = LLAToECEF(lat, lon, alt);
-        return {position: eus}
+        const pos = LLAToECEF(lat, lon, alt);
+        return {position: pos}
     }
 }

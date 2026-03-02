@@ -502,8 +502,8 @@ export class CNodeDisplayTrack extends CNode3DGroup {
                         const t = seg / numSegments;
                         const interpLL = interpolateGreatCircle(lastLLA.x, lastLLA.y, currentLLA.x, currentLLA.y, t);
                         const interpAlt = lastLLA.z + t * (currentLLA.z - lastLLA.z);
-                        const interpEUS = LLAToECEF(interpLL.lat, interpLL.lon, interpAlt);
-                        line_points.push(interpEUS.x, interpEUS.y, interpEUS.z);
+                        const interpECEF = LLAToECEF(interpLL.lat, interpLL.lon, interpAlt);
+                        line_points.push(interpECEF.x, interpECEF.y, interpECEF.z);
                         line_colors.push(color.r, color.g, color.b);
                     }
                 }

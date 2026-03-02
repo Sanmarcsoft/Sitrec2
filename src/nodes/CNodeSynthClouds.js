@@ -127,10 +127,10 @@ export class CNodeSynthClouds extends CNode3DGroup {
     }
     
     updateGroupPosition() {
-        const centerEUS = LLAToECEF(this.centerLat, this.centerLon, this.altitude);
-        this.basePosition = centerEUS.clone();
-        this.group.position.copy(centerEUS);
-        this.localUp = getLocalUpVector(centerEUS);
+        const centerECEF = LLAToECEF(this.centerLat, this.centerLon, this.altitude);
+        this.basePosition = centerECEF.clone();
+        this.group.position.copy(centerECEF);
+        this.localUp = getLocalUpVector(centerECEF);
     }
     
     buildCloudMesh() {
@@ -140,10 +140,10 @@ export class CNodeSynthClouds extends CNode3DGroup {
             if (this.cloudMesh.material) this.cloudMesh.material.dispose();
         }
         
-        const centerEUS = LLAToECEF(this.centerLat, this.centerLon, this.altitude);
-        this.basePosition = centerEUS.clone();
-        this.localUp = getLocalUpVector(centerEUS);
-        this.group.position.copy(centerEUS);
+        const centerECEF = LLAToECEF(this.centerLat, this.centerLon, this.altitude);
+        this.basePosition = centerECEF.clone();
+        this.localUp = getLocalUpVector(centerECEF);
+        this.group.position.copy(centerECEF);
         
         const east = new Vector3(1, 0, 0).cross(this.localUp).normalize();
         const north = new Vector3().crossVectors(this.localUp, east).normalize();
@@ -541,9 +541,9 @@ export class CNodeSynthClouds extends CNode3DGroup {
             this.dragInitialLat = this.centerLat;
             this.dragInitialLon = this.centerLon;
             
-            const centerEUS = LLAToECEF(this.centerLat, this.centerLon, this.altitude);
-            this.dragLocalUp = getLocalUpVector(centerEUS);
-            this.dragInitialCenterEUS = centerEUS.clone();
+            const centerECEF = LLAToECEF(this.centerLat, this.centerLon, this.altitude);
+            this.dragLocalUp = getLocalUpVector(centerECEF);
+            this.dragInitialCenterECEF = centerECEF.clone();
             
             // Calculate initial intersection point on the drag plane
             const mouseRay = screenToNDC(view, event.clientX, event.clientY);
@@ -552,12 +552,12 @@ export class CNodeSynthClouds extends CNode3DGroup {
             const plane = new Plane();
             if (handle === 'altitude') {
                 // Create vertical plane facing camera (allows height adjustment)
-                const toCamera = view.camera.position.clone().sub(centerEUS).normalize();
+                const toCamera = view.camera.position.clone().sub(centerECEF).normalize();
                 const tangent = new Vector3().crossVectors(this.dragLocalUp, toCamera).normalize();
                 const planeNormal = new Vector3().crossVectors(tangent, this.dragLocalUp).normalize();
-                plane.setFromNormalAndCoplanarPoint(planeNormal, centerEUS);
+                plane.setFromNormalAndCoplanarPoint(planeNormal, centerECEF);
             } else {
-                plane.setFromNormalAndCoplanarPoint(this.dragLocalUp, centerEUS);
+                plane.setFromNormalAndCoplanarPoint(this.dragLocalUp, centerECEF);
             }
             
             this.dragInitialIntersection = new Vector3();
@@ -593,12 +593,12 @@ export class CNodeSynthClouds extends CNode3DGroup {
             const plane = new Plane();
             if (this.draggingHandle === 'altitude') {
                 // Create vertical plane facing camera (allows height adjustment)
-                const toCamera = view.camera.position.clone().sub(this.dragInitialCenterEUS).normalize();
+                const toCamera = view.camera.position.clone().sub(this.dragInitialCenterECEF).normalize();
                 const tangent = new Vector3().crossVectors(this.dragLocalUp, toCamera).normalize();
                 const planeNormal = new Vector3().crossVectors(tangent, this.dragLocalUp).normalize();
-                plane.setFromNormalAndCoplanarPoint(planeNormal, this.dragInitialCenterEUS);
+                plane.setFromNormalAndCoplanarPoint(planeNormal, this.dragInitialCenterECEF);
             } else {
-                plane.setFromNormalAndCoplanarPoint(this.dragLocalUp, this.dragInitialCenterEUS);
+                plane.setFromNormalAndCoplanarPoint(this.dragLocalUp, this.dragInitialCenterECEF);
             }
             
             const currentIntersection = new Vector3();
@@ -618,7 +618,7 @@ export class CNodeSynthClouds extends CNode3DGroup {
                         this.updateGUIControllers();
                     }
                 } else if (this.draggingHandle === 'radius') {
-                    const newRadius = currentIntersection.distanceTo(this.dragInitialCenterEUS);
+                    const newRadius = currentIntersection.distanceTo(this.dragInitialCenterECEF);
                     const limits = this.radiusController?.getSILimits() ?? { min: 100, max: 100000 };
                     if (newRadius >= limits.min && newRadius <= limits.max) {
                         this.radius = newRadius;
@@ -628,8 +628,8 @@ export class CNodeSynthClouds extends CNode3DGroup {
                     }
                 } else if (this.draggingHandle === 'move') {
                     // Move center by displacement
-                    const newCenterEUS = this.dragInitialCenterEUS.clone().add(displacement);
-                    const lla = ECEFToLLAVD_radii(newCenterEUS);
+                    const newCenterECEF = this.dragInitialCenterECEF.clone().add(displacement);
+                    const lla = ECEFToLLAVD_radii(newCenterECEF);
                     this.centerLat = lla.x;
                     this.centerLon = lla.y;
                     this.updateGroupPosition();
@@ -742,8 +742,8 @@ export class CNodeSynthClouds extends CNode3DGroup {
         
         if (!this.editMode) return;
         
-        const centerEUS = LLAToECEF(this.centerLat, this.centerLon, this.altitude);
-        const localUp = getLocalUpVector(centerEUS);
+        const centerECEF = LLAToECEF(this.centerLat, this.centerLon, this.altitude);
+        const localUp = getLocalUpVector(centerECEF);
         const east = new Vector3(1, 0, 0).cross(localUp).normalize();
         
         // Use fixed 3m radius geometry (same as buildings) - scaled dynamically in updateHandleScales

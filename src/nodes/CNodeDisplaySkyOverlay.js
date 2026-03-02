@@ -203,13 +203,13 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
             if (satellites.labelLit && !sat.isLit) continue;
             if (isMainView && satellites.labelLookVisible && !sat.visibleInLook) continue;
 
-            const distSq = sat.eus.distanceToSquared(cameraPos);
+            const distSq = sat.ecef.distanceToSquared(cameraPos);
             if (!sat.userFiltered && distSq >= arrowRangeSq) continue;
 
-            const viewPos = sat.eus.clone().applyMatrix4(camera.matrixWorldInverse);
+            const viewPos = sat.ecef.clone().applyMatrix4(camera.matrixWorldInverse);
             if (viewPos.z >= 0) continue;
             
-            const satScreenPos = sat.eus.clone().project(camera);
+            const satScreenPos = sat.ecef.clone().project(camera);
             const isInsideFrustum = satScreenPos.x >= -1 && satScreenPos.x <= 1 &&
                 satScreenPos.y >= -1 && satScreenPos.y <= 1;
             
@@ -226,7 +226,7 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
                 }
             }
 
-            const camToSat = sat.eus.clone().sub(cameraPos);
+            const camToSat = sat.ecef.clone().sub(cameraPos);
             const distToSat = Math.sqrt(distSq);
             raycaster.set(cameraPos, camToSat.normalize());
             const isOccluded = intersectSphere2(raycaster.ray, earthSphere, hitPoint, hitPoint2)

@@ -912,11 +912,11 @@ class CameraMapControls {
 
 				const terrainNode = NodeMan.get("TerrainModel", false);
 				if (terrainNode !== undefined) {
-					const eus = terrainNode.getPointBelow(cursorPos)
+					const terrainHit = terrainNode.getPointBelow(cursorPos)
 					// Blue sphere is the collision with the terrainmodel
 					// allowing you so see differences between the model mesh (blue)
 					// and the elevation map (red)
-					DebugSphere("Mouse3" + event.clientX * 1000 + event.clientY, eus, 5, 0x0000FF)
+					DebugSphere("Mouse3" + event.clientX * 1000 + event.clientY, terrainHit, 5, 0x0000FF)
 				}
 			}
 

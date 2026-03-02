@@ -275,11 +275,11 @@ export class C3DSynthManager extends CManager {
      * @returns {CNodeSynthClouds|null} The clouds at that point, or null if none
      */
     findCloudsAtLatLon(lat, lon) {
-        const clickedEUS = LLAToECEF(lat, lon, 0);
+        const clickedECEF = LLAToECEF(lat, lon, 0);
         for (const id in this.cloudsList) {
             const clouds = this.cloudsList[id];
-            const centerEUS = LLAToECEF(clouds.centerLat, clouds.centerLon, 0);
-            const distance = clickedEUS.distanceTo(centerEUS);
+            const centerECEF = LLAToECEF(clouds.centerLat, clouds.centerLon, 0);
+            const distance = clickedECEF.distanceTo(centerECEF);
             if (distance <= clouds.radius) {
                 return clouds;
             }

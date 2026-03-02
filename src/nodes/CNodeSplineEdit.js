@@ -128,15 +128,15 @@ export class CNodeSplineEditor extends CNodeTrack {
         super.modDeserialize(v);
         if (v.positions !== undefined) {
             // Convert LLA coordinates back to EUS before loading into spline editor
-            let eusPositions = [];
+            let ecefPositions = [];
             for (let i = 0; i < v.positions.length; i++) {
                 const posData = v.positions[i];
                 const frameNumber = posData[0];
                 const lla = new Vector3(posData[1], posData[2], posData[3]);
-                const eus = LLAVToECEF(lla);
-                eusPositions.push([frameNumber, eus.x, eus.y, eus.z]);
+                const ecef = LLAVToECEF(lla);
+                ecefPositions.push([frameNumber, ecef.x, ecef.y, ecef.z]);
             }
-            this.splineEditor.load(eusPositions)
+            this.splineEditor.load(ecefPositions)
         }
         if (v.constantSpeed !== undefined) {
             this.constantSpeed = v.constantSpeed
@@ -179,13 +179,13 @@ export class CNodeSplineEditor extends CNodeTrack {
     reprojectControlPointsFromLLA() {
         if (!this._controlPointsLLA || this._controlPointsLLA.length === 0) return;
 
-        const eusPositions = [];
+        const ecefPositions = [];
         for (let i = 0; i < this._controlPointsLLA.length; i++) {
             const [frameNumber, lat, lon, alt] = this._controlPointsLLA[i];
-            const eus = LLAVToECEF(new Vector3(lat, lon, alt));
-            eusPositions.push([frameNumber, eus.x, eus.y, eus.z]);
+            const ecef = LLAVToECEF(new Vector3(lat, lon, alt));
+            ecefPositions.push([frameNumber, ecef.x, ecef.y, ecef.z]);
         }
-        this.splineEditor.load(eusPositions);
+        this.splineEditor.load(ecefPositions);
         this.splineEditor.updatePointEditorGraphics();
     }
 

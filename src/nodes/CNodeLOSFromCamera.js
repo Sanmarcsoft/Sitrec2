@@ -126,7 +126,7 @@ export class CNodeLOSFromCamera extends CNodeLOS {
             // Also compute ellipsoidal altitude for comparison
             const ecef = data.position;
             const llaEllip = ECEFToLLAVD(ecef);
-            console.log(`  EUS pos=(${data.position.x.toFixed(1)}, ${data.position.y.toFixed(1)}, ${data.position.z.toFixed(1)}) sphere_alt=${lla.z.toFixed(1)}m ellip_alt=${llaEllip.z.toFixed(1)}m`);
+            console.log(`  ECEF pos=(${data.position.x.toFixed(1)}, ${data.position.y.toFixed(1)}, ${data.position.z.toFixed(1)}) sphere_alt=${lla.z.toFixed(1)}m ellip_alt=${llaEllip.z.toFixed(1)}m`);
             const [az, el] = getAzElFromPositionAndForward(data.position, data.heading);
 
             // Convert vertical FOV to horizontal FOV

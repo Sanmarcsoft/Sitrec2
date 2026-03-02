@@ -2638,7 +2638,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         } else if (data.vertices) {
             // Old format - convert to new format
             // Extract the 4 bottom corners and calculate roofAGL
-            const verticesEUS = data.vertices.map(v => {
+            const verticesECEF = data.vertices.map(v => {
                 if (v.position) {
                     return {
                         position: LLAToECEF(v.position[0], v.position[1], v.position[2]),
@@ -2653,8 +2653,8 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             });
             
             // Find bottom and top vertices
-            const bottomVerts = verticesEUS.filter(v => v.type === 'bottom').slice(0, 4);
-            const topVerts = verticesEUS.filter(v => v.type === 'top').slice(0, 4);
+            const bottomVerts = verticesECEF.filter(v => v.type === 'bottom').slice(0, 4);
+            const topVerts = verticesECEF.filter(v => v.type === 'top').slice(0, 4);
             
             if (bottomVerts.length === 4 && topVerts.length === 4) {
                 // Extract cornerLatLons from bottom vertices
@@ -2691,7 +2691,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                 return new CNodeSynthBuilding({
                     id: data.id,
                     name: data.name,
-                    vertices: verticesEUS,
+                    vertices: verticesECEF,
                     faces: data.faces,
                     material: data.material,
                     wallColor: data.wallColor,

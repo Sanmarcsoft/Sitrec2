@@ -414,7 +414,7 @@ export class CNodeTrackFromLLAArray extends CNodeTrack {
         if (this.altitudeReference === "MSL") {
             alt += meanSeaLevelOffset(lat, lon);
         }
-        let eus = LLAToECEF(lat, lon, alt);
+        let pos = LLAToECEF(lat, lon, alt);
 
         // while this is sub optimal, it should not be done constantly.
         // it mostly for KML polygons and paths, which have no inputs, so are essentially static
@@ -424,21 +424,21 @@ export class CNodeTrackFromLLAArray extends CNodeTrack {
 
             if (this.showCap) {
                 // use the center elevation for ground level, plus the point's altitude
-                eus = LLAToECEF(lat, lon, this.centerElevation + alt);
+                pos = LLAToECEF(lat, lon, this.centerElevation + alt);
 
 
             } else {
 
                 const terrainNode = NodeMan.get("TerrainModel", false);
                 if (terrainNode !== undefined) {
-                    eus = terrainNode.getPointBelow(eus, alt, true)
+                    pos = terrainNode.getPointBelow(pos, alt, true)
                 }
 
             }
 
         }
 
-        return {position: eus}
+        return {position: pos}
     }
 
     // p(frame) {

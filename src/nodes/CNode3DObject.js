@@ -893,10 +893,10 @@ export class CNode3DObject extends CNode3DGroup {
     async exportToKML() {
         try {
             // Get the current position of the object in EUS coordinates
-            const eusPosition = this.group.position.clone();
+            const ecefPosition = this.group.position.clone();
             
             // Convert EUS position to LLA (Latitude, Longitude, Altitude)
-            const lla = ECEFToLLAVD_radii(eusPosition);
+            const lla = ECEFToLLAVD_radii(ecefPosition);
             const latitude = lla.x;   // degrees
             const longitude = lla.y;  // degrees  
             const altitude = lla.z;   // meters above sea level

@@ -44,8 +44,8 @@ export class CNodeControllerAzElZoom extends CNodeController {
         var up = getLocalUpVector(camera.position)
 
         // to get a northish direction we get the vector from here to the north pole.
-        var northPoleEUS = getNorthPole()
-        var toNorth = northPoleEUS.clone().sub(camera.position).normalize()
+        var northPoleECEF = getNorthPole()
+        var toNorth = northPoleECEF.clone().sub(camera.position).normalize()
         // take only the component perpendicular
         let dot = toNorth.dot(up)
         let north = toNorth.clone().sub(up.clone().multiplyScalar(dot))

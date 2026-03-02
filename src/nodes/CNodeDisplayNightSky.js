@@ -927,7 +927,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                 continue;
             }
 
-            assert(satData.eus !== undefined, `satData.eus is undefined, i= ${i}`);
+            assert(satData.ecef !== undefined, `satData.ecef is undefined, i= ${i}`);
 
             // stagger updates unless it has an arrow or this is the first render after TLE load
             if (!this.firstRenderTLE && (i - this.satStartTime) % this.satTimeStep !== 0 && !satData.hasSunArrow) {
@@ -935,7 +935,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                 continue;
             }
 
-            const satPosition = satData.eus;
+            const satPosition = satData.ecef;
             let brightness = 0.04;
             const darknessMultiplier = 0.3;
             let fade = 1;
@@ -992,8 +992,8 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                             satPosition.clone().add(toSun.clone().multiplyScalar(10000000)), "#c08000", true, this.sunArrowGroup, 10, LAYER.MASK_HELPERS);
 
                         if (this.satellites.showFlareTracks) {
-                            const dir = satData.eusB.clone().sub(satData.eusA).normalize();
-                            DebugArrow(satData.name + "flare", dir, satData.eus, 100000, "#FFFF00", true, this.satelliteFlareTracksGroup, 20, LAYER.MASK_LOOKRENDER);
+                            const dir = satData.ecefB.clone().sub(satData.ecefA).normalize();
+                            DebugArrow(satData.name + "flare", dir, satData.ecef, 100000, "#FFFF00", true, this.satelliteFlareTracksGroup, 20, LAYER.MASK_LOOKRENDER);
                         }
 
                         satData.hasSunArrow = true;
@@ -1243,8 +1243,8 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         }
 
         if (this[flagName]) {
-            const eusDir = getCelestialDirectionFromRaDec(ra, dec, date)
-            this[obName].updateDirection(eusDir)
+            const ecefDir = getCelestialDirectionFromRaDec(ra, dec, date)
+            this[obName].updateDirection(ecefDir)
         }
 
         // Handle Sun-specific calculations for flare region

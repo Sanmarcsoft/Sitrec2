@@ -177,12 +177,12 @@ self.onmessage = function(event) {
             }
 
             // Convert to EUS coordinates
-            const vertexEUS = LLAToECEF(lat, lon, elevation);
+            const vertexECEF = LLAToECEF(lat, lon, elevation);
 
             // Subtract the center of the tile for relative positioning
-            const x = vertexEUS.x - tileCenterX;
-            const y = vertexEUS.y - tileCenterY;
-            const z = vertexEUS.z - tileCenterZ;
+            const x = vertexECEF.x - tileCenterX;
+            const y = vertexECEF.y - tileCenterY;
+            const z = vertexECEF.z - tileCenterZ;
 
             // Store the vertex position
             vertexPositions[i * 3] = x;

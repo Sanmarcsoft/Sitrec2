@@ -688,7 +688,7 @@ export class CSatellite {
         this.removeSatellites();
         this.TLEData = new CTLEData(tle);
         this.TLEData.satData.forEach(sat => {
-            sat.eus = V3();
+            sat.ecef = V3();
         });
         EventManager.dispatchEvent("tleLoaded", {});
         setRenderOne(2); // force a render update after loading the TLE data
@@ -773,7 +773,7 @@ export class CSatellite {
 
         for (let i = 0; i < len; i++) {
             const sat = this.TLEData.satData[i];
-            sat.eus = V3();
+            sat.ecef = V3();
 
             let color = new Color(0xF0F0FF);
             if (sat.name.includes("STARLINK")) {
@@ -882,7 +882,7 @@ export class CSatellite {
     }
 
     /**
-     * Calculate satellite EUS position for a given date
+     * Calculate satellite ECEF position for a given date
      */
     calcSatECEF(sat, date) {
         const positionAndVelocity = satellite.propagate(sat, date);
@@ -903,8 +903,8 @@ export class CSatellite {
                 return null;
             }
 
-            const EUS = LLAToECEFRadians(GD.latitude, GD.longitude, altitude);
-            return EUS;
+            const ecef = LLAToECEFRadians(GD.latitude, GD.longitude, altitude);
+            return ecef;
         } else {
             return null;
         }
@@ -958,14 +958,14 @@ export class CSatellite {
                 if (satData.timeB !== undefined
                     && timeMS > satData.timeB               // current time is past B time
                     && (timeMS - satData.timeB) < 1000      // but less than a second past
-                    && satData.eusB !== null) {             // and we were interpolating valid     positions
+                    && satData.ecefB !== null) {             // and we were interpolating valid     positions
                     // Carry forward: old end becomes new start
                     satData.timeA = satData.timeB;
-                    satData.eusA = satData.eusB;
+                    satData.ecefA = satData.ecefB;
                 } else {
                     // First time or backwards jump or jump fwd more that a second, calculate fresh
                     satData.timeA = timeMS;
-                    satData.eusA = this.calcSatECEF(satrec, date);
+                    satData.ecefA = this.calcSatECEF(satrec, date);
                 }
                 if (satData.timeB === undefined) {
                     satData.timeB = satData.timeA + Math.floor(1 + this.timeStep * (i / numSats));
@@ -973,28 +973,28 @@ export class CSatellite {
                     satData.timeB = satData.timeA + this.timeStep;
                 }
                 const dateB = new Date(satData.timeB);
-                satData.eusB = this.calcSatECEF(satrec, dateB);
+                satData.ecefB = this.calcSatECEF(satrec, dateB);
             }
 
-            if (satData.eusA !== null && satData.eusB !== null) {
-                const velocity = satData.eusB.clone().sub(satData.eusA).multiplyScalar(1000 / (satData.timeB - satData.timeA)).length();
+            if (satData.ecefA !== null && satData.ecefB !== null) {
+                const velocity = satData.ecefB.clone().sub(satData.ecefA).multiplyScalar(1000 / (satData.timeB - satData.timeA)).length();
 
                 if (velocity < 2500 || velocity > 11000) {
                     satData.invalidPosition = true;
                 } else {
                     var t = (timeMS - satData.timeA) / (satData.timeB - satData.timeA);
-                    satData.eus.lerpVectors(satData.eusA, satData.eusB, t);
+                    satData.ecef.lerpVectors(satData.ecefA, satData.ecefB, t);
 
-                    this.lightCloud.setPosition(i, satData.eus.x, satData.eus.y, satData.eus.z);
+                    this.lightCloud.setPosition(i, satData.ecef.x, satData.ecef.y, satData.ecef.z);
                     satData.invalidPosition = false;
-                    satData.currentPosition = satData.eus.clone();
+                    satData.currentPosition = satData.ecef.clone();
 
                     if (satData.spriteText) {
-                        satData.spriteText.position.set(satData.eus.x, satData.eus.y, satData.eus.z);
+                        satData.spriteText.position.set(satData.ecef.x, satData.ecef.y, satData.ecef.z);
                     }
 
                     let arrowsDrawn = false;
-                    const inRange = satData.eusA.distanceTo(lookPos) < this.arrowRange * 1000;
+                    const inRange = satData.ecefA.distanceTo(lookPos) < this.arrowRange * 1000;
                     const arrowVisible = satData.visible && inRange && 
                         (!this.labelLookVisible || satData.visibleInLook) &&
                         (!this.labelFlares || satData.isFlaring) &&
@@ -1002,14 +1002,14 @@ export class CSatellite {
                     
                     if (arrowVisible) {
                         if (this.showSatelliteTracks && options.satelliteTrackGroup) {
-                            let dir = satData.eusB.clone().sub(satData.eusA).normalize();
-                            DebugArrow(satData.name + "_t", dir, satData.eus, 500000, "#FFFF00", true, options.satelliteTrackGroup, 20, LAYER.MASK_LOOKRENDER);
+                            let dir = satData.ecefB.clone().sub(satData.ecefA).normalize();
+                            DebugArrow(satData.name + "_t", dir, satData.ecef, 500000, "#FFFF00", true, options.satelliteTrackGroup, 20, LAYER.MASK_LOOKRENDER);
                             arrowsDrawn = true;
                             satData.hasArrowsNeedingCleanup = true;
                         }
 
                         if (this.showSatelliteGround && options.satelliteGroundGroup) {
-                            let A = satData.eusA.clone();
+                            let A = satData.ecefA.clone();
                             let B = getPointBelow(A);
                             DebugArrowAB(satData.name + "_g", A, B, "#00FF00", true, options.satelliteGroundGroup, 20, LAYER.MASK_LOOKRENDER);
                             arrowsDrawn = true;

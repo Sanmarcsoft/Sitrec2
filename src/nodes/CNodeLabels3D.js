@@ -33,7 +33,7 @@ let featuresGroupNode = null;
 let featuresControllerMain = null;
 let featuresControllerLook = null;
 
-function altitudeMSLFromEUS(pos) {
+function altitudeMSLFromECEF(pos) {
     const lla = ECEFToLLAVD_radii(pos);
     return lla.z - meanSeaLevelOffset(lla.x, lla.y);
 }
@@ -323,8 +323,8 @@ export class CNodeMeasureAB extends CNodeLabel3D {
         if (this.altitude) {
             // User-facing altitude labels should be MSL, so convert from geodetic
             // ellipsoid height (HAE) to MSL at each endpoint before differencing.
-            const altA = altitudeMSLFromEUS(this.A);
-            const altB = altitudeMSLFromEUS(this.B);
+            const altA = altitudeMSLFromECEF(this.A);
+            const altB = altitudeMSLFromECEF(this.B);
             length = altA - altB;
         } else {
             length = this.A.distanceTo(this.B);
@@ -334,7 +334,7 @@ export class CNodeMeasureAB extends CNodeLabel3D {
 
         let text;
         if (this.altitude) {
-            const alt = altitudeMSLFromEUS(this.A);
+            const alt = altitudeMSLFromECEF(this.A);
             if (Math.abs(alt-length) < 1) {
                 // if the altitude is within 1 meter of the length, then just show the length
                 // as that means we are over the ocean (zero altitude msl))
