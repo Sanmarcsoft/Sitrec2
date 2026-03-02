@@ -1,6 +1,6 @@
 import {Plane, Vector3} from "three";
 import {atan2, cos, degrees, radians, sin} from "./utils.js";
-import {ECEF2EUS, ECEFToEUS_radii, ECEFToLLA_radii, EUSToECEF_radii, RLLAToECEF_radii, wgs84} from "./LLA-ECEF-ENU";
+import {ECEFToLLA_radii, RLLAToECEF_radii} from "./LLA-ECEF-ENU";
 import {Globals, Sit} from "./Globals";
 import {assert} from "./assert.js";
 import {MV3, V3} from "./threeUtils";
@@ -153,7 +153,7 @@ function PRJ2EA(pitch, roll, jetPitch) {
  *   - pole (lat=90°):   Y = -polarRadius
  */
 export function earthCenterEUS() {
-    return ECEFToEUS_radii(V3(0, 0, 0));
+    return V3(0, 0, 0);
 }
 
 /**
@@ -164,8 +164,7 @@ export function earthCenterEUS() {
  *   MSL = altitudeMSL(point) - meanSeaLevelOffset(lat, lon)
  */
 export function altitudeMSL(point) {
-    const ecef = EUSToECEF_radii(point);
-    return ECEFToLLA_radii(ecef.x, ecef.y, ecef.z)[2];
+    return ECEFToLLA_radii(point.x, point.y, point.z)[2];
 }
 
 /**
@@ -175,10 +174,8 @@ export function altitudeMSL(point) {
  * callers. For true MSL targets, convert MSL->HAE first by adding geoid offset.
  */
 export function setAltitudeMSL(point, altitude) {
-    const ecef = EUSToECEF_radii(point);
-    const lla  = ECEFToLLA_radii(ecef.x, ecef.y, ecef.z);
-    const ecef2 = RLLAToECEF_radii(lla[0], lla[1], altitude);
-    return ECEFToEUS_radii(ecef2);
+    const lla = ECEFToLLA_radii(point.x, point.y, point.z);
+    return RLLAToECEF_radii(lla[0], lla[1], altitude);
 }
 
 /**
@@ -264,13 +261,9 @@ export function getLocalUpVector(position) {
     // The outward normal to the ellipsoid x²/a² + y²/a² + z²/b² = 1
     // at ECEF point (X,Y,Z) is proportional to (X/a², Y/a², Z/b²).
     // For a sphere (a === b) this degenerates to the geocentric direction.
-    const ecef = EUSToECEF_radii(position);
     const a = Globals.equatorRadius;
     const b = Globals.polarRadius;
-    const normalECEF = V3(ecef.x / (a * a), ecef.y / (a * a), ecef.z / (b * b)).normalize();
-
-    // Rotate from ECEF to EUS (rotation only, no translation)
-    return ECEF2EUS(normalECEF, radians(Sit.lat), radians(Sit.lon), wgs84.RADIUS, true);
+    return V3(position.x / (a * a), position.y / (a * a), position.z / (b * b)).normalize();
 }
 
 export function getLocalDownVector(position) {
@@ -281,7 +274,7 @@ export function getLocalDownVector(position) {
 export function getNorthPole() {
     // North Pole in ECEF is at (0, 0, polarRadius) for an ellipsoid
     const northPoleECEF = V3(0, 0, Globals.polarRadius);
-    return ECEFToEUS_radii(northPoleECEF);
+    return northPoleECEF;
 }
 
 export function getLocalNorthVector(position) {

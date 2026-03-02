@@ -164,17 +164,6 @@ export function ECEFToLLA_radii(X, Y, Z) {
     return [latitude, longitude, altitude];
 }
 
-/** EUS → ECEF using the ellipsoid origin at Sit.lat/lon computed from Globals radii. */
-// EXPERIMENT: EUS is now identical to ECEF (origin at Earth center, same axes)
-export function EUSToECEF_radii(posEUS) {
-    return posEUS.clone();
-}
-
-/** ECEF → EUS using the ellipsoid origin at Sit.lat/lon computed from Globals radii. */
-// EXPERIMENT: EUS is now identical to ECEF (origin at Earth center, same axes)
-export function ECEFToEUS_radii(posECEF) {
-    return posECEF.clone();
-}
 
 
 // Other elipsoids I've seen:
@@ -400,10 +389,6 @@ export function ECEF2ENU(pos,lat1, lon1, radius, justRotate=false) {
     return enu;
 }
 
-// EXPERIMENT: EUS is now identical to ECEF
-export function ECEF2EUS(pos,lat1, lon1, radius, justRotate=false) {
-    return pos.clone();
-}
 
 // Ellipsoid-aware ECEF→ENU using RLLAToECEF_radii for origin (Globals radii).
 // Rotation matrix depends only on geodetic lat/lon, not Earth shape.
@@ -481,15 +466,6 @@ export function legacyEUSToECEF(eus, lat, lon) {
     return LLAToEUSRadians(lla[0], lla[1], lla[2]);
 }
 
-// EXPERIMENT: EUS is now identical to ECEF
-export function ECEFToEUS(posECEF, radius) {
-    return posECEF.clone();
-}
-
-// EXPERIMENT: EUS is now identical to ECEF
-export function EUSToECEF(posEUS, radius) {
-    return posEUS.clone();
-}
 
 // Pre-computed constants for optimization - updated when Sit location or earth model changes
 let _sitLatRad, _sitLonRad, _sitSinLat, _sitCosLat, _sitSinLon, _sitCosLon;

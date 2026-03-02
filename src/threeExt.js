@@ -28,7 +28,7 @@ import {par} from "./par";
 import {altitudeMSL, drop3, earthCenterEUS, pointOnSphereBelow, raisePoint, setAltitudeMSL} from "./SphericalMath"
 import {GlobalScene} from "./LocalFrame";
 import * as LAYER from "./LayerMasks";
-import {ECEFToEUS, EUSToECEF, LLAToEUS} from "./LLA-ECEF-ENU";
+import {LLAToEUS} from "./LLA-ECEF-ENU";
 import {LineMaterial} from "three/addons/lines/LineMaterial.js";
 import {LineGeometry} from "three/addons/lines/LineGeometry.js";
 import {Line2} from "three/addons/lines/Line2.js";
@@ -637,13 +637,9 @@ export function intersectEllipsoid(pointEUS, headingVectorEUS) {
     const a = Globals.equatorRadius;
     const b = Globals.polarRadius;
     
-    const originECEF = EUSToECEF(pointEUS);
-    const dirEUS = headingVectorEUS.clone().normalize();
-    const endEUS = pointEUS.clone().add(dirEUS);
-    const endECEF = EUSToECEF(endEUS);
-    const dirECEF = endECEF.clone().sub(originECEF).normalize();
+    const dirECEF = headingVectorEUS.clone().normalize();
     
-    const ox = originECEF.x, oy = originECEF.y, oz = originECEF.z;
+    const ox = pointEUS.x, oy = pointEUS.y, oz = pointEUS.z;
     const dx = dirECEF.x, dy = dirECEF.y, dz = dirECEF.z;
     
     const a2 = a * a, b2 = b * b;
@@ -672,7 +668,7 @@ export function intersectEllipsoid(pointEUS, headingVectorEUS) {
     }
     
     const intersectionECEF = originECEF.clone().add(dirECEF.clone().multiplyScalar(t));
-    return ECEFToEUS(intersectionECEF);
+    return intersectionECEF;
 }
 
 export class CDisplayLine {

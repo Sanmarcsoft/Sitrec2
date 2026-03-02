@@ -7,7 +7,7 @@ import {intersectSphere2, V3} from "../threeUtils";
 import {assert} from "../assert";
 import {showError} from "../showError";
 import {Globals} from "../Globals";
-import {ECEFToLLA_radii, EUSToECEF} from "../LLA-ECEF-ENU";
+import {ECEFToLLA_radii} from "../LLA-ECEF-ENU";
 
 // Intersect ray with ellipsoid of semi-axes (a, a, b) centered at origin.
 // Returns nearest positive-t intersection point, or null.
@@ -79,7 +79,7 @@ export class CNodeLOSTraverseConstantAltitude extends CNodeTrack {
                 position.add(heading)
                 // Derive target altitude from starting position
                 if (isEllipsoid) {
-                    const ecef = EUSToECEF(position);
+                    const ecef = position;
                     const lla = ECEFToLLA_radii(ecef.x, ecef.y, ecef.z);
                     targetAltitude = lla[2];
                 } else {

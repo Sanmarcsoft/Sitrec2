@@ -8,7 +8,7 @@ import {CNodeEmptyArray} from "./CNodeArray";
 import {assert} from "../assert.js";
 import {getAzElFromPositionAndForward} from "../SphericalMath";
 import {CNodeLOS} from "./CNodeLOS";
-import {ECEFToLLAVD, EUSToECEF, EUSToLLA} from "../LLA-ECEF-ENU";
+import {ECEFToLLAVD, EUSToLLA} from "../LLA-ECEF-ENU";
 import {saveAs} from "file-saver";
 
 export class CNodeLOSFromCamera extends CNodeLOS {
@@ -124,7 +124,7 @@ export class CNodeLOSFromCamera extends CNodeLOS {
 
             const lla = EUSToLLA(data.position);
             // Also compute ellipsoidal altitude for comparison
-            const ecef = EUSToECEF(data.position);
+            const ecef = data.position;
             const llaEllip = ECEFToLLAVD(ecef);
             console.log(`  EUS pos=(${data.position.x.toFixed(1)}, ${data.position.y.toFixed(1)}, ${data.position.z.toFixed(1)}) sphere_alt=${lla.z.toFixed(1)}m ellip_alt=${llaEllip.z.toFixed(1)}m`);
             const [az, el] = getAzElFromPositionAndForward(data.position, data.heading);

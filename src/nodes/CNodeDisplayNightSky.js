@@ -10,7 +10,7 @@ import {
     propagateLayerMaskObject,
     setLayerMaskRecursive
 } from "../threeExt";
-import {ECEFToLLAVD_Sphere, EUSToECEF, getLST, raDecToAzElRADIANS, wgs84} from "../LLA-ECEF-ENU";
+import {ECEFToLLAVD_Sphere, getLST, raDecToAzElRADIANS, wgs84} from "../LLA-ECEF-ENU";
 // npm install three-text2d --save-dev
 // https://github.com/gamestdio/three-text2d
 //import { MeshText2D, textAlign } from 'three-text2d'
@@ -524,7 +524,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             date: this.in.startTime.dateNow,
             cameraPos: this.camera.position,
             ecefToLla: (pos) => {
-                const ecef = EUSToECEF(pos);
+                const ecef = pos;
                 return ECEFToLLAVD_Sphere(ecef);
             }
         })
@@ -848,8 +848,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
         // Use lookCamera position for observer instead of fixed Sit coordinates
         const cameraPos = this.camera.position;
-        const cameraEcef = EUSToECEF(cameraPos);
-        const cameraLLA = ECEFToLLAVD_Sphere(cameraEcef);
+        const cameraLLA = ECEFToLLAVD_Sphere(cameraPos);
         let observer = new Astronomy.Observer(cameraLLA.x, cameraLLA.y, cameraLLA.z);
         // update the planets position for the current time
         for (const [name, planet] of Object.entries(this.planets.planetSprites)) {
@@ -1283,8 +1282,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             const camera = NodeMan.get("lookCamera").camera;
 
             const cameraPos = camera.position;
-            const cameraEcef = EUSToECEF(cameraPos)
-            const LLA = ECEFToLLAVD_Sphere(cameraEcef)
+            const LLA = ECEFToLLAVD_Sphere(cameraPos)
 
             const {
                 az: az1,

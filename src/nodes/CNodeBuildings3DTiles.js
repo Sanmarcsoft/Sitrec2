@@ -10,7 +10,7 @@
 import {CNode} from "./CNode";
 import {NodeMan} from "../Globals";
 import {GlobalScene} from "../LocalFrame";
-import {Group, Matrix4} from "three";
+import {Group} from "three";
 import * as LAYER from "../LayerMasks";
 import {TilesRenderer} from "3d-tiles-renderer";
 import {GLTFExtensionsPlugin, TilesFadePlugin} from "3d-tiles-renderer/plugins";
@@ -28,13 +28,6 @@ function createDracoLoader() {
     return dracoLoader;
 }
 
-// Build a Matrix4 that transforms ECEF coordinates to EUS (East-Up-South) local frame.
-// This is the matrix form of ECEFToEUS(), applied to the TilesRenderer group
-// so all child tiles are automatically positioned in Sitrec's coordinate system.
-// EXPERIMENT: EUS is now identical to ECEF, so no transformation needed
-function buildECEFToEUSMatrix4() {
-    return new Matrix4(); // identity
-}
 
 
 // Per-view state: a TilesRenderer instance, its parent group, and the view it tracks.
@@ -89,8 +82,6 @@ class PerViewTiles {
         };
         this.renderer.addEventListener("tile-visibility-change", this._onTileVisibilityChange);
 
-        const ecefToEUS = buildECEFToEUSMatrix4();
-        this.renderer.group.applyMatrix4(ecefToEUS);
         this.renderer.group.layers.mask = layerMask;
 
         // Set layer mask on all tile meshes as they load

@@ -7,7 +7,7 @@
 // EUS is now identical to ECEF (identity mapping), so celestial and scene coords are the same.
 // See: https://en.wikipedia.org/wiki/Equatorial_coordinate_system#Rectangular_coordinates
 import {V3} from "./threeUtils";
-import {ECEF2EUS, EUSToLLA, wgs84} from "./LLA-ECEF-ENU";
+import {EUSToLLA, wgs84} from "./LLA-ECEF-ENU";
 import {Sit} from "./Globals";
 import * as Astronomy from "astronomy-engine";
 import {radians} from "./utils";
@@ -162,9 +162,7 @@ export function getCelestialDirectionFromRaDec(ra, dec, date) {
     // ecef for the sun will give us a vector from the center to the earth towards the Sun (which, for our purposes
     // is considered to be infinitely far away
 
-    // rotate this into the EUS coordinate system and normalize
-    const eusDir = ECEF2EUS(ecef, radians(Sit.lat), radians(Sit.lon), 0, true).normalize();
-    return eusDir;
+    return ecef.normalize();
 }
 
 // Geocentric body vector in ECEF/EUS (meters).
@@ -183,7 +181,7 @@ export function getGeocentricBodyPositionEUS(body, date, aberration = true) {
 
     const scale = Astronomy.KM_PER_AU * 1000; // AU -> meters
     const ecef = V3(x * scale, y * scale, z * scale);
-    return ECEF2EUS(ecef, radians(Sit.lat), radians(Sit.lon), 0, false);
+    return ecef;
 }
 
 export function getGeocentricBodyDirectionEUS(body, date, aberration = true) {

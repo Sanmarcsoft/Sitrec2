@@ -12,7 +12,7 @@ import {CNodeTrack} from "./CNodeTrack";
 import {GlobalDateTimeNode, NodeMan, Sit} from "../Globals";
 import {saveAs} from "file-saver";
 import {Matrix3, Vector3} from "three";
-import {ECEF2ENU_radii, ECEFToEUS, ENU2ECEF_radii, EUSToECEF, EUSToLLA} from "../LLA-ECEF-ENU";
+import {ECEF2ENU_radii, ENU2ECEF_radii, EUSToLLA} from "../LLA-ECEF-ENU";
 import {extractFOV} from "./CNodeControllerVarious";
 import {elevationAtLL} from "../threeExt";
 import {roundIfClose} from "../utils";
@@ -79,7 +79,7 @@ export class CNodeLOS extends CNodeTrack {
             }
 
             const posEUS = data.position;
-            const posECEF = EUSToECEF(posEUS);
+            const posECEF = posEUS;
             const posENU = ECEF2ENU_radii(posECEF, originLat, originLon, false);
 
             // Round ENU position components if very close to whole numbers
@@ -205,7 +205,7 @@ export class CNodeLOS extends CNodeTrack {
             // Convert position from ENU back to EUS (EUS=ECEF)
             const posENU = new Vector3(x, y, z);
             const posECEF = ENU2ECEF_radii(posENU, originLat, originLon, false);
-            const posEUS = ECEFToEUS(posECEF);
+            const posEUS = posECEF;
 
             // Convert heading from ENU back to ECEF (=EUS)
             const headingENU = new Vector3(dx, dy, dz);

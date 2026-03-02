@@ -9,7 +9,7 @@ import {assert} from "../assert.js";
 import {CGeoJSON} from "../geoJSONUtils";
 import {isLocal} from "../configUtils.js"
 import stringify from "json-stringify-pretty-compact";
-import {Matrix4, Vector3} from "three";
+import {Vector3} from "three";
 
 export class CNodeTrackFromMISB extends CNodeTrack {
     constructor(v) {
@@ -303,8 +303,6 @@ export class CNodeTrackFromMISB extends CNodeTrack {
 
 
 
-// EXPERIMENT: EUS is now identical to ECEF, so use identity matrix
-        const mECEF2EUS = new Matrix4(); // identity
 
         // Pre-compute ellipsoid constants for per-vertex ECEF conversion
         const eqR = Globals.equatorRadius;
@@ -392,7 +390,6 @@ export class CNodeTrackFromMISB extends CNodeTrack {
             // Final transformation in one step
 
             const pos = new Vector3(ecefX, ecefY, ecefZ );
-            pos.applyMatrix4(mECEF2EUS);
             // const posY = pos.y;
             // pos.y = pos.z;
             // pos.z = -posY;
