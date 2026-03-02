@@ -1,6 +1,6 @@
 import {CNodeTrack} from "./CNodeTrack";
 import {NodeMan, Sit} from "../Globals";
-import {getLocalNorthVector, getLocalUpVector, setAltitudeMSL} from "../SphericalMath";
+import {getLocalNorthVector, getLocalUpVector, setAltitudeHAE} from "../SphericalMath";
 import {radians} from "../utils";
 import {V3} from "../threeUtils";
 import {EventManager} from "../CEventManager";
@@ -80,6 +80,6 @@ export class CNodeTrackFromVelocity extends CNodeTrack {
         if (terrainNode) {
             return this.getPointBelowCached(terrainNode, pos, this.agl, frame);
         }
-        return setAltitudeMSL(pos, this.agl);
+        return setAltitudeHAE(pos, this.agl);
     }
 }

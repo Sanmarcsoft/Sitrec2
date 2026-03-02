@@ -2,12 +2,12 @@
 
 import {Matrix4, Plane, Raycaster, Sphere, Vector2, Vector3} from "three";
 import {degrees, radians, vdump} from "../utils";
-import {clampAboveGround, DebugArrowAB, DebugSphere, getPointBelow, intersectMSL, pointAbove} from "../threeExt";
+import {clampAboveGround, DebugArrowAB, DebugSphere, getPointBelow, intersectSurface, pointAbove} from "../threeExt";
 import {par} from "../par";
 import {ECEFToLLAVD_radii} from "../LLA-ECEF-ENU";
 import {
 	altitudeAboveSphere,
-	altitudeMSL,
+	altitudeHAE,
 	earthCenterECEF,
 	getAzElFromPositionAndForward,
 	getLocalDownVector,
@@ -1193,8 +1193,8 @@ class CameraMapControls {
 		const A = g.startPoint;
 		const B = g.endPoint;
 
-		const alt_A = altitudeMSL(A);
-		const alt_B = altitudeMSL(B);
+		const alt_A = altitudeHAE(A);
+		const alt_B = altitudeHAE(B);
 		const alt_max = Math.max(alt_A, alt_B);
 
 		const A2 = pointOnSphereBelow(A.clone(), alt_max);
@@ -1388,7 +1388,7 @@ class CameraMapControls {
 		const camFwd = new Vector3();
 		this.camera.getWorldDirection(camFwd);
 
-		const ground = intersectMSL(camPos, camFwd);
+		const ground = intersectSurface(camPos, camFwd);
 
 
 		if (ground) {

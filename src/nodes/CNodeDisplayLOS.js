@@ -1,7 +1,7 @@
 //var matLineWhiteThin = makeMatLine(0xFFFFFF, 0.75);
 import {makeMatLine} from "../MatLines";
 import {Sit} from "../Globals";
-import {DebugSphere, dispose, intersectMSL} from "../threeExt";
+import {DebugSphere, dispose, intersectSurface} from "../threeExt";
 import {par} from "../par";
 import {metersFromMiles} from "../utils";
 import {CNode3DGroup} from "./CNode3DGroup";
@@ -137,7 +137,7 @@ export class CNodeDisplayLOS extends CNode3DGroup {
                     // especially when a sitch is setup with large tiles
                     // as the "level" plane diverges significantly from the globe
                     // so we get intersection with the globe
-                    const seaLevelPoint = intersectMSL(A, fwd)
+                    const seaLevelPoint = intersectSurface(A, fwd)
                     if (seaLevelPoint) {
                         B = seaLevelPoint
                     }

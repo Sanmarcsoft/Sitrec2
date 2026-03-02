@@ -740,38 +740,27 @@ app.post('/api/reset/:id', (req, res) => {
     }
 
     let deleted = 0;
-    
+
     if (test.snapshot) {
-        const snapshotDir = __dirname + '/tests_regression/regression.test.js-snapshots';
         const baseName = test.snapshot;
-        const patterns = [
-            `${baseName}.png`,
-            `${baseName}-chromium.png`,
-            `${baseName}_Good.png`,
-            `${baseName}_Bad.png`,
+        const snapshotDirs = [
+            __dirname + '/tests_regression/regression.test.js-snapshots',
+            __dirname + '/tests_regression/ui-playwright.test.js-snapshots',
         ];
-        
-        for (const pattern of patterns) {
-            const fullPath = snapshotDir + '/' + pattern;
-            if (fs.existsSync(fullPath)) {
-                try { 
-                    fs.unlinkSync(fullPath); 
+
+        for (const dir of snapshotDirs) {
+            if (!fs.existsSync(dir)) continue;
+            // Match all files starting with the base snapshot name (handles all platform suffixes)
+            const files = fs.readdirSync(dir).filter(f => f.startsWith(baseName) && f.endsWith('.png'));
+            for (const file of files) {
+                const fullPath = dir + '/' + file;
+                try {
+                    fs.unlinkSync(fullPath);
                     deleted++;
                     console.log(`Deleted: ${fullPath}`);
                 } catch (e) {
                     console.error(`Failed to delete ${fullPath}:`, e);
                 }
-            }
-        }
-        
-        const uiSnapshotDir = __dirname + '/tests_regression/ui-playwright.test.js-snapshots';
-        for (const pattern of patterns) {
-            const fullPath = uiSnapshotDir + '/' + pattern;
-            if (fs.existsSync(fullPath)) {
-                try { 
-                    fs.unlinkSync(fullPath); 
-                    deleted++;
-                } catch (e) {}
             }
         }
     }

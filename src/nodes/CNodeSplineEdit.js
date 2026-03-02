@@ -5,7 +5,7 @@ import {getCameraNode} from "./CNodeCamera";
 import {assert} from "../assert.js";
 import {CNodeTrack} from "./CNodeTrack";
 import {ECEFToLLAVD_radii, LLAVToECEF} from "../LLA-ECEF-ENU";
-import {adjustHeightAboveGround, adjustHeightMSL, pointAbove} from "../threeExt";
+import {adjustHeightAboveGround, adjustHeightHAE, pointAbove} from "../threeExt";
 import {EventManager} from "../CEventManager";
 
 // a node wrapper for varioius spline editors
@@ -219,7 +219,7 @@ export class CNodeSplineEditor extends CNodeTrack {
     applyAltitudeLock(position, frame) {
         if (this.altitudeLock !== undefined && this.altitudeLock >= 0) {
             if (this.altitudeLockAGL === false) {
-                return adjustHeightMSL(position, this.altitudeLock);
+                return adjustHeightHAE(position, this.altitudeLock);
             }
             if (frame !== undefined) {
                 const terrainNode = NodeMan.get("TerrainModel", false);

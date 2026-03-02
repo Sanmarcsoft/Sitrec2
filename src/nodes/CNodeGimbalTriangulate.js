@@ -1,5 +1,5 @@
 import {makeMatLine} from "../MatLines";
-import {dispose, intersectMSL} from "../threeExt";
+import {dispose, intersectSurface} from "../threeExt";
 import {metersFromMiles, radians} from "../utils";
 import {CNode3DGroup} from "./CNode3DGroup";
 import {LineGeometry} from "three/addons/lines/LineGeometry.js";
@@ -85,7 +85,7 @@ export class CNodeGimbalTriangulate extends CNode3DGroup {
         let end = start.clone().add(fwd);
 
         if (this.clipSeaLevel && fwd.dot(getLocalUpVector(start)) < 0) {
-            const seaLevelPoint = intersectMSL(start, fwd);
+            const seaLevelPoint = intersectSurface(start, fwd);
             if (seaLevelPoint) {
                 end = seaLevelPoint;
             }

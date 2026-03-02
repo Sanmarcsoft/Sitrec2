@@ -1,6 +1,6 @@
 // Dispaly an arrow from an object to a celestial body
 
-import {DebugArrowAB, intersectMSL, removeDebugArrow} from "../threeExt";
+import {DebugArrowAB, intersectSurface, removeDebugArrow} from "../threeExt";
 import {CNode} from "./CNode";
 import {guiShowHide} from "../Globals";
 import {convertColorInput} from "../ConvertColorInputs";
@@ -87,8 +87,8 @@ export class CNodeBackgroundFlowIndicator extends CNode {
 
         // also get closest intersection with the globe
         // and use that if it's close (i.e. over ocean)
-        const globeA = intersectMSL(cameraPosA, losA);
-        const globeB = intersectMSL(cameraPosB, losB);
+        const globeA = intersectSurface(cameraPosA, losA);
+        const globeB = intersectSurface(cameraPosB, losB);
 
 
         if (obA && obB) {

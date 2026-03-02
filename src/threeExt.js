@@ -25,7 +25,7 @@ import {Globals, NodeMan, setRenderOne, Synth3DManager} from './Globals';
 import {par} from "./par";
 
 
-import {altitudeMSL, drop3, earthCenterECEF, pointOnSphereBelow, raisePoint, setAltitudeMSL} from "./SphericalMath"
+import {altitudeHAE, drop3, earthCenterECEF, pointOnSphereBelow, raisePoint, setAltitudeHAE} from "./SphericalMath"
 import {GlobalScene} from "./LocalFrame";
 import * as LAYER from "./LayerMasks";
 import {LLAToECEF} from "./LLA-ECEF-ENU";
@@ -616,10 +616,10 @@ export class DEBUGGroup extends Group {
     }
 }
 
-// get intersection of a point/heading ray with the Mean Sea Level surface.
+// get intersection of a point/heading ray with the reference surface (ellipsoid or sphere at HAE=0).
 // In ellipsoid mode, delegates to intersectEllipsoid for accuracy.
 // In sphere mode (equatorRadius === polarRadius), uses fast sphere intersection.
-export function intersectMSL(point, headingVector) {
+export function intersectSurface(point, headingVector) {
     if (Globals.equatorRadius !== Globals.polarRadius) {
         return intersectEllipsoid(point, headingVector);
     }
@@ -632,7 +632,7 @@ export function intersectMSL(point, headingVector) {
 }
 
 // get intersection of a point/heading ray with the WGS84 ellipsoid
-// More accurate than intersectMSL for high-latitude locations
+// More accurate than sphere intersection for high-latitude locations
 export function intersectEllipsoid(point, headingVector) {
     const a = Globals.equatorRadius;
     const b = Globals.polarRadius;
@@ -769,17 +769,17 @@ export function adjustHeightAboveGround (point, height, raycast = false) {
     return pointAbove(ground, height);
 }
 
-export function adjustHeightMSL(point, height) {
-    return setAltitudeMSL(point, height);
+export function adjustHeightHAE(point, height) {
+    return setAltitudeHAE(point, height);
 }
 
 export function calculateAltitude(point) {
-    return altitudeMSL(point);
+    return altitudeHAE(point);
 }
 
-// given a lat/lon, calculate the terrainelevation of the ground above the WGS84 sphere
-// (i.e. the MSL altitude of the ground below that point)
-// uses the terrain model if available, otherwise uses the WGS84 sphere
+// given a lat/lon, calculate the terrain elevation of the ground above the WGS84 ellipsoid
+// (i.e. the HAE altitude of the ground below that point)
+// uses the terrain model if available, otherwise uses the WGS84 ellipsoid
 export function elevationAtLL(lat, lon, raycast = false) {
     // get the point in ECEF
     const point = LLAToECEF(lat, lon, 100000);

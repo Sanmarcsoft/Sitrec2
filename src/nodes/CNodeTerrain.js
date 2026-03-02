@@ -3,7 +3,7 @@ import {pointAbove} from "../threeExt";
 import {cos, radians} from "../utils";
 import {Globals, NodeMan, Sit} from "../Globals";
 import {ECEFToLLAVD_radii, RLLAToECEF_radii, RLLAToECEFV_Sphere} from "../LLA-ECEF-ENU";
-import {earthCenterECEF, setAltitudeMSL} from "../SphericalMath";
+import {earthCenterECEF, setAltitudeHAE} from "../SphericalMath";
 import {Group, Mesh, MeshBasicMaterial, Raycaster, SphereGeometry} from "three";
 import {GlobalScene} from "../LocalFrame";
 import {assert} from "../assert";
@@ -811,7 +811,7 @@ export class CNodeTerrain extends CNode {
             elevation = seaLevel;
         }
 
-        return setAltitudeMSL(A, elevation + agl);
+        return setAltitudeHAE(A, elevation + agl);
     }
 
     getPointBelowWithTileInfo(A, agl = 0) {
@@ -833,7 +833,7 @@ export class CNodeTerrain extends CNode {
             elevation = seaLevel;
         }
 
-        const point = setAltitudeMSL(A, elevation + agl);
+        const point = setAltitudeHAE(A, elevation + agl);
         return {point, elevation: rawElevation, tileZ, tileX, tileY};
     }
 

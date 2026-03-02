@@ -6,7 +6,7 @@ import {getAzElFromPositionAndForward, getCompassHeading} from "../SphericalMath
 import {MV3} from "../threeUtils";
 import {Raycaster} from "three";
 import * as LAYER from "../LayerMasks";
-import {getPointBelow, intersectMSL} from "../threeExt";
+import {getPointBelow, intersectSurface} from "../threeExt";
 import {ECEFToLLAVD_radii, haversineDistanceKM} from "../LLA-ECEF-ENU";
 import {forward as mgrsForward} from "mgrs";
 import {degrees} from "../utils";
@@ -364,9 +364,9 @@ export class   CNodeMQ9UI extends CNodeViewUI {
                     targetPos = intersection.point.clone();
                 }
             }
-            // Fall back to MSL sphere if no terrain hit
+            // Fall back to reference surface if no terrain hit
             if (!targetPos) {
-                targetPos = intersectMSL(camera.position, forward);
+                targetPos = intersectSurface(camera.position, forward);
             }
         }
 

@@ -5,7 +5,7 @@ import {ViewMan} from "./CViewManager";
 import {CNode} from "./nodes/CNode";
 import {Raycaster, Vector3} from "three";
 import {assert} from "./assert.js";
-import {intersectMSL} from "./threeExt";
+import {intersectSurface} from "./threeExt";
 import * as LAYER from "./LayerMasks";
 
 const MAX_PANORAMA_WIDTH = 20000;
@@ -21,7 +21,7 @@ function getBackgroundPoint(cameraPos, lookDir, terrainNode) {
         }
     }
     
-    const globePoint = intersectMSL(cameraPos, lookDir);
+    const globePoint = intersectSurface(cameraPos, lookDir);
     if (globePoint) {
         return globePoint;
     }

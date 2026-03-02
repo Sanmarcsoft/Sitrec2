@@ -153,21 +153,19 @@ export function earthCenterECEF() {
 /**
  * Geodetic ellipsoid height (HAE) of a point in ECEF coordinates.
  *
- * Historical note: this function name predates geoid-aware MSL handling and is
- * still used broadly in geometry code. User-facing MSL should be computed as:
- *   MSL = altitudeMSL(point) - meanSeaLevelOffset(lat, lon)
+ * For user-facing MSL, compute as:
+ *   MSL = altitudeHAE(point) - meanSeaLevelOffset(lat, lon)
  */
-export function altitudeMSL(point) {
+export function altitudeHAE(point) {
     return ECEFToLLA_radii(point.x, point.y, point.z)[2];
 }
 
 /**
  * Move a point to a specific geodetic ellipsoid height (HAE).
  *
- * Historical note: function name is retained for compatibility with existing
- * callers. For true MSL targets, convert MSL->HAE first by adding geoid offset.
+ * For true MSL targets, convert MSL→HAE first by adding geoid offset.
  */
-export function setAltitudeMSL(point, altitude) {
+export function setAltitudeHAE(point, altitude) {
     const lla = ECEFToLLA_radii(point.x, point.y, point.z);
     return RLLAToECEF_radii(lla[0], lla[1], altitude);
 }
@@ -176,7 +174,7 @@ export function setAltitudeMSL(point, altitude) {
  * Point on the WGS84 ellipsoid (HAE=0) directly below a given ECEF point.
  */
 export function pointOnSurface(point) {
-    return setAltitudeMSL(point, 0);
+    return setAltitudeHAE(point, 0);
 }
 
 /**
@@ -225,10 +223,10 @@ export function dropFromDistance(dist, radius=Globals.equatorRadius) {
 }
 
 
-// get altitude of a point in ECEF coordinates above MSL
+// get HAE altitude of a point in ECEF coordinates
 // for full terrain use altitudeAt(position) or altitudeAtLL(lat, lon)
 export function pointAltitude(position) {
-    return altitudeMSL(position);
+    return altitudeHAE(position);
 }
 
 
@@ -360,14 +358,14 @@ export function extractRollFromMatrix(m) {
 }
 
 
-// Given a point p. return the point on the globe below this, with an optional added altitude
-// (essentially adjusting the MSL altitude of a point)
+// Given a point p, return the point on the globe below this, with an optional added altitude
+// (essentially adjusting the HAE altitude of a point)
 export function pointOnSphereBelow(p, altitude=0) {
-    return setAltitudeMSL(p, altitude);
+    return setAltitudeHAE(p, altitude);
 }
 
 export function altitudeAboveSphere(p) {
-    return altitudeMSL(p);
+    return altitudeHAE(p);
 }
 
 // given a position and a forward vector, return the Azimuth and Elevation (heading and pitch)

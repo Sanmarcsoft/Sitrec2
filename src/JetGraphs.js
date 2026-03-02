@@ -3,7 +3,7 @@ import {CNodeGraphSeries} from "./nodes/CNodeGraphSeries";
 import {CNodeMunge, makeMunge} from "./nodes/CNodeMunge";
 import {NodeMan, Sit, Units} from "./Globals";
 import {acos, degrees, m2f, NMFromMeters} from "./utils";
-import {altitudeMSL, getLocalUpVector} from "./SphericalMath";
+import {altitudeHAE, getLocalUpVector} from "./SphericalMath";
 import {CNodeTrackScreenAngle} from "./nodes/CNodeJetTrack";
 import {assert} from "./assert.js";
 import {getGlareAngleFromFrame} from "./JetUtils";
@@ -407,7 +407,7 @@ export function AddAltitudeGraph(min, max, source = "LOSTraverseSelect", left  =
                     inputs: {source: source},
                     munge: function (f) {
                         const pos = this.in.source.p(f)
-                        const alt = m2f(altitudeMSL(pos))
+                        const alt = m2f(altitudeHAE(pos))
                         return alt;
                     }
                 }),
