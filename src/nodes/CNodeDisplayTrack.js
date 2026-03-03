@@ -199,14 +199,14 @@ export class CNodeDisplayTrack extends CNode3DGroup {
                 this.updateContrail();
                 setRenderOne(true);
             })
-            this.guiContrailDuration = this.guiFolder.add(this, "contrailDuration", 2, 1000, 1)
+            this.guiContrailDuration = this.guiFolder.add(this, "contrailDuration", 2, 5000, 1)
                 .name("Contrail Secs").listen().onChange(() => {
                     if (this.contrailNode) {
                         this.contrailNode.duration = this.contrailDuration;
                     }
                     setRenderOne(true);
                 })
-            this.guiFolder.add(this, "contrailSpread", 0, 5, 0.01)
+            this.guiFolder.add(this, "contrailSpread", 0, 20, 0.01)
                 .name("Contrail Spread m/s").listen().onChange(() => {
                     if (this.contrailNode) {
                         this.contrailNode.spread = this.contrailSpread;

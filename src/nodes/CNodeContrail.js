@@ -4,6 +4,8 @@ import {GlobalDateTimeNode, setRenderOne, Sit} from "../Globals";
 import {dispose} from "../threeExt";
 import {V3} from "../threeUtils";
 import {getLocalUpVector} from "../SphericalMath";
+import {ECEFToLLAVD_radii, RLLAToECEF_radii} from "../LLA-ECEF-ENU";
+import {radians} from "../utils";
 import * as LAYER from "../LayerMasks";
 
 // CNodeContrail renders a flat horizontal white ribbon trailing behind a track,
@@ -109,7 +111,7 @@ export class CNodeContrail extends CNode3DGroup {
 
             let pos;
             if (loOk && hiOk) {
-                pos = dataTrack.p(floatFrame); // safe to interpolate
+                pos = dataTrack.p(floatFrame);
             } else if (loOk) {
                 pos = loVal.position;
             } else if (hiOk) {
@@ -123,13 +125,19 @@ export class CNodeContrail extends CNode3DGroup {
         return null;
     }
 
+    // Clamp an ECEF point to a target altitude (HAE meters), preserving lat/lon.
+    clampToAltitude(ecef, targetAlt) {
+        const lla = ECEFToLLAVD_radii(ecef); // {x: lat_deg, y: lon_deg, z: alt_m}
+        return RLLAToECEF_radii(radians(lla.x), radians(lla.y), targetAlt);
+    }
+
     rebuildRibbon(frame) {
         this.removeMesh();
 
         const wind = this.in.wind;
         const fps = Sit.fps;
 
-        // Collect sample points with elapsed time
+        // Collect sample points with elapsed time and original track altitude
         const samples = [];
         const maxOffset = this.duration;
         const step = this.sampleInterval;
@@ -139,36 +147,29 @@ export class CNodeContrail extends CNode3DGroup {
             const pos = this.getPositionAtFrame(sampleFrame);
             if (!pos) continue;
 
+            // Remember the track point's altitude before wind drift
+            const trackAlt = ECEFToLLAVD_radii(pos).z;
+
+            // Apply wind drift computed at this point's location (not a shared reference)
             if (wind) {
-                const windPerFrame = wind.v(frame);
+                const windPerFrame = wind.getValueFrame(frame, pos);
                 pos.add(windPerFrame.multiplyScalar(t * fps));
             }
 
-            samples.push({pos, elapsed: t});
+            samples.push({pos, elapsed: t, trackAlt});
         }
 
         // Include current position exactly if loop didn't land on t=0
         const lastT = maxOffset % step;
         if (lastT !== 0) {
             const pos = this.getPositionAtFrame(frame);
-            if (pos) samples.push({pos, elapsed: 0});
+            if (pos) {
+                const trackAlt = ECEFToLLAVD_radii(pos).z;
+                samples.push({pos, elapsed: 0, trackAlt});
+            }
         }
 
         if (samples.length < 2) return;
-
-        // Compute horizontal wind direction (constant for all points, used for spread)
-        let windDir = null;
-        if (wind && this.spread > 0) {
-            const refPos = samples[Math.floor(samples.length / 2)].pos;
-            const windVec = wind.v(frame);
-            const up = getLocalUpVector(refPos);
-            windDir = windVec.clone().sub(up.clone().multiplyScalar(windVec.dot(up)));
-            if (windDir.lengthSq() > 1e-10) {
-                windDir.normalize();
-            } else {
-                windDir = null;
-            }
-        }
 
         // Compute midpoint for float precision
         const mid = V3(0, 0, 0);
@@ -182,6 +183,7 @@ export class CNodeContrail extends CNode3DGroup {
         for (let i = 0; i < samples.length; i++) {
             const p = samples[i].pos;
             const elapsed = samples[i].elapsed;
+            const trackAlt = samples[i].trackAlt;
 
             // Per-point travel direction: average of adjacent segments for smooth edges
             let dir;
@@ -201,25 +203,38 @@ export class CNodeContrail extends CNode3DGroup {
             // Base half-width perpendicular to travel
             const baseHW = this.ribbonWidth / 2;
 
-            // Spread half-width in wind direction
+            // Spread half-width in wind direction (computed locally at this point)
             const spreadHW = this.spread * elapsed / 2;
 
             let leftOffset, rightOffset;
-            if (windDir && spreadHW > 0) {
-                // Combine base perpendicular width + spread in wind direction
+            if (wind && spreadHW > 0) {
+                // Compute local horizontal wind direction at this point
+                const windVec = wind.getValueFrame(frame, p);
+                let localWindDir = windVec.clone().sub(up.clone().multiplyScalar(windVec.dot(up)));
+                if (localWindDir.lengthSq() > 1e-10) {
+                    localWindDir.normalize();
+                } else {
+                    localWindDir = perp; // fallback
+                }
                 const baseOffset = perp.clone().multiplyScalar(baseHW);
-                const spreadOffset = windDir.clone().multiplyScalar(spreadHW);
+                const spreadOffset = localWindDir.clone().multiplyScalar(spreadHW);
                 leftOffset = baseOffset.clone().negate().sub(spreadOffset);
                 rightOffset = baseOffset.clone().add(spreadOffset);
             } else {
-                // No wind or no spread: just perpendicular width
                 leftOffset = perp.clone().multiplyScalar(-baseHW);
                 rightOffset = perp.clone().multiplyScalar(baseHW);
             }
 
+            // Compute edge positions in world space, then clamp to track altitude
+            const leftWorld = V3(p.x + leftOffset.x, p.y + leftOffset.y, p.z + leftOffset.z);
+            const rightWorld = V3(p.x + rightOffset.x, p.y + rightOffset.y, p.z + rightOffset.z);
+
+            const leftClamped = this.clampToAltitude(leftWorld, trackAlt);
+            const rightClamped = this.clampToAltitude(rightWorld, trackAlt);
+
             edges.push({
-                left: V3(p.x - mid.x + leftOffset.x, p.y - mid.y + leftOffset.y, p.z - mid.z + leftOffset.z),
-                right: V3(p.x - mid.x + rightOffset.x, p.y - mid.y + rightOffset.y, p.z - mid.z + rightOffset.z),
+                left: V3(leftClamped.x - mid.x, leftClamped.y - mid.y, leftClamped.z - mid.z),
+                right: V3(rightClamped.x - mid.x, rightClamped.y - mid.y, rightClamped.z - mid.z),
             });
         }
 
@@ -232,12 +247,10 @@ export class CNodeContrail extends CNode3DGroup {
             const e1 = edges[i];
             const e2 = edges[i + 1];
 
-            // Triangle 1: e1.left, e2.left, e2.right
             vertices.push(e1.left.x, e1.left.y, e1.left.z);
             vertices.push(e2.left.x, e2.left.y, e2.left.z);
             vertices.push(e2.right.x, e2.right.y, e2.right.z);
 
-            // Triangle 2: e1.left, e2.right, e1.right
             vertices.push(e1.left.x, e1.left.y, e1.left.z);
             vertices.push(e2.right.x, e2.right.y, e2.right.z);
             vertices.push(e1.right.x, e1.right.y, e1.right.z);
