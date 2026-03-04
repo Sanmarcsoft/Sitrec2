@@ -1076,7 +1076,8 @@ export async function SetupFromKeyAndData(key, _data, depth=0) {
                 knots: data.knots,
                 max: data.max,
                 name: "Object",
-                arrowColor: "cyan"
+                arrowColor: "cyan",
+                originTrack: data.originTrack,
             }, guiPhysics)
             break;
 
@@ -1088,7 +1089,8 @@ export async function SetupFromKeyAndData(key, _data, depth=0) {
                 knots: data.knots,
                 max: data.max,
                 name: "Local",
-                arrowColor: "yellow"
+                arrowColor: "yellow",
+                originTrack: data.originTrack,
             }, guiPhysics)
             break;
 
