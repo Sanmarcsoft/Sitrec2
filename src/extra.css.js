@@ -236,6 +236,12 @@ html, body {
     margin-top: 0 !important;
 }
 
+/* Limit menu dropdown height so tall menus scroll internally instead of overflowing the viewport */
+#menuBar .lil-gui.root > .children {
+    max-height: calc(100vh - 35px);
+    overflow-y: auto;
+}
+
 /* Custom HTML controller styling */
 .lil-gui .custom-html-controller {
     display: flex;

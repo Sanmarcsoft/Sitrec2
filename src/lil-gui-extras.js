@@ -758,7 +758,7 @@ export class CGuiMenuBar {
         this.menuBar.style.left = "0px";
         this.menuBar.style.height = "100%";
         this.menuBar.style.width = "100%"; // Added this to ensure full width
-        this.menuBar.style.overflowY = "auto"; // Allow scrolling if content overflows
+        this.menuBar.style.overflowY = "hidden"; // Prevent scroll - menus handle their own overflow
         this.menuBar.style.overflowX = "hidden"; // Prevent horizontal scrollbar when dragging menus
 
         this._hidden = false;
@@ -1427,6 +1427,9 @@ export class CGuiMenuBar {
     handleTitleMouseDown(event) {
         const newGUI = this.slots.find((gui) => gui.$title === event.target);
 
+        // Reset any scroll on the menuBar container (defensive - shouldn't scroll with overflow:hidden)
+        this.menuBar.scrollTop = 0;
+
         this.bringToFront(newGUI);
 
         const newDiv = this.divs.find((div) => div === newGUI.domElement.parentElement);
@@ -1438,7 +1441,7 @@ export class CGuiMenuBar {
         const wasInLeftSidebar = isInLeftSidebar(newGUI);
         const wasInRightSidebar = isInRightSidebar(newGUI);
         let hasUndockedFromSidebar = false;
-        
+
         const divRect = newDiv.getBoundingClientRect();
         const menuBarRect = this.menuBar.getBoundingClientRect();
         const dragOffsetX = event.clientX - divRect.left;
@@ -1458,10 +1461,11 @@ export class CGuiMenuBar {
         const boundHandlePointerMove = (event) => {
             const dx = Math.abs(event.clientX - startX);
             const dy = Math.abs(event.clientY - startY);
+            const wasDragging = hasDragged;
             if (dx > 10 || dy > 10) {
                 hasDragged = true;
             }
-            
+
             if ((wasInLeftSidebar || wasInRightSidebar) && !hasUndockedFromSidebar && hasDragged) {
                 this.menuBar.appendChild(newDiv);
                 newDiv.style.position = 'absolute';
@@ -1491,7 +1495,15 @@ export class CGuiMenuBar {
             if (!hasUndockedFromSidebar && (wasInLeftSidebar || wasInRightSidebar)) {
                 return;
             }
-            
+
+            // Don't update position until drag was confirmed by a PREVIOUS event.
+            // This prevents phantom pointermove events (fired by browsers during
+            // fullscreen transitions with bogus coordinates) from repositioning the menu.
+            if (!wasDragging) {
+                event.preventDefault();
+                return;
+            }
+
             newDiv.style.left = (event.clientX - dragOffsetX - menuBarRect.left) + 'px';
             newDiv.style.top = (event.clientY - dragOffsetY - menuBarRect.top) + 'px';
 
