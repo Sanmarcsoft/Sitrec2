@@ -665,7 +665,7 @@ class CTrackManager extends CManager {
             tiltType: "banking",
             guiFolder: trackOb.displayTargetSphere.gui,
         }
-        const maybeWind = NodeMan.get("targetWind");
+        const maybeWind = NodeMan.get("targetWind", false);
         if (maybeWind) {
             tiltDef.wind = maybeWind;
         }
