@@ -660,12 +660,17 @@ class CTrackManager extends CManager {
             sourceTrack: trackID,
         });
 
-        trackOb.displayTargetSphere.addController("ObjectTilt", {
+        const tiltDef = {
             track: trackID,
             tiltType: "banking",
             guiFolder: trackOb.displayTargetSphere.gui,
-            //                 wind: "targetWind" // NOT ALL SITCHES HAVE THIS
-        })
+        }
+        const maybeWind = NodeMan.get("targetWind");
+        if (maybeWind) {
+            tiltDef.wind = maybeWind;
+        }
+
+        trackOb.displayTargetSphere.addController("ObjectTilt", tiltDef);
     }
 
     centerOnTrack(shortName, trackNumber, trackOb, hasAngles, trackIndex = 0) {
