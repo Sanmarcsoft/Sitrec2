@@ -197,7 +197,7 @@ export class CNodeContrail extends CNode3DGroup {
                     const d1 = distFromTip[i + 1];
                     if (d0 <= this.rampDistance || d1 <= this.rampDistance) {
                         const segLen = samples[i].pos.distanceTo(samples[i + 1].pos);
-                        const subdivs = Math.ceil(segLen / rampSegLen);
+                        const subdivs = Math.min(Math.ceil(segLen / rampSegLen), 250);
                         if (subdivs > 1) {
                             for (let s = 1; s < subdivs; s++) {
                                 const frac = s / subdivs;
@@ -211,7 +211,9 @@ export class CNodeContrail extends CNode3DGroup {
                 }
             }
             samples.length = 0;
-            samples.push(...subdividedSamples);
+            for (let i = 0; i < subdividedSamples.length; i++) {
+                samples.push(subdividedSamples[i]);
+            }
 
             // Recompute distFromTip for subdivided samples
             distFromTip.length = samples.length;
