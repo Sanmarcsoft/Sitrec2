@@ -58,6 +58,7 @@ import {CNodeViewDAG} from "./nodes/CNodeViewDAG";
 import {CNodeNotes} from "./nodes/CNodeNotes";
 import {createCustomModalWithCopy, saveFilePrompted} from "./FileUtils";
 import {deserializeMotionAnalysis, serializeMotionAnalysis} from "./CMotionAnalysis";
+import {deserializeAutoTracking, serializeAutoTracking} from "./CObjectTracking";
 import {getCursorPositionFromTopView} from "./mouseMoveView";
 import {addMenuToLeftSidebar, addMenuToRightSidebar, isInLeftSidebar, isInRightSidebar} from "./PageStructure";
 import {CNodeControllerCelestial} from "./nodes/CNodeControllerVarious";
@@ -3536,6 +3537,9 @@ export class CCustomManager {
         // Serialize motion analysis state
         out.motionAnalysis = serializeMotionAnalysis()
 
+        // Serialize auto tracking state (tracked positions + stabilization)
+        out.autoTracking = serializeAutoTracking()
+
         // Serialize sub sitches
         out.subSitchesData = this.serializeSubSitches()
 
@@ -3994,6 +3998,10 @@ export class CCustomManager {
 
         if (sitchData.motionAnalysis) {
             await deserializeMotionAnalysis(sitchData.motionAnalysis);
+        }
+
+        if (sitchData.autoTracking) {
+            await deserializeAutoTracking(sitchData.autoTracking);
         }
 
         if (sitchData.subSitchesData) {

@@ -1582,3 +1582,90 @@ export function addObjectTrackingMenu() {
 export function getObjectTracker() {
     return objectTracker;
 }
+
+export function serializeAutoTracking() {
+    if (!objectTracker || !objectTracker.enabled) return null;
+    if (objectTracker.trackedPositions.size === 0) return null;
+
+    const videoView = objectTracker.videoView;
+    const videoData = videoView?.videoData;
+
+    return {
+        trackX: objectTracker.trackX,
+        trackY: objectTracker.trackY,
+        trackRadius: objectTracker.trackRadius,
+        searchRadius: objectTracker.searchRadius,
+        centerOnBright: objectTracker.centerOnBright,
+        centerOnDark: objectTracker.centerOnDark,
+        brightnessThreshold: objectTracker.brightnessThreshold,
+        trackingMethod: objectTracker.trackingMethod,
+        // Convert Map to array of [frame, {x,y}] pairs
+        trackedPositions: Array.from(objectTracker.trackedPositions.entries()),
+        // Stabilization state
+        stabilizationEnabled: videoData?.stabilizationEnabled ?? false,
+        stabilizationDirectOffset: videoData?.stabilizationDirectOffset ?? false,
+    };
+}
+
+export async function deserializeAutoTracking(data) {
+    if (!data) return;
+
+    const videoView = NodeMan.get("video", false);
+    if (!videoView) return;
+
+    // Create and enable the tracker
+    if (!objectTracker) {
+        objectTracker = new ObjectTracker(videoView);
+    }
+    objectTracker.enable();
+    if (enableMenuItem) enableMenuItem.name("Disable Auto Tracking");
+
+    // Hook rendering if not already done
+    if (!renderHooked) {
+        renderHooked = true;
+        const originalRender = videoView.renderCanvas.bind(videoView);
+        videoView.renderCanvas = function(frame) {
+            originalRender(frame);
+            if (objectTracker && objectTracker.enabled) {
+                objectTracker.renderOverlay(frame);
+            }
+        };
+    }
+
+    // Restore tracker state
+    objectTracker.trackX = data.trackX ?? 0;
+    objectTracker.trackY = data.trackY ?? 0;
+    objectTracker.trackRadius = data.trackRadius ?? 30;
+    objectTracker.searchRadius = data.searchRadius ?? 50;
+    objectTracker.centerOnBright = data.centerOnBright ?? false;
+    objectTracker.centerOnDark = data.centerOnDark ?? false;
+    objectTracker.brightnessThreshold = data.brightnessThreshold ?? 128;
+    objectTracker.trackingMethod = data.trackingMethod ?? 'template';
+
+    // Restore tracked positions
+    if (data.trackedPositions) {
+        objectTracker.trackedPositions = new Map(data.trackedPositions);
+    }
+
+    // Restore stabilization if there's tracking data
+    if (data.stabilizationEnabled && objectTracker.trackedPositions.size > 0) {
+        const videoData = videoView.videoData;
+        if (videoData) {
+            const firstFrame = Math.min(...objectTracker.trackedPositions.keys());
+            const referencePoint = objectTracker.trackedPositions.get(firstFrame);
+            if (referencePoint) {
+                videoData.setStabilizationData(
+                    objectTracker.trackedPositions,
+                    referencePoint,
+                    data.stabilizationDirectOffset ?? false
+                );
+                videoData.setStabilizationEnabled(true);
+                if (stabilizeToggleMenuItem) {
+                    stabilizeToggleMenuItem.name("Disable Stabilization");
+                }
+            }
+        }
+    }
+
+    setRenderOne(true);
+}

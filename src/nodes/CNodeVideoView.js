@@ -213,9 +213,23 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
     }
 
+    showOverlay() {
+        if (this.overlay?.canvas) {
+            this.overlay.canvas.style.display = '';
+        }
+    }
+
+    hideOverlay() {
+        if (this.overlay?.canvas) {
+            this.overlay.canvas.style.display = 'none';
+        }
+    }
+
     addLoadingMessage() {
-        if (this.overlay)
+        if (this.overlay) {
+            this.showOverlay();
             this.overlay.addText("videoLoading", "LOADING", 50, 50, 5, "#f0f000")
+        }
     }
 
 
@@ -225,6 +239,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
             this.overlay.removeText("videoError")
             this.overlay.removeText("videoErrorName")
             this.overlay.removeText("videoNo")
+            this.hideOverlay();
         }
     }
 
@@ -448,6 +463,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         }
         if (this.overlay) {
             this.overlay.removeText("videoLoading")
+            this.showOverlay();
             this.overlay.addText("videoError", "Error Loading", 50, 45, 5, "#f0f000", "center")
             this.overlay.addText("videoErrorName", this.fileName, 50, 55, 1.5, "#f0f000", "center")
         }
