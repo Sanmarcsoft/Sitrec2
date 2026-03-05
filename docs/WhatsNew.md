@@ -45,7 +45,46 @@ Example entry format:
 
 ---
 
-## Version 2.31.0
+## 2.31.4
+
+### Bug Fixes
+- Fixed leaking event listener on MQ9 UI
+- Fixed resize timeout not being cleared on dispose
+- Fixed audio decode timeout not being cleared when disposing MP4 video
+- Fixed ECEF-to-LLA conversion near the poles
+
+---
+
+## Version 2.31.3 (2026-03-05)
+
+### Improvements
+- Auto-hide empty CNodeViewUI overlay canvases to reduce GPU compositing
+- Auto Tracking/Stabilization state is now serialized
+- Added "Center on Dark" option
+
+### Bug Fixes
+- Fixed chatbot session continuation infinite loop
+- Fixed "LOADING" message getting stuck
+
+---
+
+## Version 2.31.2 (2026-03-04)
+
+### Bug Fixes
+- Fixed incorrect scaling of lights (from Global Scale)
+- Fixed contrail subdivision stack overflow
+- Handle version correctly when loading from one user's file while not logged in as them
+
+---
+
+## Version 2.31.1 (2026-03-04)
+
+### Bug Fixes
+- Fixed right-clicking on stars and other objects
+
+---
+
+## Version 2.31.0 (2026-03-04)
 
 ### New Features
 - **Contrails**: Contrail rendering as flat horizontal ribbons trailing behind tracks, with wind drift, initial width ramp, and spread over time
