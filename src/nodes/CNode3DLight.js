@@ -363,8 +363,12 @@ export class CNode3DLight extends CNode3D {
             newSize *= (1.0 - skyOpacity); // scale down the size based on the sky opacity
         }
 
-        this._object.scale.setScalar(newSize);
-        
+        // Compensate for parent group's scale (e.g. objectScale * objectSize)
+        // so the billboard's world-space size is just newSize * geometrySize,
+        // regardless of the parent's scale transform.
+        const parentWorldScale = this._object.parent ? this._object.parent.getWorldScale(new Vector3()).x : 1;
+        this._object.scale.setScalar(newSize / parentWorldScale);
+
         // CRITICAL: Force immediate matrix world update after changing scale
         //
         // When rendering multiple views with different cameras, each view's preRender() sets
