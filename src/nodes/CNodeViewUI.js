@@ -173,6 +173,18 @@ export class CNodeViewUI extends CNodeViewCanvas2D {
 
     // render for CNodeViewUI - extends CNodeViewCanvas2D
     renderCanvas(frame) {
+
+        // Auto-hide empty overlay canvases to save GPU compositing.
+        // Only for pure CNodeViewUI (not subclasses that draw custom content).
+        if (this.overlayView && this.constructor === CNodeViewUI
+            && Object.keys(this.textElements).length === 0) {
+            if (this.canvas) this.canvas.style.display = 'none';
+            return;
+        }
+        if (this.canvas && this.canvas.style.display === 'none') {
+            this.canvas.style.display = '';
+        }
+
         super.renderCanvas(frame) // will be CNodeViewCanvas2D
 
         if (!this.visible) return;
