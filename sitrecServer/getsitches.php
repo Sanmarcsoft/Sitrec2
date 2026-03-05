@@ -421,7 +421,7 @@ if (isset($_GET['get'])) {
 
     } else if ($_GET['get'] == "versions") {
             $name = $_GET['name'];
-            
+
             // SECURITY: Validate name to prevent path traversal
             if (!preg_match(SITCH_NAME_PATTERN, $name)) {
                 http_response_code(400);
@@ -429,7 +429,13 @@ if (isset($_GET['get'])) {
                 exit();
             }
             $name = basename($name); // Extra safety: strip any path components
-            
+
+            // Allow viewing another user's versions (e.g. when loading a shared sitch URL)
+            if (isset($_GET['userid']) && preg_match('/^\d+$/', $_GET['userid'])) {
+                $userID = $_GET['userid'];
+                $dir = $useAWS ? getShortDir($userID) : getUserDir($userID);
+            }
+
             $dir .= "/" . $name;
             $versions = array();
             if (!$useAWS) {

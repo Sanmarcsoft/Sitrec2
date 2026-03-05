@@ -369,7 +369,11 @@ export class CFileManager extends CManager {
      * @returns {Promise<Array<{version: string, url: string}>>} Array of version objects with version and url properties
      */
     getVersions(name) {
-        return fetch((SITREC_SERVER + "getsitches.php?get=versions&name="+name), {mode: 'cors'}).then(response => {
+        let url = SITREC_SERVER + "getsitches.php?get=versions&name=" + name;
+        if (this.sourceUserID) {
+            url += "&userid=" + this.sourceUserID;
+        }
+        return fetch(url, {mode: 'cors'}).then(response => {
             if (response.status !== 200) {
                 throw new Error(`Server returned status ${response.status}`);
             }
@@ -606,6 +610,10 @@ export class CFileManager extends CManager {
      * @returns {Promise<void>} Resolves when save completes
      */
     saveSitch(local = false) {
+        // Once the user saves, versions should reflect their own user, not the source
+        if (!local) {
+            this.sourceUserID = null;
+        }
         if (Sit.sitchName === undefined) {
             return this.inputSitchName().then(() => {
                 return this.saveSitchNamed(Sit.sitchName, local);  // return the Promise here

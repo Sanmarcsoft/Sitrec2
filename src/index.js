@@ -1457,6 +1457,11 @@ async function initializeOnce() {
     const customURL = urlParams.get("custom") || urlParams.get("mod");
     if (customURL) {
         FileManager.loadURL = customURL;
+        // Extract the source user ID from S3 URLs so version listings use the correct user
+        const s3UserMatch = customURL.match(/https:\/\/sitrec\.s3[^\/]*\.amazonaws\.com\/(\d+)\//);
+        if (s3UserMatch) {
+            FileManager.sourceUserID = s3UserMatch[1];
+        }
     }
 
     window.FileManager = FileManager;
