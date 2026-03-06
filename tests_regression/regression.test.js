@@ -282,10 +282,14 @@ test.describe('Visual Regression Testing', () => {
 
                 page.on('console', msg => {
                     const text = msg.text();
-                    console.log(`[WORKER-${testInfo.workerIndex}] PAGE CONSOLE [${msg.type()}]: ${text}`);
+                    const type = msg.type();
+                    console.log(`[WORKER-${testInfo.workerIndex}] PAGE CONSOLE [${type}]: ${text}`);
                     if (text.includes('ASSERT:')) {
                         console.error(`[WORKER-${testInfo.workerIndex}] ASSERTION FAILURE DETECTED: ${text}`);
                         assertionReject(new Error(`ASSERTION FAILURE: ${text}`));
+                    } else if (type === 'error') {
+                        console.error(`[WORKER-${testInfo.workerIndex}] CONSOLE ERROR DETECTED: ${text}`);
+                        assertionReject(new Error(`CONSOLE ERROR: ${text}`));
                     }
                 });
 

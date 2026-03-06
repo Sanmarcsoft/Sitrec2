@@ -3222,9 +3222,20 @@ export class CCustomManager {
         Globals.screenshotting = true;
         const results = {added: [], failed: []};
 
+        // Intercept console.error so any error (including asserts) stops the process
+        const originalConsoleError = console.error;
+        let capturedError = null;
+        console.error = function (...args) {
+            originalConsoleError.apply(console, args);
+            if (!capturedError) {
+                capturedError = args.join(' ');
+            }
+        };
+
         for (let i = 0; i < missing.length; i++) {
             const sitchName = String(missing[i][0]);
             let latestVersion = "(unknown)";
+            capturedError = null;
             console.log(`\n[${i + 1}/${total}] Loading: ${sitchName}`);
 
             try {
@@ -3278,6 +3289,11 @@ export class CCustomManager {
                 // One extra frame to ensure rendering is complete
                 await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
+                // Check if any console.error occurred during loading
+                if (capturedError) {
+                    throw new Error(`console.error during load: ${capturedError}`);
+                }
+
                 // Capture and upload the screenshot
                 const blob = await FileManager.captureViewportScreenshot();
                 if (!blob) {
@@ -3289,6 +3305,7 @@ export class CCustomManager {
                 results.added.push(sitchName);
 
             } catch (error) {
+                console.error = originalConsoleError;
                 console.error(`  FAILED: ${sitchName} - ${error.message}`);
                 results.failed.push({name: sitchName, error: error.message});
                 Globals.screenshotting = false;
@@ -3300,6 +3317,7 @@ export class CCustomManager {
             }
         }
 
+        console.error = originalConsoleError;
         Globals.screenshotting = false;
         let report = `\nScreenshot generation complete.\nAdded: ${results.added.length}\n`;
         console.log(report);

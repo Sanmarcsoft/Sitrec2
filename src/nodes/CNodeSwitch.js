@@ -245,7 +245,7 @@ class CNodeSwitch extends CNode {
 
         // if the choice is invalid, warn and return without changing the choice
         if (this.inputs[option] === undefined) {
-            console.error("CNodeSwitch("+this.id+"):selectOption: option "+option+" not found in inputs, ignoring");
+            console.warn("CNodeSwitch("+this.id+"):selectOption: option "+option+" not found in inputs, ignoring");
             return;
         }
 
