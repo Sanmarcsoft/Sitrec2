@@ -292,6 +292,14 @@ export function initKeyboard() {
             return;
         }
 
+        if ((e.ctrlKey || e.metaKey) && keyCode === 'KeyN') {
+            e.preventDefault();
+            if (FileManager && FileManager.newSitch) {
+                FileManager.newSitch();
+            }
+            return;
+        }
+
         KeyMan.handleKeyDown(e);
 
         EventManager.dispatchEvent("keydown", {key: key, keyCode: keyCode, event: e});
