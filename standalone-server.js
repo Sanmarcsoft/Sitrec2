@@ -152,6 +152,20 @@ async function startServer() {
             }
         }));
 
+        // SAM2 tracking service proxy (local dev only)
+        const SAM2_PORT = process.env.SAM2_PORT || 8001;
+        app.use('/sam2', createProxyMiddleware({
+            target: `http://127.0.0.1:${SAM2_PORT}`,
+            changeOrigin: true,
+            pathRewrite: { '^/sam2': '' },
+            timeout: 300000,        // 5 min timeout for long tracking jobs
+            proxyTimeout: 300000,
+            onError: (err, req, res) => {
+                console.log('SAM2 proxy error (start sam2-service if needed):', err.message);
+                res.status(503).json({ error: 'SAM2 service unavailable. Start it with: cd sam2-service && ./start.sh' });
+            }
+        }));
+
         // Enable debugging features
         if (process.env.NODE_ENV !== 'production') {
             // Log all requests for debugging

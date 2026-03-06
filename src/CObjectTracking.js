@@ -1091,6 +1091,12 @@ function toggleStartTracking() {
         return;
     }
 
+    // SAM2 mode: send video + click to server, get back all positions
+    if (objectTracker.trackingMethod === 'sam2') {
+        runSAM2Tracking();
+        return;
+    }
+
     // Optical flow mode requires jsfeat
     if (objectTracker.trackingMethod === 'opticalflow') {
         const jsfeat = getJsfeat();
@@ -1135,6 +1141,127 @@ function toggleStartTracking() {
         alert("Failed to load OpenCV.js: " + e.message);
         if (startMenuItem) startMenuItem.name("Start Auto Tracking");
     });
+}
+
+async function runSAM2Tracking() {
+    const videoView = objectTracker.videoView;
+    const videoData = videoView?.videoData;
+
+    if (!videoData) {
+        alert("No video loaded.");
+        return;
+    }
+
+    // Get the video file data (ArrayBuffer stored from file load or drop)
+    const videoBuffer = videoData.videoDroppedData;
+    if (!videoBuffer) {
+        alert("SAM2 tracking requires a loaded video file (drag-and-drop or file picker). URL-only videos are not yet supported.");
+        return;
+    }
+
+    const clickX = objectTracker.trackX;
+    const clickY = objectTracker.trackY;
+    const clickFrame = Math.floor(par.frame);
+
+    if (startMenuItem) startMenuItem.name("SAM2: Connecting...");
+    setRenderOne(true);
+
+    try {
+        // SAM2 service is proxied through the web server at /sam2/
+        const sam2Base = '/sam2';
+        const healthResp = await fetch(`${sam2Base}/health`).catch(() => null);
+        if (!healthResp || !healthResp.ok) {
+            alert("SAM2 service is not running.\n\nStart it with:\n  cd sam2-service && ./start.sh\n\nMake sure your web server proxies /sam2/ to port 8001.");
+            if (startMenuItem) startMenuItem.name("Start Auto Tracking");
+            return;
+        }
+
+        // Upload video and start tracking job
+        if (startMenuItem) startMenuItem.name("SAM2: Uploading...");
+        setRenderOne(true);
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const formData = new FormData();
+        const blob = new Blob([videoBuffer], { type: 'video/mp4' });
+        formData.append('video', blob, 'video.mp4');
+        formData.append('x', clickX.toString());
+        formData.append('y', clickY.toString());
+        formData.append('frame', clickFrame.toString());
+
+        const startResp = await fetch(`${sam2Base}/track`, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!startResp.ok) {
+            const errText = await startResp.text();
+            throw new Error(`SAM2 service error (${startResp.status}): ${errText}`);
+        }
+
+        const { job_id } = await startResp.json();
+        console.log(`[SAM2] Job started: ${job_id}`);
+
+        // Poll for progress
+        let results = null;
+        while (true) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            const pollResp = await fetch(`${sam2Base}/track/${job_id}`);
+            if (!pollResp.ok) {
+                throw new Error(`SAM2 poll error (${pollResp.status})`);
+            }
+
+            const job = await pollResp.json();
+
+            if (job.status === 'error') {
+                throw new Error(job.error || 'SAM2 tracking failed');
+            }
+
+            // Update status display with progress
+            if (job.total > 0 && job.progress > 0) {
+                const pct = Math.round(100 * job.progress / job.total);
+                if (startMenuItem) startMenuItem.name(`SAM2: ${job.phase} ${pct}%`);
+            } else {
+                if (startMenuItem) startMenuItem.name(`SAM2: ${job.phase}...`);
+            }
+            setRenderOne(true);
+
+            if (job.status === 'complete') {
+                results = job.results;
+                break;
+            }
+        }
+
+        // Store the initial click position
+        objectTracker.trackedPositions.set(clickFrame, { x: clickX, y: clickY });
+
+        // Populate tracked positions from SAM2 results
+        let validCount = 0;
+        let lostCount = 0;
+        for (const r of results) {
+            if (r.cx >= 0 && r.cy >= 0) {
+                objectTracker.trackedPositions.set(r.frame, { x: r.cx, y: r.cy });
+                validCount++;
+            } else {
+                lostCount++;
+            }
+        }
+
+        console.log(`[SAM2] Got ${results.length} frames: ${validCount} valid, ${lostCount} lost. trackedPositions size: ${objectTracker.trackedPositions.size}`);
+        if (results.length > 0) {
+            console.log(`[SAM2] Frame range: ${results[0].frame} - ${results[results.length - 1].frame}`);
+            console.log(`[SAM2] First result:`, results[0], `Last:`, results[results.length - 1]);
+        }
+
+        if (startMenuItem) startMenuItem.name("Start Auto Tracking");
+        objectTracker.updateSliderStatus();
+        setRenderOne(true);
+
+    } catch (e) {
+        console.error("[SAM2] Tracking failed:", e);
+        alert("SAM2 tracking failed: " + e.message);
+        if (startMenuItem) startMenuItem.name("Start Auto Tracking");
+    }
 }
 
 function clearTrack() {
@@ -1490,7 +1617,8 @@ export function addObjectTrackingMenu() {
 
     const trackingMethodOptions = {
         'Template Match': 'template',
-        'Optical Flow': 'opticalflow'
+        'Optical Flow': 'opticalflow',
+        'SAM2 (Meta)': 'sam2'
     };
     
     const trackingMethodParams = {

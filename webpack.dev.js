@@ -34,6 +34,7 @@ module.exports = merge(common({ includeIWER: true }), {
                 { from: /^\/sitrec-videos/, to: context => context.parsedUrl.pathname },
                 { from: /^\/sitrec-cache/, to: context => context.parsedUrl.pathname },
                 { from: /^\/sitrec-terrain/, to: context => context.parsedUrl.pathname },
+                { from: /^\/sam2/, to: context => context.parsedUrl.pathname },
             ]
         },
         allowedHosts: 'all',
@@ -83,6 +84,13 @@ module.exports = merge(common({ includeIWER: true }), {
                 target: BACKEND_TARGET,
                 changeOrigin: true,
                 secure: false,
+            },
+            {
+                context: ['/sam2/**'],
+                target: `http://127.0.0.1:${process.env.SAM2_PORT || 8001}`,
+                changeOrigin: true,
+                pathRewrite: { '^/sam2': '' },
+                timeout: 300000,
             },
         ],
     },

@@ -29,3 +29,6 @@ tests/__image_snapshots__/
 /app_dist/
 /apps_dist/
 /test-results.json
+/sam2-service/venv/
+/sam2-service/segment-anything-2/
+/sam2-service/uploads/
