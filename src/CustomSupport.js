@@ -37,7 +37,7 @@ import {GlobalScene} from "./LocalFrame";
 import {refreshLabelsAfterLoading} from "./nodes/CNodeLabels3D";
 import {assert} from "./assert.js";
 import {getShortURL} from "./urlUtils";
-import {CNode3DObject} from "./nodes/CNode3DObject";
+import {CNode3DObject, ModelAliases} from "./nodes/CNode3DObject";
 import {UpdateHUD} from "./JetStuff";
 import {degrees, getDateTimeFilename, parseBoolean} from "./utils";
 import {ViewMan} from "./CViewManager";
@@ -3224,6 +3224,7 @@ export class CCustomManager {
 
         for (let i = 0; i < missing.length; i++) {
             const sitchName = String(missing[i][0]);
+            let latestVersion = "(unknown)";
             console.log(`\n[${i + 1}/${total}] Loading: ${sitchName}`);
 
             try {
@@ -3232,7 +3233,7 @@ export class CCustomManager {
                 if (!versions || versions.length === 0) {
                     throw new Error("No versions found");
                 }
-                const latestVersion = versions[versions.length - 1].url;
+                latestVersion = versions[versions.length - 1].url;
 
                 // Fetch and parse the sitch
                 const response = await fetch(latestVersion);
@@ -3250,37 +3251,32 @@ export class CCustomManager {
                     sitchObject.terrain.elevationType = "Local";
                 }
 
-                // Load the sitch and wait for it to render, collecting any errors
-                let loadErrors = [];
-                await new Promise((resolve) => {
-                    const errorHandler = (event) => {
-                        loadErrors.push(event.message || String(event));
-                    };
-                    const rejectionHandler = (event) => {
-                        loadErrors.push(event.reason?.message || String(event.reason));
-                    };
-                    const origError = console.error;
-                    console.error = (...args) => {
-                        loadErrors.push(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
-                        origError.apply(console, args);
-                    };
+                // Load the sitch and wait for it to fully render
+                setNewSitchObject(sitchObject);
 
-                    window.addEventListener('error', errorHandler);
-                    window.addEventListener('unhandledrejection', rejectionHandler);
-
-                    setNewSitchObject(sitchObject);
-
-                    setTimeout(() => {
-                        window.removeEventListener('error', errorHandler);
-                        window.removeEventListener('unhandledrejection', rejectionHandler);
-                        console.error = origError;
-                        resolve();
-                    }, 5000);
+                // Wait for the sitch object to be picked up by the animation loop
+                await new Promise(resolve => {
+                    const check = () => {
+                        if (Globals.newSitchObject === undefined) resolve();
+                        else setTimeout(check, 100);
+                    };
+                    check();
                 });
 
-                if (loadErrors.length > 0) {
-                    throw new Error(`${loadErrors.length} error(s) during load: ${loadErrors[0]}`);
-                }
+                // Wait for all pending async operations (model loading, terrain, etc.)
+                const maxWait = 60000;
+                const start = Date.now();
+                await new Promise(resolve => {
+                    const check = () => {
+                        if (Globals.pendingActions <= 0 || Date.now() - start > maxWait) resolve();
+                        else setTimeout(check, 200);
+                    };
+                    // Initial delay to let the sitch setup start registering pending actions
+                    setTimeout(check, 1000);
+                });
+
+                // One extra frame to ensure rendering is complete
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
                 // Capture and upload the screenshot
                 const blob = await FileManager.captureViewportScreenshot();
@@ -3295,19 +3291,19 @@ export class CCustomManager {
             } catch (error) {
                 console.error(`  FAILED: ${sitchName} - ${error.message}`);
                 results.failed.push({name: sitchName, error: error.message});
+                Globals.screenshotting = false;
+                let report = `\nScreenshot generation STOPPED on error.\nAdded: ${results.added.length} | Failed: 1\n`;
+                report += `  ${sitchName}: ${error.message}\n`;
+                console.log(report);
+                alert(`Screenshot generation stopped on error!\n\nAdded: ${results.added.length}\nFailed: ${sitchName}\nFile: ${latestVersion}\n\n${error.message}\n\nSee console for details.`);
+                return;
             }
         }
 
         Globals.screenshotting = false;
-        let report = `\nScreenshot generation complete.\nAdded: ${results.added.length} | Failed: ${results.failed.length}\n`;
-        if (results.failed.length > 0) {
-            report += "\nFailed:\n";
-            for (const f of results.failed) {
-                report += `  ${f.name}: ${f.error}\n`;
-            }
-        }
+        let report = `\nScreenshot generation complete.\nAdded: ${results.added.length}\n`;
         console.log(report);
-        alert(`Screenshot generation complete!\n\nAdded: ${results.added.length}\nFailed: ${results.failed.length}\n\nSee console for details.`);
+        alert(`Screenshot generation complete!\n\nAdded: ${results.added.length}\n\nSee console for details.`);
     }
 
     refreshLookViewTracks() {
@@ -3889,6 +3885,13 @@ export class CCustomManager {
 
         Globals.deserializing = true;
 
+        // Restore Sit.ignores early, BEFORE files are loaded.
+        // extractKMLObjectsInternal checks shouldIgnore() to avoid recreating
+        // features that are already saved in featureMarkers.
+        if (sitchData.Sit && sitchData.Sit.ignores) {
+            Sit.ignores = sitchData.Sit.ignores;
+        }
+
         // Store file metadata for special handling during loading
         if (sitchData.loadedFilesMetadata) {
             FileManager.loadedFilesMetadata = sitchData.loadedFilesMetadata;
@@ -3898,6 +3901,24 @@ export class CCustomManager {
 
         const loadingPromises = [];
         if (sitchData.loadedFiles) {
+            // Remap any old/renamed file paths in loadedFiles (e.g. renamed model .glb files)
+            for (const oldId of Object.keys(sitchData.loadedFiles)) {
+                if (ModelAliases[oldId]) {
+                    const newPath = ModelAliases[oldId];
+                    const oldValue = sitchData.loadedFiles[oldId];
+                    // Remap the value: replace old filename with new in the URL/path
+                    const oldFilename = oldId.split('/').pop();
+                    const newFilename = newPath.split('/').pop();
+                    const newValue = oldValue.includes(oldFilename)
+                        ? oldValue.replace(oldFilename, newFilename)
+                        : oldValue;
+                    console.log(`Remapped old model path in loadedFiles: ${oldId} -> ${newPath}`);
+                    sitchData.loadedFiles[newPath] = newValue;
+                    Sit.loadedFiles[newPath] = newValue;
+                    delete sitchData.loadedFiles[oldId];
+                    delete Sit.loadedFiles[oldId];
+                }
+            }
             // load the files as if they have been drag-and-dropped in
             for (let id in sitchData.loadedFiles) {
                 loadingPromises.push(FileManager.loadAsset(Sit.loadedFiles[id], id).then(
