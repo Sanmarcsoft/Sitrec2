@@ -6,6 +6,7 @@ import {interpolatePosition} from "./CVideoData";
 import {EventManager} from "./CEventManager";
 import {createVideoExporter, DefaultVideoFormat, getBestFormatForResolution, getVideoExtension} from "./VideoExporter";
 import {drawVideoWatermark, ExportProgressWidget, getExportPrefix} from "./utils";
+import {isLocal} from "./configUtils";
 
 let cv = null;
 
@@ -1618,7 +1619,7 @@ export function addObjectTrackingMenu() {
     const trackingMethodOptions = {
         'Template Match': 'template',
         'Optical Flow': 'opticalflow',
-        'SAM2 (Meta)': 'sam2'
+        ...(isLocal ? {'SAM2 (Meta)': 'sam2'} : {}),
     };
     
     const trackingMethodParams = {

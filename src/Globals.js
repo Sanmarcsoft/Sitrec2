@@ -23,6 +23,7 @@ export const Globals = {
     isMobile: false, // Is device a mobile/touchscreen device
     arMode: false, // AR mode active (camera follows device orientation)
     tileDelay: 0,  // Additional delay before loading tiles (0-5 seconds)
+    screenshotting: false, // true during batch screenshot generation (skips menu rebuilds)
     
     // Granular render debug flags - shared across ALL views
     renderDebugFlags: {

@@ -86,7 +86,7 @@ export class CRehoster {
 
     // Function to promise to rehostFile the file from the client to the server
     //
-    async rehostFilePromise(filename, data, version) {
+    async rehostFilePromise(filename, data, version, {skipHash = false} = {}) {
         assert(filename !== undefined, "rehostFile needs a filename")
 
         if (parseBoolean(process.env.SAVE_TO_S3) && parseBoolean(process.env.USE_S3_PRESIGNED_URLS)) {
@@ -225,9 +225,9 @@ export class CRehoster {
             }
 
             initUploadProgress(filename, data.byteLength);
-            
+
             try {
-                const contentHash = await computeContentHash(data);
+                const contentHash = skipHash ? null : await computeContentHash(data);
                 let requestData = {
                     filename: filename,
                 };
@@ -377,7 +377,7 @@ export class CRehoster {
     }
 
 
-    rehostFile(filename, data, version) {
+    rehostFile(filename, data, version, options) {
 
         let limit = process.env.MAX_FILE_SIZE_MB || 99; // default to 99MB if not set
 
@@ -395,7 +395,7 @@ export class CRehoster {
             filename = filename.trim().replace(/\.$/, "");
         }
 
-        var promise = this.rehostFilePromise(filename, data, version)
+        var promise = this.rehostFilePromise(filename, data, version, options)
         this.rehostPromises.push(promise);
         return promise;
     }

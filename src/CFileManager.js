@@ -69,6 +69,8 @@ import {ModelFiles} from "./nodes/CNode3DObject";
 import {LoadingManager} from "./CLoadingManager";
 import {convertTiffBufferToPngImage} from "./TIFFUtils";
 import {extractFlightClubInfo, flightClubToCSVStrings, isFlightClubJSON} from "./ParseFlightClubJSON";
+import {CSitchBrowser} from "./CSitchBrowser";
+import {ViewMan} from "./CViewManager";
 
 const trackFileClasses = [
     CTrackFileKML,
@@ -261,11 +263,22 @@ export class CFileManager extends CManager {
         if ((! parseBoolean(process.env.SAVE_TO_SERVER) && !parseBoolean(process.env.SAVE_TO_S3)) || isServerless)
             return;
 
+        // During batch screenshotting, skip rebuilding server menus to preserve dropdown order
+        if (Globals.screenshotting)
+            return;
+
         this.guiServer.add(this, "saveSitchFromMenu").name("Save").perm().tooltip("Save the current sitch to the server");
         this.guiServer.add(this, "saveSitchAs").name("Save As").perm().tooltip("Save the current sitch to the server with a new name");
         this.guiServer.add(this, "saveWithPermalink").name("Save with Permalink").perm().tooltip("Save the current sitch to the server and get a permalink to share it");
 
         this.guiServer.open();
+
+        // Add Browse button for S3-backed deployments
+        if (parseBoolean(process.env.SAVE_TO_S3)) {
+            this.sitchBrowser = new CSitchBrowser(this);
+            this.guiServer.add(this, "openBrowseDialog").name("Browse...").perm()
+                .tooltip("Browse all your saved sitches in a searchable, sortable list");
+        }
 
         // get the list of files saved on the server
         // this is basically a list of the folders in the user's directory
@@ -299,7 +312,7 @@ export class CFileManager extends CManager {
             this.loadName = this.userSaves[0];
             this.guiLoad = this.guiServer.add(this, "loadName", this.userSaves).name("Open").perm().onChange((value) => {
                 this.loadSavedFile(value)
-            }).moveAfter("Save with Permalink")
+            }).moveAfter(this.sitchBrowser ? "Browse..." : "Save with Permalink")
                 .tooltip("Load a saved sitch from your personal folder on the server");
 
             // Create alphabetically sorted version for Open (A-Z)
@@ -340,6 +353,77 @@ export class CFileManager extends CManager {
             console.error("Could not fetch user files from server (non-critical):", error.message);
         })
 
+    }
+
+    openBrowseDialog() {
+        if (this.sitchBrowser) {
+            this.sitchBrowser.open();
+        }
+    }
+
+    captureViewportScreenshot(targetWidth = 640) {
+        const scale = 1; // don't use retina for thumbnails
+        const srcWidth = ViewMan.widthPx * scale;
+        const srcHeight = ViewMan.heightPx * scale;
+
+        if (srcWidth <= 0 || srcHeight <= 0) return Promise.resolve(null);
+
+        const targetHeight = Math.round(targetWidth * srcHeight / srcWidth);
+
+        // Composite all visible views into a full-size canvas (same as viewport video export)
+        const fullCanvas = document.createElement("canvas");
+        fullCanvas.width = srcWidth;
+        fullCanvas.height = srcHeight;
+        const fullCtx = fullCanvas.getContext("2d");
+        fullCtx.fillStyle = "#000000";
+        fullCtx.fillRect(0, 0, srcWidth, srcHeight);
+
+        ViewMan.computeEffectiveVisibility();
+
+        const nonOverlays = [];
+        const overlays = [];
+        ViewMan.iterate((id, view) => {
+            if (view._effectivelyVisible) {
+                if (view.overlayView) {
+                    overlays.push(view);
+                } else {
+                    nonOverlays.push(view);
+                }
+            }
+        });
+
+        // Re-render each view so WebGL buffers are fresh (preserveDrawingBuffer is not set)
+        const frame = Math.floor(par.frame);
+        for (const view of nonOverlays) {
+            view.renderCanvas(frame);
+            if (view.canvas) {
+                const x = view.leftPx * scale;
+                const y = (view.topPx - ViewMan.topPx) * scale;
+                fullCtx.drawImage(view.canvas, x, y, view.widthPx * scale, view.heightPx * scale);
+            }
+        }
+        for (const view of overlays) {
+            const alpha = view.transparency !== undefined ? view.transparency : 1;
+            if (alpha <= 0 || !view.canvas) continue;
+            view.renderCanvas(frame);
+            const parentView = view.overlayView;
+            const x = parentView.leftPx * scale;
+            const y = (parentView.topPx - ViewMan.topPx) * scale;
+            fullCtx.globalAlpha = alpha;
+            fullCtx.drawImage(view.canvas, x, y, parentView.widthPx * scale, parentView.heightPx * scale);
+            fullCtx.globalAlpha = 1;
+        }
+
+        // Scale down to target size
+        const thumbCanvas = document.createElement("canvas");
+        thumbCanvas.width = targetWidth;
+        thumbCanvas.height = targetHeight;
+        const thumbCtx = thumbCanvas.getContext("2d");
+        thumbCtx.drawImage(fullCanvas, 0, 0, targetWidth, targetHeight);
+
+        return new Promise(resolve => {
+            thumbCanvas.toBlob(blob => resolve(blob), "image/jpeg", 0.85);
+        });
     }
 
     /**
@@ -703,8 +787,28 @@ export class CFileManager extends CManager {
         par.paused = true;
         disableAllInput("SAVING");
 
+        // Capture the screenshot before serialization starts (viewport is still rendered)
+        const screenshotPromise = (!local && parseBoolean(process.env.SAVE_TO_S3))
+            ? this.captureViewportScreenshot()
+            : Promise.resolve(null);
+
         return CustomManager.serialize(sitchName, todayDateTimeFilename, local)
-            .then((serialized) => {})
+            .then(() => {
+                // After sitch is saved, upload the screenshot to the same folder
+                if (!local) {
+                    return screenshotPromise.then(blob => {
+                        if (blob) {
+                            return blob.arrayBuffer().then(buffer => {
+                                return this.rehoster.rehostFile(sitchName, buffer, "screenshot.jpg", {skipHash: true});
+                            }).then(url => {
+                                console.log("Screenshot saved: " + url);
+                            }).catch(err => {
+                                console.warn("Failed to save screenshot (non-critical):", err);
+                            });
+                        }
+                    });
+                }
+            })
             .catch((error) => {})
             .finally(() => {
                 this.guiFolder.close();

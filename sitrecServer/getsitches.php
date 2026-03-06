@@ -302,7 +302,7 @@ if (isset($_GET['get'])) {
                         $newestTime = 0;
                         if ($versions !== false) {
                             foreach ($versions as $v) {
-                                if ($v !== '.' && $v !== '..' && is_file($sitchPath . '/' . $v)) {
+                                if ($v !== '.' && $v !== '..' && $v !== 'screenshot.jpg' && is_file($sitchPath . '/' . $v)) {
                                     $vTime = @filemtime($sitchPath . '/' . $v);
                                     if ($vTime > $newestTime) {
                                         $newestTime = $vTime;
@@ -311,7 +311,12 @@ if (isset($_GET['get'])) {
                             }
                         }
                         $lastDate = $newestTime ? date('Y-m-d H:i:s', $newestTime) : '1970-01-01 00:00:00';
-                        $folders[] = [$file, $lastDate];
+                        $screenshotPath = $sitchPath . '/screenshot.jpg';
+                        $screenshotUrl = null;
+                        if (is_file($screenshotPath)) {
+                            $screenshotUrl = $storagePath . $userID . '/' . $file . '/screenshot.jpg';
+                        }
+                        $folders[] = [$file, $lastDate, $screenshotUrl];
                     }
                 }
                 echo json_encode($folders);
@@ -329,6 +334,7 @@ if (isset($_GET['get'])) {
                     "Prefix" => $dir . '/'
                 ));
                 $folderDates = array();
+                $folderScreenshots = array();
                 foreach ($objects as $object) {
                     $key = $object['Key'];
 
@@ -341,16 +347,23 @@ if (isset($_GET['get'])) {
                         $folderName = strtok($key, "/");
                         $lastModified = $object['LastModified'];
                         $lastDate = $lastModified->format('Y-m-d H:i:s');
-                        
-                        if (!isset($folderDates[$folderName]) || $lastDate > $folderDates[$folderName]) {
-                            $folderDates[$folderName] = $lastDate;
+
+                        // Check if this object is a screenshot
+                        $fileName = substr($key, strlen($folderName) + 1);
+                        if ($fileName === 'screenshot.jpg') {
+                            $folderScreenshots[$folderName] = $s3->getObjectUrl($aws['bucket'], $dir . '/' . $folderName . '/screenshot.jpg');
+                        } else {
+                            if (!isset($folderDates[$folderName]) || $lastDate > $folderDates[$folderName]) {
+                                $folderDates[$folderName] = $lastDate;
+                            }
                         }
                     }
                 }
-                
+
                 $folders = array();
                 foreach ($folderDates as $name => $date) {
-                    $folders[] = [$name, $date];
+                    $screenshotUrl = isset($folderScreenshots[$name]) ? $folderScreenshots[$name] : null;
+                    $folders[] = [$name, $date, $screenshotUrl];
                 }
                 echo json_encode($folders);
                 exit();
@@ -441,7 +454,7 @@ if (isset($_GET['get'])) {
             if (!$useAWS) {
                 $files = scandir($dir);
                 foreach ($files as $file) {
-                    if (is_file($dir . '/' . $file) && $file != '.' && $file != '..' && $file != '.DS_Store') {
+                    if (is_file($dir . '/' . $file) && $file != '.' && $file != '..' && $file != '.DS_Store' && $file !== 'screenshot.jpg') {
                         $url = $storagePath . $userID . '/' . $name. '/' . $file;
                         // add to the array and object that contains the url and the version
                         $versions[] = array('version' => $file, 'url' => $url);
@@ -452,17 +465,20 @@ if (isset($_GET['get'])) {
             } else {
                 // get the list of files in the S3 bucket
                 try {
+                    $prefix = $dir . '/';
                     $objects = $s3->getIterator('ListObjects', array(
                         "Bucket" => $aws['bucket'],
-                        "Prefix" => $dir
+                        "Prefix" => $prefix
                     ));
                     foreach ($objects as $object) {
                         $key = $object['Key'];
-                        // we need to strip off the full dir prefix to get the filename (the version)
-                        $key = str_replace($dir, "", $key);
-                        if ($key != "") {
+                        // Strip the prefix to get just the filename (the version)
+                        if (strpos($key, $prefix) === 0) {
+                            $key = substr($key, strlen($prefix));
+                        }
+                        if ($key != "" && strpos($key, '/') === false && $key !== 'screenshot.jpg') {
                             // get the url to the file in the bucket
-                            $url = $s3->getObjectUrl($aws['bucket'], $dir . $key);
+                            $url = $s3->getObjectUrl($aws['bucket'], $prefix . $key);
 
                             // add to the array and object that contains the url and the version
                             $versions[] = array('version' => $key, 'url' => $url);

@@ -57,7 +57,8 @@ import {
     setupDaySkyScene,
     setupLocalFrame,
     setupNightSkyScene,
-    setupScene
+    setupScene,
+    setupSunSkyScene
 } from "./LocalFrame";
 import {CNodeManager} from "./nodes/CNodeManager";
 import {CSitchFactory} from "./CSitchFactory";
@@ -2627,8 +2628,8 @@ function disposeEverything() {
         setupDaySkyScene(undefined)
     }
     if (GlobalSunSkyScene !== undefined) {
-        disposeScene(GlobalDaySkyScene)
-        setupDaySkyScene(undefined)
+        disposeScene(GlobalSunSkyScene)
+        setupSunSkyScene(undefined)
     }
 
     // dispose of the renderers attached to the views

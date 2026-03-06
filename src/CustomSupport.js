@@ -39,7 +39,7 @@ import {assert} from "./assert.js";
 import {getShortURL} from "./urlUtils";
 import {CNode3DObject} from "./nodes/CNode3DObject";
 import {UpdateHUD} from "./JetStuff";
-import {degrees, getDateTimeFilename} from "./utils";
+import {degrees, getDateTimeFilename, parseBoolean} from "./utils";
 import {ViewMan} from "./CViewManager";
 import {EventManager} from "./CEventManager";
 import {isLocal, SITREC_APP, SITREC_SERVER} from "./configUtils";
@@ -526,6 +526,9 @@ export class CCustomManager {
             adminFolder.add(this, "openAdminDashboard").name("Admin Dashboard").tooltip("Open the admin dashboard");
             adminFolder.add(this, "validateSitchNames").name("Validate Sitch Names").tooltip("Check all user sitch names against the validation pattern");
             adminFolder.add(this, "validateAllSitches").name("Validate All Sitches").tooltip("Load all saved sitches with local terrain to check for errors");
+            if (parseBoolean(process.env.SAVE_TO_S3)) {
+                adminFolder.add(this, "addMissingScreenshots").name("Add Missing Screenshots").tooltip("Load each sitch that has no screenshot, render it, and upload a screenshot");
+            }
         }
 
         // TODO - Multiple events passed to EventManager.addEventListener
@@ -3188,6 +3191,123 @@ export class CCustomManager {
 
         console.log(report);
         alert(`Validation complete!\n\nPassed: ${results.passed.length}\nFailed: ${results.failed.length}\n\nSee console for detailed report.`);
+    }
+
+    async addMissingScreenshots() {
+        // Fetch the full sitch list with screenshot info
+        let sitchList;
+        try {
+            const response = await fetch(SITREC_SERVER + "getsitches.php?get=myfiles", {mode: 'cors'});
+            if (response.status !== 200) throw new Error(`Server returned ${response.status}`);
+            sitchList = await response.json();
+        } catch (err) {
+            alert("Failed to fetch sitch list: " + err.message);
+            return;
+        }
+
+        // Filter to sitches without screenshots: entry is [name, date, screenshotUrl|null]
+        const missing = sitchList.filter(entry => !entry[2]);
+        if (missing.length === 0) {
+            alert("All sitches already have screenshots!");
+            return;
+        }
+
+        const total = missing.length;
+        if (!confirm(`Found ${total} sitch(es) without screenshots.\n\nThis will load each one, wait for it to render, then upload a screenshot.\n\nContinue?`)) {
+            return;
+        }
+
+        console.log(`Adding screenshots to ${total} sitches...`);
+
+        Globals.screenshotting = true;
+        const results = {added: [], failed: []};
+
+        for (let i = 0; i < missing.length; i++) {
+            const sitchName = String(missing[i][0]);
+            console.log(`\n[${i + 1}/${total}] Loading: ${sitchName}`);
+
+            try {
+                // Get the latest version URL
+                const versions = await FileManager.getVersions(sitchName);
+                if (!versions || versions.length === 0) {
+                    throw new Error("No versions found");
+                }
+                const latestVersion = versions[versions.length - 1].url;
+
+                // Fetch and parse the sitch
+                const response = await fetch(latestVersion);
+                const data = await response.arrayBuffer();
+                const decoder = new TextDecoder('utf-8');
+                const decodedString = decoder.decode(data);
+                let sitchObject = textSitchToObject(decodedString);
+
+                // Force local terrain to avoid network delays
+                if (sitchObject.terrainUI) {
+                    sitchObject.terrainUI.mapType = "Local";
+                    sitchObject.terrainUI.elevationType = "Local";
+                } else if (sitchObject.terrain) {
+                    sitchObject.terrain.mapType = "Local";
+                    sitchObject.terrain.elevationType = "Local";
+                }
+
+                // Load the sitch and wait for it to render, collecting any errors
+                let loadErrors = [];
+                await new Promise((resolve) => {
+                    const errorHandler = (event) => {
+                        loadErrors.push(event.message || String(event));
+                    };
+                    const rejectionHandler = (event) => {
+                        loadErrors.push(event.reason?.message || String(event.reason));
+                    };
+                    const origError = console.error;
+                    console.error = (...args) => {
+                        loadErrors.push(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
+                        origError.apply(console, args);
+                    };
+
+                    window.addEventListener('error', errorHandler);
+                    window.addEventListener('unhandledrejection', rejectionHandler);
+
+                    setNewSitchObject(sitchObject);
+
+                    setTimeout(() => {
+                        window.removeEventListener('error', errorHandler);
+                        window.removeEventListener('unhandledrejection', rejectionHandler);
+                        console.error = origError;
+                        resolve();
+                    }, 5000);
+                });
+
+                if (loadErrors.length > 0) {
+                    throw new Error(`${loadErrors.length} error(s) during load: ${loadErrors[0]}`);
+                }
+
+                // Capture and upload the screenshot
+                const blob = await FileManager.captureViewportScreenshot();
+                if (!blob) {
+                    throw new Error("Screenshot capture returned null");
+                }
+                const buffer = await blob.arrayBuffer();
+                const url = await FileManager.rehoster.rehostFile(sitchName, buffer, "screenshot.jpg", {skipHash: true});
+                console.log(`  Screenshot saved: ${url}`);
+                results.added.push(sitchName);
+
+            } catch (error) {
+                console.error(`  FAILED: ${sitchName} - ${error.message}`);
+                results.failed.push({name: sitchName, error: error.message});
+            }
+        }
+
+        Globals.screenshotting = false;
+        let report = `\nScreenshot generation complete.\nAdded: ${results.added.length} | Failed: ${results.failed.length}\n`;
+        if (results.failed.length > 0) {
+            report += "\nFailed:\n";
+            for (const f of results.failed) {
+                report += `  ${f.name}: ${f.error}\n`;
+            }
+        }
+        console.log(report);
+        alert(`Screenshot generation complete!\n\nAdded: ${results.added.length}\nFailed: ${results.failed.length}\n\nSee console for details.`);
     }
 
     refreshLookViewTracks() {
