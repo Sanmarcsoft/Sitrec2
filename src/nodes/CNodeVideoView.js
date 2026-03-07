@@ -40,6 +40,7 @@ import {CVideoMp4Data} from "../CVideoMp4Data";
 import {CVideoAudioOnly} from "../CVideoAudioOnly";
 import {CVideoImageData} from "../CVideoImageData";
 import {isAudioOnlyFormat} from "../AudioFormats";
+import {getFileExtension} from "../utils";
 import {assert} from "../assert";
 import {EventManager} from "../CEventManager";
 import {getFlowAlignRotation} from "../FlowAlignment";
@@ -179,6 +180,22 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         const videoIndex = this.videos.length;
         const videoDataId = this.id + "_data_" + videoIndex;
         console.log(`[VideoNew] Creating video[${videoIndex}]: "${fileName}", id="${videoDataId}"`);
+
+        // Check if it's an image file — load as single-frame pseudo-video
+        const fileExt = getFileExtension(fileName);
+        if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'].includes(fileExt)) {
+            console.log(`[VideoNew] Detected image file for video[${videoIndex}]`);
+            const { FileManager } = require("../Globals");
+            FileManager.loadAsset(fileName).then(result => {
+                this.makeImageVideo(fileName, result.parsed);
+                this.staticURL = fileName;
+            }).catch(err => {
+                console.error(`[VideoNew] Error loading image as video: ${fileName}`, err);
+                Globals.pendingActions--;
+                this.videoLoadPending = false;
+            });
+            return;
+        }
 
         // Check if it's an audio-only file based on extension
         if (isAudioOnlyFormat(fileName)) {
