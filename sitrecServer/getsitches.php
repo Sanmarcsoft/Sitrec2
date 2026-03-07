@@ -302,7 +302,7 @@ if (isset($_GET['get'])) {
                         $newestTime = 0;
                         if ($versions !== false) {
                             foreach ($versions as $v) {
-                                if ($v !== '.' && $v !== '..' && $v !== 'screenshot.jpg' && is_file($sitchPath . '/' . $v)) {
+                                if ($v !== '.' && $v !== '..' && $v !== 'screenshot.jpg' && $v !== 'metadata.json' && is_file($sitchPath . '/' . $v)) {
                                     $vTime = @filemtime($sitchPath . '/' . $v);
                                     if ($vTime > $newestTime) {
                                         $newestTime = $vTime;
@@ -348,10 +348,12 @@ if (isset($_GET['get'])) {
                         $lastModified = $object['LastModified'];
                         $lastDate = $lastModified->format('Y-m-d H:i:s');
 
-                        // Check if this object is a screenshot
+                        // Check if this object is a screenshot or metadata
                         $fileName = substr($key, strlen($folderName) + 1);
                         if ($fileName === 'screenshot.jpg') {
                             $folderScreenshots[$folderName] = $s3->getObjectUrl($aws['bucket'], $dir . '/' . $folderName . '/screenshot.jpg');
+                        } else if ($fileName === 'metadata.json') {
+                            // Skip metadata.json for date calculations
                         } else {
                             if (!isset($folderDates[$folderName]) || $lastDate > $folderDates[$folderName]) {
                                 $folderDates[$folderName] = $lastDate;
@@ -454,7 +456,7 @@ if (isset($_GET['get'])) {
             if (!$useAWS) {
                 $files = scandir($dir);
                 foreach ($files as $file) {
-                    if (is_file($dir . '/' . $file) && $file != '.' && $file != '..' && $file != '.DS_Store' && $file !== 'screenshot.jpg') {
+                    if (is_file($dir . '/' . $file) && $file != '.' && $file != '..' && $file != '.DS_Store' && $file !== 'screenshot.jpg' && $file !== 'metadata.json') {
                         $url = $storagePath . $userID . '/' . $name. '/' . $file;
                         // add to the array and object that contains the url and the version
                         $versions[] = array('version' => $file, 'url' => $url);
@@ -476,7 +478,7 @@ if (isset($_GET['get'])) {
                         if (strpos($key, $prefix) === 0) {
                             $key = substr($key, strlen($prefix));
                         }
-                        if ($key != "" && strpos($key, '/') === false && $key !== 'screenshot.jpg') {
+                        if ($key != "" && strpos($key, '/') === false && $key !== 'screenshot.jpg' && $key !== 'metadata.json') {
                             // get the url to the file in the bucket
                             $url = $s3->getObjectUrl($aws['bucket'], $prefix . $key);
 

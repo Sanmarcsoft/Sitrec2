@@ -2,7 +2,7 @@
 // Handles loading and saving user settings from cookies, server (S3), or IndexedDB
 // The setting UI is set up in setupSettingsMenu()
 
-import {Globals} from "./Globals";
+import {getEffectiveUserID, Globals, withTestUser} from "./Globals";
 import {indexedDBManager} from "./IndexedDBManager";
 import {isServerless} from "./configUtils";
 import {parseBoolean} from "./utils";
@@ -171,7 +171,7 @@ export async function loadSettingsFromServer() {
     }
     
     try {
-        const response = await fetch('./sitrecServer/settings.php', {
+        const response = await fetch(withTestUser('./sitrecServer/settings.php'), {
             method: 'GET',
             credentials: 'same-origin'
         });
@@ -215,7 +215,7 @@ export async function saveSettingsToServer(settings) {
         const sanitized = sanitizeSettings(settings);
         const testPayload = { ...sanitized, stripthis: "123" };
         
-        const response = await fetch('./sitrecServer/settings.php', {
+        const response = await fetch(withTestUser('./sitrecServer/settings.php'), {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
@@ -312,7 +312,7 @@ export async function initializeSettings() {
     }
     
     // Server mode - try server first (if logged in)
-    if (Globals.userID > 0) {
+    if (getEffectiveUserID() > 0) {
         const serverSettings = await loadSettingsFromServer();
         if (serverSettings && Object.keys(serverSettings).length > 0) {
             Object.assign(Globals.settings, serverSettings);
@@ -362,7 +362,7 @@ export async function saveSettings() {
     }
     
     // Server mode - try to save to server first (if logged in)
-    if (Globals.userID > 0) {
+    if (getEffectiveUserID() > 0) {
         const success = await saveSettingsToServer(settings);
         if (success) {
             console.log("Settings saved to server");

@@ -10,12 +10,12 @@ require_once __DIR__ . '/config_paths.php';
 require('./user.php');
 
 $userInfo = getUserInfo();
-if (!in_array(3, $userInfo['user_groups'])) {
+if (!isAdmin($userInfo)) {
     http_response_code(403);
     die('Admin access required');
 }
 
-$user_id = getUserID();
+$user_id = $userInfo['user_id'];
 
 
 // just test if we can connect to S3

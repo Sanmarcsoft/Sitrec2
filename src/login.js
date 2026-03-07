@@ -4,7 +4,7 @@
 // if we are not logged in, then we can't rehost files
 // so we don't show the rehost button
 
-import {Globals} from "./Globals";
+import {Globals, withTestUser} from "./Globals";
 import {_configParams} from "../config/config";
 import {isServerless, SITREC_SERVER} from "./configUtils";
 
@@ -36,7 +36,7 @@ export function asyncCheckLogin() {
 
     const url = SITREC_SERVER + "rehost.php?getuser=1"
     console.log("Checking login at " + url)
-    return fetch(url, {mode: 'cors'})
+    return fetch(withTestUser(url), {mode: 'cors'})
         .then(response => response.json())
         .then(data => {
             Globals.userData = data;

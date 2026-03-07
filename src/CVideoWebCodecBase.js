@@ -3,7 +3,7 @@ import {assert} from "./assert";
 import {loadImage} from "./utils";
 import {CVideoAndAudio} from "./CVideoAndAudio";
 import {par} from "./par";
-import {isLocal} from "./configUtils";
+import {isAdmin, isLocal} from "./configUtils";
 import {showError, showErrorOnce} from "./showError";
 import {VideoDecodeWorkerManager} from "./CVideoDecodeWorker";
 
@@ -931,7 +931,7 @@ export class CVideoWebCodecBase extends CVideoAndAudio {
         if (mem !== undefined && mem >= 8) {
             cacheWindow = 100;
 
-            if (isLocal || Globals.userID === 1) {
+            if (isAdmin()) {
          //       cacheWindow = 300;
             }
         }

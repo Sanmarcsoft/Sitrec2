@@ -1,22 +1,49 @@
 /**
  * S3 Sitch Browser - full-screen dialog for browsing saved sitches.
- * Supports a list+preview mode and a thumbnail grid mode.
+ * Supports list+preview and thumbnail grid modes.
+ * Labels system with permanent Private/Deleted labels.
+ * Multi-selection: click, shift-click, cmd-click, rubber-band drag.
+ * Right-click context menu with label checkboxes.
  */
 import {SITREC_SERVER} from "./configUtils";
+import {withTestUser} from "./Globals";
+
+const LABEL_COLORS = [
+    "#4285f4", "#34a853", "#fbbc04", "#24c1e0",
+    "#e8710a", "#f538a0", "#9334e6", "#1a73e8",
+];
+
+const PERMANENT_LABELS = [
+    {name: "Private", color: "#a142f4", permanent: true},
+    {name: "Deleted", color: "#ea4335", permanent: true},
+];
 
 export class CSitchBrowser {
     constructor(fileManager) {
         this.fileManager = fileManager;
-        this.sitches = []; // [{name, date, screenshotUrl}]
+        this.sitches = [];      // [{name, date, screenshotUrl}]
         this.filtered = [];
         this.sortColumn = "date";
         this.sortAsc = false;
         this.searchText = "";
-        this.selectedName = null;
+        this.selectedName = null; // focused item (for preview, keyboard nav)
         this.overlay = null;
-        this.viewMode = "thumbnails"; // "list" or "thumbnails"
+        this.viewMode = "thumbnails";
         this.thumbColumns = 4;
         this._thumbObserver = null;
+
+        // Labels
+        this.userLabels = [];    // [{name, color, permanent?}, ...]
+        this.sitchLabels = {};   // {sitchName: [labelName, ...]}
+        this.activeLabel = null; // sidebar filter, or null = Home
+
+        // Multi-selection
+        this.selection = new Set();
+        this._lastClickedIndex = -1;
+
+        // Context menu
+        this._contextMenu = null;
+        this._contextMenuCloser = null;
     }
 
     open() {
@@ -24,112 +51,165 @@ export class CSitchBrowser {
         this.fetchFromServer();
     }
 
+    // ==================== DATA ====================
+
     fetchFromServer() {
-        fetch(SITREC_SERVER + "getsitches.php?get=myfiles", {mode: 'cors'})
-            .then(r => {
-                if (r.status !== 200) throw new Error(`Server returned ${r.status}`);
-                return r.json();
-            })
-            .then(data => {
-                this.sitches = data.map(entry => ({
-                    name: String(entry[0]),
-                    date: String(entry[1]),
-                    screenshotUrl: entry[2] || null,
+        const sitchesP = fetch(withTestUser(SITREC_SERVER + "getsitches.php?get=myfiles"), {mode: 'cors'})
+            .then(r => { if (r.status !== 200) throw new Error(`Server ${r.status}`); return r.json(); });
+        const metaP = fetch(withTestUser(SITREC_SERVER + "metadata.php"), {mode: 'cors'})
+            .then(r => r.ok ? r.json() : {labels: [], sitchLabels: {}})
+            .catch(() => ({labels: [], sitchLabels: {}}));
+
+        Promise.all([sitchesP, metaP])
+            .then(([sitchData, metaData]) => {
+                this.sitches = sitchData.map(e => ({
+                    name: String(e[0]), date: String(e[1]), screenshotUrl: e[2] || null,
                 }));
+                this.userLabels = metaData.labels || [];
+                this.sitchLabels = metaData.sitchLabels || {};
+                this._ensurePermanentLabels();
                 this.applyFilterAndSort();
                 this.show();
             })
             .catch(err => {
                 console.error("CSitchBrowser fetch error:", err);
                 this.sitches = [];
+                this._ensurePermanentLabels();
                 this.applyFilterAndSort();
                 this.show();
             });
     }
 
+    _ensurePermanentLabels() {
+        for (const pl of PERMANENT_LABELS) {
+            if (!this.userLabels.some(l => l.name === pl.name)) {
+                this.userLabels.unshift({...pl});
+            } else {
+                // Mark existing as permanent
+                const existing = this.userLabels.find(l => l.name === pl.name);
+                existing.permanent = true;
+                existing.color = pl.color;
+            }
+        }
+    }
+
+    _isPermanentLabel(name) {
+        return PERMANENT_LABELS.some(l => l.name === name);
+    }
+
+    _sitchHasLabel(sitchName, labelName) {
+        return this.sitchLabels[sitchName]?.includes(labelName) ?? false;
+    }
+
+    // ==================== FILTER / SORT ====================
+
     applyFilterAndSort() {
         let list = this.sitches;
+
+        if (this.activeLabel === "Deleted") {
+            list = list.filter(s => this._sitchHasLabel(s.name, "Deleted"));
+        } else if (this.activeLabel === "Private") {
+            list = list.filter(s =>
+                this._sitchHasLabel(s.name, "Private") && !this._sitchHasLabel(s.name, "Deleted"));
+        } else if (this.activeLabel) {
+            // Custom label view: has label, not Deleted, not Private
+            list = list.filter(s => {
+                if (this._sitchHasLabel(s.name, "Deleted")) return false;
+                if (this._sitchHasLabel(s.name, "Private")) return false;
+                return this._sitchHasLabel(s.name, this.activeLabel);
+            });
+        } else {
+            // Home: exclude Deleted + Private
+            list = list.filter(s =>
+                !this._sitchHasLabel(s.name, "Deleted") && !this._sitchHasLabel(s.name, "Private"));
+        }
+
         if (this.searchText) {
             list = list.filter(s => this._matchesSearch(s.name, this.searchText));
         }
+
         list = [...list];
         list.sort((a, b) => {
-            let cmp;
-            if (this.sortColumn === "name") {
-                cmp = a.name.localeCompare(b.name);
-            } else {
-                cmp = a.date.localeCompare(b.date);
-            }
+            const cmp = this.sortColumn === "name"
+                ? a.name.localeCompare(b.name)
+                : a.date.localeCompare(b.date);
             return this.sortAsc ? cmp : -cmp;
         });
         this.filtered = list;
     }
 
+    // ==================== SHOW (builds overlay) ====================
+
     show() {
         if (this.overlay) this.close();
         this.selectedName = null;
+        this.selection.clear();
 
         const overlay = document.createElement("div");
         this.overlay = overlay;
         Object.assign(overlay.style, {
-            position: "fixed",
-            left: "0", top: "0", width: "100%", height: "100%",
-            backgroundColor: "rgba(0,0,0,0.7)",
-            zIndex: "10002",
-            display: "flex",
-            fontFamily: "system-ui, -apple-system, sans-serif",
-            color: "#e0e0e0",
+            position: "fixed", left: "0", top: "0", width: "100%", height: "100%",
+            backgroundColor: "rgba(0,0,0,0.7)", zIndex: "10002", display: "flex",
+            fontFamily: "system-ui, -apple-system, sans-serif", color: "#e0e0e0",
         });
 
         // --- Sidebar ---
         const sidebar = document.createElement("div");
+        this._sidebar = sidebar;
         Object.assign(sidebar.style, {
-            width: "180px",
-            minWidth: "180px",
-            backgroundColor: "#1e1e2e",
-            display: "flex",
-            flexDirection: "column",
-            padding: "16px",
-            gap: "8px",
-            borderRight: "1px solid #333",
+            width: "180px", minWidth: "180px", backgroundColor: "#1e1e2e",
+            display: "flex", flexDirection: "column", padding: "16px",
+            gap: "4px", borderRight: "1px solid #333", overflowY: "auto",
         });
 
-        const makeLink = (text, onClick, active) => {
-            const a = document.createElement("a");
-            a.textContent = text;
-            a.href = "#";
-            Object.assign(a.style, {
-                color: active ? "#e0e0e0" : "#8ab4f8",
-                textDecoration: "none",
-                fontSize: "15px",
-                padding: "8px 12px",
-                borderRadius: "6px",
-                backgroundColor: active ? "#2a2a3e" : "transparent",
-            });
-            a.addEventListener("mouseenter", () => a.style.backgroundColor = "#2a2a3e");
-            a.addEventListener("mouseleave", () => a.style.backgroundColor = active ? "#2a2a3e" : "transparent");
-            a.addEventListener("click", e => { e.preventDefault(); onClick(); });
-            return a;
-        };
+        // Home link
+        this._homeLink = this._makeSidebarLink("Home", () => {
+            this.activeLabel = null;
+            this._onFilterChanged();
+        }, !this.activeLabel);
+        sidebar.appendChild(this._homeLink);
 
-        sidebar.appendChild(makeLink("Home", () => {}));
-        sidebar.appendChild(makeLink("Deleted", () => {}));
+        // Private link
+        const privateCount = this.sitches.filter(s =>
+            this._sitchHasLabel(s.name, "Private") && !this._sitchHasLabel(s.name, "Deleted")).length;
+        this._privateLink = this._makeSidebarLink(
+            "Private" + (privateCount ? ` (${privateCount})` : ""),
+            () => { this.activeLabel = "Private"; this._onFilterChanged(); },
+            this.activeLabel === "Private"
+        );
+        this._makePermanentLinkDropTarget(this._privateLink, "Private");
+        sidebar.appendChild(this._privateLink);
 
-        // View mode links
-        const viewSpacer = document.createElement("div");
-        viewSpacer.style.marginTop = "16px";
-        viewSpacer.style.borderTop = "1px solid #333";
-        viewSpacer.style.paddingTop = "12px";
+        // Deleted link
+        const deletedCount = this.sitches.filter(s => this._sitchHasLabel(s.name, "Deleted")).length;
+        this._deletedLink = this._makeSidebarLink(
+            "Deleted" + (deletedCount ? ` (${deletedCount})` : ""),
+            () => { this.activeLabel = "Deleted"; this._onFilterChanged(); },
+            this.activeLabel === "Deleted"
+        );
+        this._makePermanentLinkDropTarget(this._deletedLink, "Deleted");
+        sidebar.appendChild(this._deletedLink);
+
+        // View section
+        const viewSection = document.createElement("div");
+        viewSection.style.marginTop = "12px";
+        viewSection.style.borderTop = "1px solid #333";
+        viewSection.style.paddingTop = "8px";
         const viewLabel = document.createElement("div");
         Object.assign(viewLabel.style, { fontSize: "11px", color: "#666", textTransform: "uppercase", letterSpacing: "0.5px", padding: "0 12px 4px" });
         viewLabel.textContent = "View";
-        viewSpacer.appendChild(viewLabel);
-        sidebar.appendChild(viewSpacer);
+        viewSection.appendChild(viewLabel);
+        sidebar.appendChild(viewSection);
 
-        this._listLink = makeLink("List", () => { this.viewMode = "list"; this.rebuildContent(); }, this.viewMode === "list");
-        this._thumbLink = makeLink("Thumbnails", () => { this.viewMode = "thumbnails"; this.rebuildContent(); }, this.viewMode === "thumbnails");
+        this._listLink = this._makeSidebarLink("List", () => { this.viewMode = "list"; this.rebuildContent(); }, this.viewMode === "list");
+        this._thumbLink = this._makeSidebarLink("Thumbnails", () => { this.viewMode = "thumbnails"; this.rebuildContent(); }, this.viewMode === "thumbnails");
         sidebar.appendChild(this._listLink);
         sidebar.appendChild(this._thumbLink);
+
+        // Labels section
+        this._labelsContainer = document.createElement("div");
+        sidebar.appendChild(this._labelsContainer);
+        this._rebuildSidebarLabels();
 
         const spacer = document.createElement("div");
         spacer.style.flex = "1";
@@ -138,154 +218,649 @@ export class CSitchBrowser {
         const cancelBtn = document.createElement("button");
         cancelBtn.textContent = "Cancel";
         Object.assign(cancelBtn.style, {
-            padding: "10px 16px",
-            backgroundColor: "#333",
-            color: "#e0e0e0",
-            border: "1px solid #555",
-            borderRadius: "6px",
-            cursor: "pointer",
-            fontSize: "14px",
+            padding: "10px 16px", backgroundColor: "#333", color: "#e0e0e0",
+            border: "1px solid #555", borderRadius: "6px", cursor: "pointer", fontSize: "14px",
         });
         cancelBtn.addEventListener("click", () => this.close());
         sidebar.appendChild(cancelBtn);
 
         overlay.appendChild(sidebar);
 
-        // --- Content area (right of sidebar) ---
+        // --- Content area ---
         this._contentArea = document.createElement("div");
         Object.assign(this._contentArea.style, {
-            flex: "1",
-            display: "flex",
-            overflow: "hidden",
-            minWidth: "0",
+            flex: "1", display: "flex", overflow: "hidden", minWidth: "0",
         });
         overlay.appendChild(this._contentArea);
 
         document.body.appendChild(overlay);
 
         // Keyboard handler
-        this._keyHandler = (e) => {
-            if (e.key === "Escape") { this.close(); return; }
-            if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
-                e.preventDefault();
-                if (this.filtered.length === 0) return;
-                let idx = this.filtered.findIndex(s => s.name === this.selectedName);
-
-                // Nothing selected yet — select first or last depending on direction
-                if (idx === -1) {
-                    const forward = (e.key === "ArrowDown" || e.key === "ArrowRight");
-                    this.selectIndex(forward ? 0 : this.filtered.length - 1);
-                    return;
-                }
-
-                let delta;
-                if (this.viewMode === "thumbnails") {
-                    // In grid mode: left/right move by 1, up/down move by one row
-                    if (e.key === "ArrowRight") delta = 1;
-                    else if (e.key === "ArrowLeft") delta = -1;
-                    else if (e.key === "ArrowDown") delta = this.thumbColumns;
-                    else delta = -this.thumbColumns;
-                } else {
-                    // In list mode: all arrows move by 1
-                    delta = (e.key === "ArrowDown" || e.key === "ArrowRight") ? 1 : -1;
-                }
-
-                idx = Math.max(0, Math.min(this.filtered.length - 1, idx + delta));
-                this.selectIndex(idx);
-            }
-            if (e.key === "Enter" && this.selectedName) {
-                this.close();
-                this.fileManager.loadSavedFile(this.selectedName);
-            }
-        };
+        this._keyHandler = (e) => this._handleKeyDown(e);
         document.addEventListener("keydown", this._keyHandler);
 
         this.rebuildContent();
     }
 
-    rebuildContent() {
-        this._destroyThumbObserver();
-        this._contentArea.innerHTML = "";
+    _onFilterChanged() {
+        this.selection.clear();
+        this.selectedName = null;
+        this.applyFilterAndSort();
+        this._rebuildSidebar();
+        this.rebuildContent();
+    }
 
-        // Update sidebar link highlights
-        if (this._listLink) {
-            this._listLink.style.color = this.viewMode === "list" ? "#e0e0e0" : "#8ab4f8";
-            this._listLink.style.backgroundColor = this.viewMode === "list" ? "#2a2a3e" : "transparent";
-        }
-        if (this._thumbLink) {
-            this._thumbLink.style.color = this.viewMode === "thumbnails" ? "#e0e0e0" : "#8ab4f8";
-            this._thumbLink.style.backgroundColor = this.viewMode === "thumbnails" ? "#2a2a3e" : "transparent";
+    _rebuildSidebar() {
+        this._rebuildSidebarLinks();
+        this._rebuildSidebarLabels();
+    }
+
+    _rebuildSidebarLinks() {
+        // Update Home/Private/Deleted link styles
+        const links = [
+            [this._homeLink, !this.activeLabel, "Home"],
+            [this._privateLink, this.activeLabel === "Private", "Private"],
+            [this._deletedLink, this.activeLabel === "Deleted", "Deleted"],
+            [this._listLink, this.viewMode === "list", null],
+            [this._thumbLink, this.viewMode === "thumbnails", null],
+        ];
+        for (const [el, active] of links) {
+            if (!el) continue;
+            el.style.color = active ? "#e0e0e0" : "#8ab4f8";
+            el.style.backgroundColor = active ? "#2a2a3e" : "transparent";
         }
 
-        if (this.viewMode === "list") {
-            this.buildListView();
-        } else {
-            this.buildThumbnailView();
+        // Update counts
+        if (this._privateLink) {
+            const c = this.sitches.filter(s =>
+                this._sitchHasLabel(s.name, "Private") && !this._sitchHasLabel(s.name, "Deleted")).length;
+            this._privateLink.textContent = "Private" + (c ? ` (${c})` : "");
+        }
+        if (this._deletedLink) {
+            const c = this.sitches.filter(s => this._sitchHasLabel(s.name, "Deleted")).length;
+            this._deletedLink.textContent = "Deleted" + (c ? ` (${c})` : "");
         }
     }
 
-    // ========== LIST VIEW ==========
+    // ==================== SIDEBAR LABELS ====================
 
-    buildListView() {
-        // --- List area ---
-        const listArea = document.createElement("div");
-        Object.assign(listArea.style, {
-            flex: "1",
-            display: "flex",
-            flexDirection: "column",
-            backgroundColor: "#181825",
-            overflow: "hidden",
-            minWidth: "0",
+    _rebuildSidebarLabels() {
+        const container = this._labelsContainer;
+        if (!container) return;
+        container.innerHTML = "";
+
+        const section = document.createElement("div");
+        section.style.marginTop = "12px";
+        section.style.borderTop = "1px solid #333";
+        section.style.paddingTop = "8px";
+        const header = document.createElement("div");
+        Object.assign(header.style, { fontSize: "11px", color: "#666", textTransform: "uppercase", letterSpacing: "0.5px", padding: "0 12px 4px" });
+        header.textContent = "Labels";
+        section.appendChild(header);
+        container.appendChild(section);
+
+        // Only show non-permanent labels in the labels section
+        const userOnlyLabels = this.userLabels.filter(l => !l.permanent);
+
+        for (const label of userOnlyLabels) {
+            const row = document.createElement("div");
+            Object.assign(row.style, {
+                display: "flex", alignItems: "center", gap: "6px",
+                padding: "5px 12px", borderRadius: "6px", cursor: "pointer",
+                backgroundColor: (this.activeLabel === label.name) ? "#2a2a3e" : "transparent",
+            });
+
+            const dot = document.createElement("div");
+            Object.assign(dot.style, {
+                width: "10px", height: "10px", borderRadius: "50%",
+                backgroundColor: label.color, flexShrink: "0",
+            });
+            row.appendChild(dot);
+
+            const nameSpan = document.createElement("span");
+            Object.assign(nameSpan.style, {
+                fontSize: "13px", flex: "1", overflow: "hidden",
+                textOverflow: "ellipsis", whiteSpace: "nowrap",
+                color: (this.activeLabel === label.name) ? "#e0e0e0" : "#8ab4f8",
+            });
+            nameSpan.textContent = label.name;
+            nameSpan.title = label.name;
+            row.appendChild(nameSpan);
+
+            const count = Object.values(this.sitchLabels).filter(arr => arr.includes(label.name)).length;
+            if (count > 0) {
+                const badge = document.createElement("span");
+                Object.assign(badge.style, { fontSize: "10px", color: "#666", flexShrink: "0" });
+                badge.textContent = String(count);
+                row.appendChild(badge);
+            }
+
+            const delBtn = document.createElement("span");
+            Object.assign(delBtn.style, {
+                fontSize: "12px", color: "#666", cursor: "pointer", flexShrink: "0", padding: "0 2px",
+            });
+            delBtn.textContent = "\u00d7";
+            delBtn.title = "Delete label";
+            delBtn.addEventListener("mouseenter", () => delBtn.style.color = "#ea4335");
+            delBtn.addEventListener("mouseleave", () => delBtn.style.color = "#666");
+            delBtn.addEventListener("click", (e) => { e.stopPropagation(); this._deleteLabel(label.name); });
+            row.appendChild(delBtn);
+
+            row.addEventListener("click", () => {
+                this.activeLabel = (this.activeLabel === label.name) ? null : label.name;
+                this._onFilterChanged();
+            });
+            row.addEventListener("mouseenter", () => row.style.backgroundColor = "#2a2a3e");
+            row.addEventListener("mouseleave", () => {
+                row.style.backgroundColor = (this.activeLabel === label.name) ? "#2a2a3e" : "transparent";
+            });
+
+            // Drop target
+            this._makeLabelDropTarget(row, label);
+            container.appendChild(row);
+        }
+
+        // "Add Label" button
+        const addBtn = document.createElement("button");
+        addBtn.textContent = "+ Add Label";
+        Object.assign(addBtn.style, {
+            marginTop: "6px", padding: "5px 12px", backgroundColor: "transparent",
+            color: "#8ab4f8", border: "1px dashed #444", borderRadius: "6px",
+            cursor: "pointer", fontSize: "12px", width: "100%", textAlign: "left",
+        });
+        addBtn.addEventListener("mouseenter", () => addBtn.style.backgroundColor = "#2a2a3e");
+        addBtn.addEventListener("mouseleave", () => addBtn.style.backgroundColor = "transparent");
+        addBtn.addEventListener("click", () => this._promptAddLabel());
+
+        // Drop on "Add Label" creates new label and assigns
+        addBtn.addEventListener("dragover", (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "link"; addBtn.style.backgroundColor = "#3a3a5e"; });
+        addBtn.addEventListener("dragleave", () => addBtn.style.backgroundColor = "transparent");
+        addBtn.addEventListener("drop", (e) => {
+            e.preventDefault();
+            addBtn.style.backgroundColor = "transparent";
+            const names = this._parseDragData(e);
+            if (names.length > 0) this._promptAddLabel(names);
         });
 
-        // Title bar
+        container.appendChild(addBtn);
+    }
+
+    _makeLabelDropTarget(element, label) {
+        element.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "link";
+            element.style.backgroundColor = "#3a3a5e";
+            element.style.outline = "2px solid " + label.color;
+        });
+        element.addEventListener("dragleave", () => {
+            element.style.backgroundColor = (this.activeLabel === label.name) ? "#2a2a3e" : "transparent";
+            element.style.outline = "none";
+        });
+        element.addEventListener("drop", (e) => {
+            e.preventDefault();
+            element.style.backgroundColor = (this.activeLabel === label.name) ? "#2a2a3e" : "transparent";
+            element.style.outline = "none";
+            const names = this._parseDragData(e);
+            if (names.length > 0) this._addLabelToSitches(names, label.name);
+        });
+    }
+
+    // Also make the permanent sidebar links (Private, Deleted) drop targets
+    _makePermanentLinkDropTarget(element, labelName) {
+        const label = PERMANENT_LABELS.find(l => l.name === labelName);
+        if (!label) return;
+        element.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "link";
+            element.style.outline = "2px solid " + label.color;
+        });
+        element.addEventListener("dragleave", () => {
+            element.style.outline = "none";
+        });
+        element.addEventListener("drop", (e) => {
+            e.preventDefault();
+            element.style.outline = "none";
+            const names = this._parseDragData(e);
+            if (names.length > 0) this._addLabelToSitches(names, labelName);
+        });
+    }
+
+    // ==================== SELECTION ====================
+
+    _handleItemClick(e, idx) {
+        const sitch = this.filtered[idx];
+        if (!sitch) return;
+
+        if (e.metaKey || e.ctrlKey) {
+            // Toggle individual
+            if (this.selection.has(sitch.name)) {
+                this.selection.delete(sitch.name);
+            } else {
+                this.selection.add(sitch.name);
+            }
+            this._lastClickedIndex = idx;
+        } else if (e.shiftKey && this._lastClickedIndex >= 0) {
+            // Range select
+            const start = Math.min(this._lastClickedIndex, idx);
+            const end = Math.max(this._lastClickedIndex, idx);
+            // Don't clear existing selection when extending with shift
+            for (let i = start; i <= end; i++) {
+                if (this.filtered[i]) this.selection.add(this.filtered[i].name);
+            }
+        } else {
+            // Single select
+            this.selection.clear();
+            this.selection.add(sitch.name);
+            this._lastClickedIndex = idx;
+        }
+
+        this.selectedName = sitch.name;
+        this._updateHighlights();
+        if (this.viewMode === "list") this.updatePreview(sitch);
+    }
+
+    _handleItemMouseDown(e, idx) {
+        // Right-click (button 2) triggers context menu.
+        // We use mousedown instead of contextmenu because index.js has a global
+        // capture-phase contextmenu blocker that prevents our handlers from firing.
+        if (e.button !== 2) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        const sitch = this.filtered[idx];
+        if (!sitch) return;
+
+        // If right-clicking an unselected item, select just it
+        if (!this.selection.has(sitch.name)) {
+            this.selection.clear();
+            this.selection.add(sitch.name);
+            this.selectedName = sitch.name;
+            this._lastClickedIndex = idx;
+            this._updateHighlights();
+            if (this.viewMode === "list") this.updatePreview(sitch);
+        }
+
+        this._showContextMenu(e.clientX, e.clientY);
+    }
+
+    _updateHighlights() {
+        const container = this.viewMode === "list" ? this._tbody : this._thumbGrid;
+        if (!container) return;
+        for (const child of container.children) {
+            if (child._setHighlight) child._setHighlight();
+        }
+    }
+
+    // ==================== KEYBOARD ====================
+
+    _handleKeyDown(e) {
+        // Don't capture if typing in search
+        if (e.target.tagName === "INPUT") return;
+
+        if (e.key === "Escape") {
+            this._hideContextMenu();
+            this.close();
+            return;
+        }
+
+        if (e.key === "a" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            // Select all
+            this.selection.clear();
+            for (const s of this.filtered) this.selection.add(s.name);
+            this._updateHighlights();
+            return;
+        }
+
+        if (e.key === "Delete" || e.key === "Backspace") {
+            if (this.selection.size > 0) {
+                const names = [...this.selection];
+                const allDeleted = names.every(n => this._sitchHasLabel(n, "Deleted"));
+                if (allDeleted) {
+                    this._removeLabelFromSitches(names, "Deleted");
+                } else {
+                    this._addLabelToSitches(names, "Deleted");
+                }
+            }
+            return;
+        }
+
+        const arrows = ["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"];
+        if (arrows.includes(e.key)) {
+            e.preventDefault();
+            if (this.filtered.length === 0) return;
+            let idx = this.filtered.findIndex(s => s.name === this.selectedName);
+
+            if (idx === -1) {
+                const forward = (e.key === "ArrowDown" || e.key === "ArrowRight");
+                idx = forward ? 0 : this.filtered.length - 1;
+            } else {
+                let delta;
+                if (this.viewMode === "thumbnails") {
+                    if (e.key === "ArrowRight") delta = 1;
+                    else if (e.key === "ArrowLeft") delta = -1;
+                    else if (e.key === "ArrowDown") delta = this.thumbColumns;
+                    else delta = -this.thumbColumns;
+                } else {
+                    delta = (e.key === "ArrowDown" || e.key === "ArrowRight") ? 1 : -1;
+                }
+                idx = Math.max(0, Math.min(this.filtered.length - 1, idx + delta));
+            }
+
+            const sitch = this.filtered[idx];
+            if (!sitch) return;
+
+            if (e.shiftKey) {
+                // Extend selection
+                if (this._lastClickedIndex < 0) this._lastClickedIndex = idx;
+                const start = Math.min(this._lastClickedIndex, idx);
+                const end = Math.max(this._lastClickedIndex, idx);
+                this.selection.clear();
+                for (let i = start; i <= end; i++) {
+                    if (this.filtered[i]) this.selection.add(this.filtered[i].name);
+                }
+            } else {
+                this.selection.clear();
+                this.selection.add(sitch.name);
+                this._lastClickedIndex = idx;
+            }
+
+            this.selectedName = sitch.name;
+            this._updateHighlights();
+            if (this.viewMode === "list") this.updatePreview(sitch);
+
+            // Scroll into view
+            const container = this.viewMode === "list" ? this._tbody : this._thumbGrid;
+            if (container && container.children[idx]) {
+                container.children[idx].scrollIntoView({block: "nearest"});
+            }
+        }
+
+        if (e.key === "Enter" && this.selectedName) {
+            this.close();
+            this.fileManager.loadSavedFile(this.selectedName);
+        }
+    }
+
+    // ==================== CONTEXT MENU ====================
+
+    _showContextMenu(x, y) {
+        this._hideContextMenu();
+
+        const menu = document.createElement("div");
+        this._contextMenu = menu;
+        Object.assign(menu.style, {
+            position: "fixed", left: x + "px", top: y + "px",
+            backgroundColor: "#2a2a3e", border: "1px solid #555",
+            borderRadius: "6px", padding: "4px 0", minWidth: "200px",
+            zIndex: "10010", boxShadow: "0 4px 16px rgba(0,0,0,0.6)",
+            fontSize: "13px", color: "#e0e0e0",
+        });
+
+        const selectedNames = [...this.selection];
+        if (selectedNames.length === 0) return;
+
+        // Header showing count
+        if (selectedNames.length > 1) {
+            const countDiv = document.createElement("div");
+            Object.assign(countDiv.style, { padding: "4px 16px 4px", fontSize: "11px", color: "#888" });
+            countDiv.textContent = `${selectedNames.length} sitches selected`;
+            menu.appendChild(countDiv);
+            menu.appendChild(this._makeMenuSep());
+        }
+
+        // Delete / Undelete action
+        const allDeleted = selectedNames.every(n => this._sitchHasLabel(n, "Deleted"));
+        menu.appendChild(this._makeMenuItem(allDeleted ? "Undelete" : "Delete", () => {
+            if (allDeleted) this._removeLabelFromSitches(selectedNames, "Deleted");
+            else this._addLabelToSitches(selectedNames, "Deleted");
+            this._hideContextMenu();
+        }));
+
+        menu.appendChild(this._makeMenuSep());
+
+        // Label checkboxes (all labels)
+        for (const label of this.userLabels) {
+            const hasCount = selectedNames.filter(n => this._sitchHasLabel(n, label.name)).length;
+            const all = hasCount === selectedNames.length;
+            const none = hasCount === 0;
+            const indeterminate = !all && !none;
+
+            menu.appendChild(this._makeMenuCheckbox(label, all, indeterminate, () => {
+                if (all) this._removeLabelFromSitches(selectedNames, label.name);
+                else this._addLabelToSitches(selectedNames, label.name);
+                this._hideContextMenu();
+            }));
+        }
+
+        document.body.appendChild(menu);
+
+        // Reposition if off-screen
+        const mr = menu.getBoundingClientRect();
+        if (mr.right > window.innerWidth) menu.style.left = Math.max(0, window.innerWidth - mr.width - 4) + "px";
+        if (mr.bottom > window.innerHeight) menu.style.top = Math.max(0, window.innerHeight - mr.height - 4) + "px";
+
+        // Close on click/scroll outside
+        setTimeout(() => {
+            this._contextMenuCloser = (e) => {
+                if (!menu.contains(e.target)) this._hideContextMenu();
+            };
+            document.addEventListener("mousedown", this._contextMenuCloser);
+        });
+    }
+
+    _hideContextMenu() {
+        if (this._contextMenu && this._contextMenu.parentNode) {
+            this._contextMenu.parentNode.removeChild(this._contextMenu);
+        }
+        this._contextMenu = null;
+        if (this._contextMenuCloser) {
+            document.removeEventListener("mousedown", this._contextMenuCloser);
+            this._contextMenuCloser = null;
+        }
+    }
+
+    _makeMenuItem(text, onClick) {
+        const item = document.createElement("div");
+        Object.assign(item.style, { padding: "6px 16px", cursor: "pointer" });
+        item.textContent = text;
+        item.addEventListener("mouseenter", () => item.style.backgroundColor = "#3a3a5e");
+        item.addEventListener("mouseleave", () => item.style.backgroundColor = "transparent");
+        item.addEventListener("click", onClick);
+        return item;
+    }
+
+    _makeMenuSep() {
+        const sep = document.createElement("div");
+        Object.assign(sep.style, { height: "1px", backgroundColor: "#444", margin: "4px 0" });
+        return sep;
+    }
+
+    _makeMenuCheckbox(label, checked, indeterminate, onClick) {
+        const item = document.createElement("div");
+        Object.assign(item.style, {
+            padding: "5px 16px", cursor: "pointer",
+            display: "flex", alignItems: "center", gap: "8px",
+        });
+
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = checked;
+        cb.indeterminate = indeterminate;
+        Object.assign(cb.style, { accentColor: label.color, cursor: "pointer", margin: "0" });
+
+        const dot = document.createElement("div");
+        Object.assign(dot.style, {
+            width: "8px", height: "8px", borderRadius: "50%", backgroundColor: label.color, flexShrink: "0",
+        });
+
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = label.name;
+
+        item.appendChild(cb);
+        item.appendChild(dot);
+        item.appendChild(nameSpan);
+        item.addEventListener("mouseenter", () => item.style.backgroundColor = "#3a3a5e");
+        item.addEventListener("mouseleave", () => item.style.backgroundColor = "transparent");
+        item.addEventListener("click", (e) => { e.preventDefault(); onClick(); });
+        return item;
+    }
+
+    // ==================== RUBBER-BAND SELECTION ====================
+
+    _initRubberBand(scrollContainer) {
+        if (this.viewMode !== "thumbnails") return;
+
+        scrollContainer.style.position = "relative";
+
+        scrollContainer.addEventListener("mousedown", (e) => {
+            // Only left button, and only on empty space (not on a card)
+            if (e.button !== 0) return;
+            if (e.target.closest("[data-sitch-card]")) return;
+
+            e.preventDefault();
+
+            const contRect = scrollContainer.getBoundingClientRect();
+            const scrollTop0 = scrollContainer.scrollTop;
+            const startX = e.clientX - contRect.left + scrollContainer.scrollLeft;
+            const startY = e.clientY - contRect.top + scrollTop0;
+
+            // Snapshot selection before band if holding shift/cmd
+            const priorSelection = (e.shiftKey || e.metaKey || e.ctrlKey) ? new Set(this.selection) : new Set();
+            if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+                this.selection.clear();
+                this._updateHighlights();
+            }
+
+            const bandEl = document.createElement("div");
+            Object.assign(bandEl.style, {
+                position: "absolute", backgroundColor: "rgba(66,133,244,0.15)",
+                border: "1px solid #4285f4", pointerEvents: "none", zIndex: "1",
+            });
+            scrollContainer.appendChild(bandEl);
+
+            let moved = false;
+
+            const onMouseMove = (me) => {
+                moved = true;
+                const cx = me.clientX - contRect.left + scrollContainer.scrollLeft;
+                const cy = me.clientY - contRect.top + scrollContainer.scrollTop;
+
+                const bx = Math.min(startX, cx);
+                const by = Math.min(startY, cy);
+                const bw = Math.abs(cx - startX);
+                const bh = Math.abs(cy - startY);
+                Object.assign(bandEl.style, {
+                    left: bx + "px", top: by + "px", width: bw + "px", height: bh + "px",
+                });
+
+                // Auto-scroll near edges
+                const edgeThresh = 40;
+                if (me.clientY < contRect.top + edgeThresh) scrollContainer.scrollTop -= 12;
+                else if (me.clientY > contRect.bottom - edgeThresh) scrollContainer.scrollTop += 12;
+
+                // Determine overlap with cards
+                const grid = this._thumbGrid;
+                if (!grid) return;
+                this.selection = new Set(priorSelection);
+
+                for (let i = 0; i < grid.children.length; i++) {
+                    const card = grid.children[i];
+                    if (!card.dataset.sitchCard) continue;
+                    const cr = card.getBoundingClientRect();
+                    const cardX = cr.left - contRect.left + scrollContainer.scrollLeft;
+                    const cardY = cr.top - contRect.top + scrollContainer.scrollTop;
+                    const overlaps = !(cardX + cr.width < bx || cardX > bx + bw ||
+                        cardY + cr.height < by || cardY > by + bh);
+                    const name = this.filtered[i]?.name;
+                    if (name && overlaps) this.selection.add(name);
+                }
+                this._updateHighlights();
+            };
+
+            const onMouseUp = () => {
+                document.removeEventListener("mousemove", onMouseMove);
+                document.removeEventListener("mouseup", onMouseUp);
+                if (bandEl.parentNode) bandEl.parentNode.removeChild(bandEl);
+
+                // If didn't move, treat as click on empty space = deselect
+                if (!moved) {
+                    this.selection.clear();
+                    this._updateHighlights();
+                }
+            };
+
+            document.addEventListener("mousemove", onMouseMove);
+            document.addEventListener("mouseup", onMouseUp);
+        });
+    }
+
+    // ==================== CONTENT REBUILD ====================
+
+    rebuildContent() {
+        this._destroyThumbObserver();
+        this._hideContextMenu();
+        this._contentArea.innerHTML = "";
+
+        this._rebuildSidebarLinks();
+
+        if (this.viewMode === "list") this.buildListView();
+        else this.buildThumbnailView();
+    }
+
+    // ==================== LIST VIEW ====================
+
+    buildListView() {
+        const listArea = document.createElement("div");
+        Object.assign(listArea.style, {
+            flex: "1", display: "flex", flexDirection: "column",
+            backgroundColor: "#181825", overflow: "hidden", minWidth: "0",
+        });
+
+        // Title
         const titleBar = document.createElement("div");
         Object.assign(titleBar.style, { padding: "16px 24px", fontSize: "20px", fontWeight: "600", borderBottom: "1px solid #333" });
-        titleBar.textContent = "Browse Sitches";
+        titleBar.textContent = this._titleText();
         listArea.appendChild(titleBar);
 
-        // Search bar
+        // Search
         const searchBar = document.createElement("div");
         Object.assign(searchBar.style, { padding: "12px 24px", borderBottom: "1px solid #333" });
         const searchInput = this._createSearchInput(() => this.renderRows(this._tbody));
         searchBar.appendChild(searchInput);
         listArea.appendChild(searchBar);
 
-        // Table header
+        // Header row
         const headerRow = document.createElement("div");
         Object.assign(headerRow.style, {
             display: "flex", padding: "10px 24px", borderBottom: "2px solid #444",
             fontSize: "13px", fontWeight: "600", textTransform: "uppercase",
             letterSpacing: "0.5px", color: "#888", userSelect: "none",
         });
-
-        const makeHeaderCell = (text, column, flex) => {
+        const makeHdr = (text, column, flex) => {
             const cell = document.createElement("div");
-            cell.style.flex = flex;
-            cell.style.cursor = "pointer";
-            cell.style.padding = "4px 0";
-            const updateLabel = () => {
+            cell.style.flex = flex; cell.style.cursor = "pointer"; cell.style.padding = "4px 0";
+            const update = () => {
                 let arrow = "";
                 if (this.sortColumn === column) arrow = this.sortAsc ? " \u25B2" : " \u25BC";
                 cell.textContent = text + arrow;
             };
-            updateLabel();
+            update();
             cell.addEventListener("click", () => {
-                if (this.sortColumn === column) { this.sortAsc = !this.sortAsc; }
+                if (this.sortColumn === column) this.sortAsc = !this.sortAsc;
                 else { this.sortColumn = column; this.sortAsc = column === "name"; }
                 this.applyFilterAndSort();
                 headerRow._updateLabels();
                 this.renderRows(this._tbody);
             });
-            cell._updateLabel = updateLabel;
+            cell._updateLabel = update;
             return cell;
         };
-
-        const nameHeader = makeHeaderCell("Name", "name", "3");
-        const dateHeader = makeHeaderCell("Date", "date", "2");
-        headerRow.appendChild(nameHeader);
-        headerRow.appendChild(dateHeader);
-        headerRow._updateLabels = () => { nameHeader._updateLabel(); dateHeader._updateLabel(); };
+        const nameHdr = makeHdr("Name", "name", "3");
+        const dateHdr = makeHdr("Date", "date", "2");
+        headerRow.appendChild(nameHdr);
+        headerRow.appendChild(dateHdr);
+        headerRow._updateLabels = () => { nameHdr._updateLabel(); dateHdr._updateLabel(); };
         listArea.appendChild(headerRow);
 
         // Scrollable list
@@ -296,10 +871,9 @@ export class CSitchBrowser {
         this.renderRows(tbody);
         listContainer.appendChild(tbody);
         listArea.appendChild(listContainer);
-
         this._contentArea.appendChild(listArea);
 
-        // --- Preview panel ---
+        // Preview panel
         const preview = document.createElement("div");
         Object.assign(preview.style, {
             width: "640px", minWidth: "640px", backgroundColor: "#1e1e2e",
@@ -307,10 +881,10 @@ export class CSitchBrowser {
             alignItems: "center", padding: "24px", gap: "16px",
         });
 
-        const previewTitle = document.createElement("div");
-        Object.assign(previewTitle.style, { fontSize: "14px", fontWeight: "600", color: "#888", textTransform: "uppercase", letterSpacing: "0.5px", alignSelf: "flex-start" });
-        previewTitle.textContent = "Preview";
-        preview.appendChild(previewTitle);
+        const pTitle = document.createElement("div");
+        Object.assign(pTitle.style, { fontSize: "14px", fontWeight: "600", color: "#888", textTransform: "uppercase", letterSpacing: "0.5px", alignSelf: "flex-start" });
+        pTitle.textContent = "Preview";
+        preview.appendChild(pTitle);
 
         this._previewName = document.createElement("div");
         Object.assign(this._previewName.style, { fontSize: "16px", fontWeight: "600", color: "#e0e0e0", wordBreak: "break-word", textAlign: "center" });
@@ -321,18 +895,19 @@ export class CSitchBrowser {
         preview.appendChild(this._previewImg);
 
         this._previewNoImage = document.createElement("div");
-        Object.assign(this._previewNoImage.style, { width: "100%", aspectRatio: "16/9", backgroundColor: "#2a2a3e", borderRadius: "6px", border: "1px solid #333", display: "flex", alignItems: "center", justifyContent: "center", color: "#555", fontSize: "13px" });
+        Object.assign(this._previewNoImage.style, { width: "100%", aspectRatio: "16/9", backgroundColor: "#2a2a3e", borderRadius: "6px", border: "1px solid #333", display: "none", alignItems: "center", justifyContent: "center", color: "#555", fontSize: "13px" });
         this._previewNoImage.textContent = "No preview available";
-        this._previewNoImage.style.display = "none";
         preview.appendChild(this._previewNoImage);
 
         this._previewDate = document.createElement("div");
         Object.assign(this._previewDate.style, { fontSize: "13px", color: "#888" });
         preview.appendChild(this._previewDate);
 
+        this._previewLabels = document.createElement("div");
+        preview.appendChild(this._previewLabels);
+
         this.updatePreview(null);
         this._contentArea.appendChild(preview);
-
         searchInput.focus();
     }
 
@@ -343,6 +918,7 @@ export class CSitchBrowser {
             this._previewImg.style.display = "none";
             this._previewNoImage.style.display = "none";
             this._previewDate.textContent = "Click a sitch to preview";
+            if (this._previewLabels) this._previewLabels.innerHTML = "";
             return;
         }
         this._previewName.textContent = sitch.name;
@@ -356,25 +932,10 @@ export class CSitchBrowser {
             this._previewImg.style.display = "none";
             this._previewNoImage.style.display = "flex";
         }
-    }
-
-    selectIndex(idx) {
-        const sitch = this.filtered[idx];
-        if (!sitch) return;
-        this.selectedName = sitch.name;
-        if (this.viewMode === "list") {
-            this.updatePreview(sitch);
-            if (this._tbody) {
-                for (const child of this._tbody.children) { if (child._setHighlight) child._setHighlight(); }
-                const row = this._tbody.children[idx];
-                if (row) row.scrollIntoView({block: "nearest"});
-            }
-        } else {
-            if (this._thumbGrid) {
-                for (const child of this._thumbGrid.children) { if (child._setHighlight) child._setHighlight(); }
-                const card = this._thumbGrid.children[idx];
-                if (card) card.scrollIntoView({block: "nearest"});
-            }
+        if (this._previewLabels) {
+            this._previewLabels.innerHTML = "";
+            const chips = this._makeLabelChips(sitch.name);
+            if (chips) this._previewLabels.appendChild(chips);
         }
     }
 
@@ -387,41 +948,54 @@ export class CSitchBrowser {
             tbody.appendChild(empty);
             return;
         }
-        this.filtered.forEach((sitch) => {
+        this.filtered.forEach((sitch, idx) => {
             const row = document.createElement("div");
-            Object.assign(row.style, { display: "flex", padding: "12px 0", borderBottom: "1px solid #2a2a3e", cursor: "pointer", borderRadius: "4px" });
-            const setHighlight = () => { row.style.backgroundColor = (this.selectedName === sitch.name) ? "#2a2a3e" : "transparent"; };
+            Object.assign(row.style, {
+                display: "flex", padding: "12px 0", borderBottom: "1px solid #2a2a3e",
+                cursor: "pointer", borderRadius: "4px", alignItems: "center",
+            });
+
+            const setHighlight = () => {
+                const sel = this.selection.has(sitch.name);
+                row.style.backgroundColor = sel ? "#2a3a5e" : "transparent";
+            };
             setHighlight();
-            row.addEventListener("mouseenter", () => { row.style.backgroundColor = "#2a2a3e"; });
-            row.addEventListener("mouseleave", () => { setHighlight(); });
+            row.addEventListener("mouseenter", () => {
+                if (!this.selection.has(sitch.name)) row.style.backgroundColor = "#2a2a3e";
+            });
+            row.addEventListener("mouseleave", () => setHighlight());
+
+            this._makeDraggable(row, sitch.name);
 
             const nameCell = document.createElement("div");
-            nameCell.style.flex = "3"; nameCell.style.fontSize = "14px"; nameCell.textContent = sitch.name;
+            nameCell.style.flex = "3"; nameCell.style.fontSize = "14px";
+            const nameText = document.createElement("div");
+            nameText.textContent = sitch.name;
+            nameCell.appendChild(nameText);
+            const chips = this._makeLabelChips(sitch.name);
+            if (chips) nameCell.appendChild(chips);
+
             const dateCell = document.createElement("div");
-            dateCell.style.flex = "2"; dateCell.style.fontSize = "13px"; dateCell.style.color = "#888"; dateCell.textContent = sitch.date;
+            dateCell.style.flex = "2"; dateCell.style.fontSize = "13px"; dateCell.style.color = "#888";
+            dateCell.textContent = sitch.date;
             row.appendChild(nameCell);
             row.appendChild(dateCell);
 
-            row.addEventListener("click", () => {
-                this.selectedName = sitch.name;
-                this.updatePreview(sitch);
-                for (const child of tbody.children) { if (child._setHighlight) child._setHighlight(); }
-            });
+            row.addEventListener("click", (e) => this._handleItemClick(e, idx));
+            row.addEventListener("mousedown", (e) => this._handleItemMouseDown(e, idx));
             row.addEventListener("dblclick", () => { this.close(); this.fileManager.loadSavedFile(sitch.name); });
+
             row._setHighlight = setHighlight;
             tbody.appendChild(row);
         });
 
-        // Scroll selected item into view after search changes
         if (this.selectedName) {
             const idx = this.filtered.findIndex(s => s.name === this.selectedName);
-            if (idx >= 0 && tbody.children[idx]) {
-                tbody.children[idx].scrollIntoView({block: "nearest"});
-            }
+            if (idx >= 0 && tbody.children[idx]) tbody.children[idx].scrollIntoView({block: "nearest"});
         }
     }
 
-    // ========== THUMBNAIL VIEW ==========
+    // ==================== THUMBNAIL VIEW ====================
 
     buildThumbnailView() {
         const area = document.createElement("div");
@@ -430,13 +1004,13 @@ export class CSitchBrowser {
             backgroundColor: "#181825", overflow: "hidden", minWidth: "0",
         });
 
-        // Title bar
+        // Title
         const titleBar = document.createElement("div");
         Object.assign(titleBar.style, { padding: "16px 24px", fontSize: "20px", fontWeight: "600", borderBottom: "1px solid #333" });
-        titleBar.textContent = "Browse Sitches";
+        titleBar.textContent = this._titleText();
         area.appendChild(titleBar);
 
-        // Search bar + column slider
+        // Search + sort + columns
         const searchBar = document.createElement("div");
         Object.assign(searchBar.style, { padding: "12px 24px", borderBottom: "1px solid #333", display: "flex", gap: "16px", alignItems: "center" });
 
@@ -444,7 +1018,7 @@ export class CSitchBrowser {
         searchInput.style.flex = "1";
         searchBar.appendChild(searchInput);
 
-        // Sort controls
+        // Sort
         const sortLabel = document.createElement("div");
         Object.assign(sortLabel.style, { fontSize: "12px", color: "#888", whiteSpace: "nowrap" });
         sortLabel.textContent = "Sort:";
@@ -452,8 +1026,7 @@ export class CSitchBrowser {
 
         const sortSelect = document.createElement("select");
         Object.assign(sortSelect.style, { backgroundColor: "#2a2a3e", color: "#e0e0e0", border: "1px solid #444", borderRadius: "4px", padding: "4px 8px", fontSize: "12px" });
-        const options = [["date_desc", "Date (newest)"], ["date_asc", "Date (oldest)"], ["name_asc", "Name (A-Z)"], ["name_desc", "Name (Z-A)"]];
-        for (const [val, label] of options) {
+        for (const [val, label] of [["date_desc", "Date (newest)"], ["date_asc", "Date (oldest)"], ["name_asc", "Name (A-Z)"], ["name_desc", "Name (Z-A)"]]) {
             const opt = document.createElement("option");
             opt.value = val; opt.textContent = label;
             if (val === this.sortColumn + "_" + (this.sortAsc ? "asc" : "desc")) opt.selected = true;
@@ -461,8 +1034,7 @@ export class CSitchBrowser {
         }
         sortSelect.addEventListener("change", () => {
             const [col, dir] = sortSelect.value.split("_");
-            this.sortColumn = col;
-            this.sortAsc = dir === "asc";
+            this.sortColumn = col; this.sortAsc = dir === "asc";
             this.applyFilterAndSort();
             this.renderThumbnails();
         });
@@ -481,32 +1053,23 @@ export class CSitchBrowser {
             this.thumbColumns = parseInt(colSlider.value);
             colLabel.textContent = `Columns: ${this.thumbColumns}`;
 
-            // Preserve selected card's screen position across column change
-            let selectedCard = null;
-            let offsetFromViewport = 0;
+            let selectedCard = null, offsetFromViewport = 0;
             if (this.selectedName && this._thumbGrid) {
-                const idx = this.filtered.findIndex(s => s.name === this.selectedName);
-                if (idx >= 0) {
-                    selectedCard = this._thumbGrid.children[idx];
+                const i = this.filtered.findIndex(s => s.name === this.selectedName);
+                if (i >= 0) {
+                    selectedCard = this._thumbGrid.children[i];
                     if (selectedCard) {
-                        const containerRect = this._thumbScrollContainer.getBoundingClientRect();
-                        const cardRect = selectedCard.getBoundingClientRect();
-                        offsetFromViewport = cardRect.top - containerRect.top;
+                        offsetFromViewport = selectedCard.getBoundingClientRect().top - this._thumbScrollContainer.getBoundingClientRect().top;
                     }
                 }
             }
-
             this._thumbGrid.style.gridTemplateColumns = `repeat(${this.thumbColumns}, 1fr)`;
-
             if (selectedCard) {
-                const containerRect = this._thumbScrollContainer.getBoundingClientRect();
-                const newCardRect = selectedCard.getBoundingClientRect();
-                const newOffset = newCardRect.top - containerRect.top;
+                const newOffset = selectedCard.getBoundingClientRect().top - this._thumbScrollContainer.getBoundingClientRect().top;
                 this._thumbScrollContainer.scrollTop += (newOffset - offsetFromViewport);
             }
         });
         searchBar.appendChild(colSlider);
-
         area.appendChild(searchBar);
 
         // Scrollable grid
@@ -521,12 +1084,14 @@ export class CSitchBrowser {
             gap: "16px",
         });
         this._thumbGrid = grid;
-
         this.renderThumbnails();
 
         scrollContainer.appendChild(grid);
         area.appendChild(scrollContainer);
         this._contentArea.appendChild(area);
+
+        // Rubber-band selection
+        this._initRubberBand(scrollContainer);
 
         searchInput.focus();
     }
@@ -543,7 +1108,6 @@ export class CSitchBrowser {
             return;
         }
 
-        // IntersectionObserver for lazy loading
         this._thumbObserver = new IntersectionObserver((entries) => {
             for (const entry of entries) {
                 if (entry.isIntersecting) {
@@ -557,26 +1121,30 @@ export class CSitchBrowser {
             }
         }, { root: this._thumbScrollContainer, rootMargin: "200px" });
 
-        this.filtered.forEach((sitch) => {
+        this.filtered.forEach((sitch, idx) => {
             const card = document.createElement("div");
+            card.dataset.sitchCard = "1";
             Object.assign(card.style, {
-                backgroundColor: "#1e1e2e",
-                borderRadius: "8px",
-                border: "1px solid #333",
-                overflow: "hidden",
-                cursor: "pointer",
-                transition: "border-color 0.15s",
+                backgroundColor: "#1e1e2e", borderRadius: "8px",
+                border: "2px solid #333", overflow: "hidden",
+                cursor: "pointer", transition: "border-color 0.15s",
             });
 
             const setHighlight = () => {
-                card.style.borderColor = (this.selectedName === sitch.name) ? "#8ab4f8" : "#333";
+                const sel = this.selection.has(sitch.name);
+                card.style.borderColor = sel ? "#8ab4f8" : "#333";
+                card.style.backgroundColor = sel ? "#252540" : "#1e1e2e";
             };
             setHighlight();
 
-            card.addEventListener("mouseenter", () => { card.style.borderColor = "#8ab4f8"; });
-            card.addEventListener("mouseleave", () => { setHighlight(); });
+            card.addEventListener("mouseenter", () => {
+                if (!this.selection.has(sitch.name)) card.style.borderColor = "#555";
+            });
+            card.addEventListener("mouseleave", () => setHighlight());
 
-            // Thumbnail image area
+            this._makeDraggable(card, sitch.name);
+
+            // Thumbnail
             const imgWrap = document.createElement("div");
             Object.assign(imgWrap.style, { width: "100%", aspectRatio: "16/9", backgroundColor: "#2a2a3e", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" });
 
@@ -587,49 +1155,45 @@ export class CSitchBrowser {
                 img.alt = sitch.name;
                 img.onerror = () => {
                     img.style.display = "none";
-                    const placeholder = document.createElement("div");
-                    Object.assign(placeholder.style, { color: "#555", fontSize: "12px" });
-                    placeholder.textContent = "No preview";
-                    imgWrap.appendChild(placeholder);
+                    const ph = document.createElement("div");
+                    Object.assign(ph.style, { color: "#555", fontSize: "12px" });
+                    ph.textContent = "No preview";
+                    imgWrap.appendChild(ph);
                 };
                 imgWrap.appendChild(img);
                 this._thumbObserver.observe(img);
             } else {
-                const placeholder = document.createElement("div");
-                Object.assign(placeholder.style, { color: "#555", fontSize: "12px" });
-                placeholder.textContent = "No preview";
-                imgWrap.appendChild(placeholder);
+                const ph = document.createElement("div");
+                Object.assign(ph.style, { color: "#555", fontSize: "12px" });
+                ph.textContent = "No preview";
+                imgWrap.appendChild(ph);
             }
             card.appendChild(imgWrap);
 
-            // Info area
+            // Info
             const info = document.createElement("div");
             Object.assign(info.style, { padding: "8px 10px" });
-
             const nameDiv = document.createElement("div");
             Object.assign(nameDiv.style, { fontSize: "13px", fontWeight: "600", color: "#e0e0e0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" });
             nameDiv.textContent = sitch.name;
             nameDiv.title = sitch.name;
             info.appendChild(nameDiv);
-
             const dateDiv = document.createElement("div");
             Object.assign(dateDiv.style, { fontSize: "11px", color: "#888", marginTop: "2px" });
             dateDiv.textContent = sitch.date;
             info.appendChild(dateDiv);
-
+            const chips = this._makeLabelChips(sitch.name);
+            if (chips) info.appendChild(chips);
             card.appendChild(info);
 
-            card.addEventListener("click", () => {
-                this.selectedName = sitch.name;
-                for (const child of this._thumbGrid.children) { if (child._setHighlight) child._setHighlight(); }
-            });
+            card.addEventListener("click", (e) => this._handleItemClick(e, idx));
+            card.addEventListener("mousedown", (e) => this._handleItemMouseDown(e, idx));
             card.addEventListener("dblclick", () => { this.close(); this.fileManager.loadSavedFile(sitch.name); });
 
             card._setHighlight = setHighlight;
             this._thumbGrid.appendChild(card);
         });
 
-        // Scroll selected item into view after search changes
         if (this.selectedName) {
             const idx = this.filtered.findIndex(s => s.name === this.selectedName);
             if (idx >= 0 && this._thumbGrid.children[idx]) {
@@ -638,58 +1202,225 @@ export class CSitchBrowser {
         }
     }
 
-    // ========== SHARED HELPERS ==========
+    // ==================== SHARED HELPERS ====================
+
+    _titleText() {
+        if (this.activeLabel === "Deleted") return "Deleted Sitches";
+        if (this.activeLabel === "Private") return "Private Sitches";
+        if (this.activeLabel) return `Label: ${this.activeLabel}`;
+        return "Browse Sitches";
+    }
+
+    _makeSidebarLink(text, onClick, active) {
+        const a = document.createElement("a");
+        a.textContent = text;
+        a.href = "#";
+        Object.assign(a.style, {
+            color: active ? "#e0e0e0" : "#8ab4f8", textDecoration: "none",
+            fontSize: "14px", padding: "6px 12px", borderRadius: "6px",
+            backgroundColor: active ? "#2a2a3e" : "transparent",
+        });
+        a.addEventListener("mouseenter", () => a.style.backgroundColor = "#2a2a3e");
+        a.addEventListener("mouseleave", () => a.style.backgroundColor = active ? "#2a2a3e" : "transparent");
+        a.addEventListener("click", e => { e.preventDefault(); onClick(); });
+        return a;
+    }
 
     _createSearchInput(onUpdate) {
-        const searchInput = document.createElement("input");
-        searchInput.type = "text";
-        searchInput.placeholder = "Search by name...";
-        searchInput.value = this.searchText;
-        Object.assign(searchInput.style, {
+        const si = document.createElement("input");
+        si.type = "text"; si.placeholder = "Search by name..."; si.value = this.searchText;
+        Object.assign(si.style, {
             width: "100%", boxSizing: "border-box", padding: "10px 14px", fontSize: "14px",
             backgroundColor: "#2a2a3e", color: "#e0e0e0", border: "1px solid #444",
             borderRadius: "6px", outline: "none",
         });
-        searchInput.addEventListener("input", () => {
-            this.searchText = searchInput.value;
+        si.addEventListener("input", () => {
+            this.searchText = si.value;
             this.applyFilterAndSort();
             onUpdate();
         });
-        return searchInput;
+        return si;
     }
 
     _matchesSearch(name, searchText) {
         const nameLower = name.toLowerCase();
-        // Split on " OR " (uppercase) to get OR groups
         const orParts = searchText.split(' OR ');
-        if (orParts.length > 1) {
-            return orParts.some(part => this._matchesSearch(name, part.trim()));
-        }
-        // Split on " AND " (uppercase) to get AND terms
+        if (orParts.length > 1) return orParts.some(part => this._matchesSearch(name, part.trim()));
         const andParts = searchText.split(' AND ');
-        if (andParts.length > 1) {
-            return andParts.every(part => nameLower.includes(part.trim().toLowerCase()));
-        }
-        // Plain text match
+        if (andParts.length > 1) return andParts.every(part => nameLower.includes(part.trim().toLowerCase()));
         return nameLower.includes(searchText.toLowerCase());
     }
 
+    _makeLabelChips(sitchName) {
+        const labels = this.sitchLabels[sitchName];
+        if (!labels || labels.length === 0) return null;
+
+        const container = document.createElement("div");
+        Object.assign(container.style, { display: "flex", flexWrap: "wrap", gap: "3px", marginTop: "2px" });
+
+        for (const labelName of labels) {
+            const labelDef = this.userLabels.find(l => l.name === labelName);
+            if (!labelDef) continue;
+
+            const chip = document.createElement("span");
+            Object.assign(chip.style, {
+                display: "inline-flex", alignItems: "center", gap: "3px",
+                padding: "1px 6px", borderRadius: "3px", fontSize: "10px",
+                backgroundColor: labelDef.color + "33", color: labelDef.color,
+                border: "1px solid " + labelDef.color + "55",
+                maxWidth: "100px", overflow: "hidden", textOverflow: "ellipsis",
+                whiteSpace: "nowrap", lineHeight: "16px",
+            });
+            chip.textContent = labelName;
+            chip.title = labelName;
+            container.appendChild(chip);
+        }
+        return container;
+    }
+
+    _makeDraggable(element, sitchName) {
+        element.draggable = true;
+        element.addEventListener("dragstart", (e) => {
+            // If dragging an unselected item, select just it
+            if (!this.selection.has(sitchName)) {
+                this.selection.clear();
+                this.selection.add(sitchName);
+                this.selectedName = sitchName;
+                this._updateHighlights();
+            }
+            const names = [...this.selection];
+            e.dataTransfer.setData("text/plain", JSON.stringify(names));
+            e.dataTransfer.effectAllowed = "link";
+
+            // Show drag badge with count
+            if (names.length > 1) {
+                const badge = document.createElement("div");
+                Object.assign(badge.style, {
+                    padding: "4px 12px", backgroundColor: "#4285f4",
+                    color: "#fff", borderRadius: "4px", fontSize: "13px",
+                    position: "absolute", top: "-1000px",
+                });
+                badge.textContent = `${names.length} sitches`;
+                document.body.appendChild(badge);
+                e.dataTransfer.setDragImage(badge, 0, 0);
+                setTimeout(() => document.body.removeChild(badge));
+            }
+        });
+    }
+
+    _parseDragData(e) {
+        const raw = e.dataTransfer.getData("text/plain");
+        try {
+            const arr = JSON.parse(raw);
+            if (Array.isArray(arr)) return arr.filter(n => typeof n === "string" && n);
+        } catch { /* not JSON */ }
+        return raw ? [raw] : [];
+    }
+
     _destroyThumbObserver() {
-        if (this._thumbObserver) {
-            this._thumbObserver.disconnect();
-            this._thumbObserver = null;
+        if (this._thumbObserver) { this._thumbObserver.disconnect(); this._thumbObserver = null; }
+    }
+
+    // ==================== LABEL MUTATIONS ====================
+
+    _promptAddLabel(assignToSitches) {
+        const name = prompt("Enter label name:");
+        if (!name || !name.trim()) return;
+        const trimmed = name.trim().substring(0, 50);
+
+        if (this._isPermanentLabel(trimmed)) {
+            alert(`"${trimmed}" is a reserved label name.`);
+            return;
+        }
+
+        if (!this.userLabels.some(l => l.name === trimmed)) {
+            // Pick a color that hasn't been used yet, or cycle
+            const usedColors = new Set(this.userLabels.map(l => l.color));
+            let color = LABEL_COLORS.find(c => !usedColors.has(c)) || LABEL_COLORS[this.userLabels.length % LABEL_COLORS.length];
+            this.userLabels.push({name: trimmed, color});
+        }
+
+        if (assignToSitches && assignToSitches.length > 0) {
+            for (const sn of assignToSitches) {
+                if (!this.sitchLabels[sn]) this.sitchLabels[sn] = [];
+                if (!this.sitchLabels[sn].includes(trimmed)) this.sitchLabels[sn].push(trimmed);
+            }
+        }
+
+        this._saveMetadata();
+        this._rebuildSidebarLabels();
+        this.rebuildContent();
+    }
+
+    _deleteLabel(labelName) {
+        if (this._isPermanentLabel(labelName)) return;
+        if (!confirm(`Delete label "${labelName}"? This will remove it from all sitches.`)) return;
+
+        this.userLabels = this.userLabels.filter(l => l.name !== labelName);
+        for (const sn of Object.keys(this.sitchLabels)) {
+            this.sitchLabels[sn] = this.sitchLabels[sn].filter(l => l !== labelName);
+            if (this.sitchLabels[sn].length === 0) delete this.sitchLabels[sn];
+        }
+        if (this.activeLabel === labelName) this.activeLabel = null;
+
+        this._saveMetadata();
+        this.applyFilterAndSort();
+        this._rebuildSidebarLabels();
+        this.rebuildContent();
+    }
+
+    _addLabelToSitches(sitchNames, labelName) {
+        let changed = false;
+        for (const sn of sitchNames) {
+            if (!this.sitchLabels[sn]) this.sitchLabels[sn] = [];
+            if (!this.sitchLabels[sn].includes(labelName)) {
+                this.sitchLabels[sn].push(labelName);
+                changed = true;
+            }
+        }
+        if (changed) {
+            this._saveMetadata();
+            this.applyFilterAndSort();
+            this._rebuildSidebar();
+            this.rebuildContent();
         }
     }
 
+    _removeLabelFromSitches(sitchNames, labelName) {
+        let changed = false;
+        for (const sn of sitchNames) {
+            if (this.sitchLabels[sn] && this.sitchLabels[sn].includes(labelName)) {
+                this.sitchLabels[sn] = this.sitchLabels[sn].filter(l => l !== labelName);
+                if (this.sitchLabels[sn].length === 0) delete this.sitchLabels[sn];
+                changed = true;
+            }
+        }
+        if (changed) {
+            this._saveMetadata();
+            this.applyFilterAndSort();
+            this._rebuildSidebar();
+            this.rebuildContent();
+        }
+    }
+
+    _saveMetadata() {
+        const body = {
+            labels: this.userLabels,
+            sitchLabels: this.sitchLabels,
+        };
+        fetch(withTestUser(SITREC_SERVER + "metadata.php"), {
+            method: "POST", mode: "cors",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(body),
+        }).catch(err => console.error("Failed to save metadata:", err));
+    }
+
+    // ==================== CLOSE ====================
+
     close() {
         this._destroyThumbObserver();
-        if (this.overlay) {
-            document.body.removeChild(this.overlay);
-            this.overlay = null;
-        }
-        if (this._keyHandler) {
-            document.removeEventListener("keydown", this._keyHandler);
-            this._keyHandler = null;
-        }
+        this._hideContextMenu();
+        if (this.overlay) { document.body.removeChild(this.overlay); this.overlay = null; }
+        if (this._keyHandler) { document.removeEventListener("keydown", this._keyHandler); this._keyHandler = null; }
     }
 }

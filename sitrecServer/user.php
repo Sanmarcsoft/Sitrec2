@@ -3,12 +3,32 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/config_paths.php';
 
+// Check if the current user is admin (group 3) based on their real identity
+function isAdmin($userInfo = null) {
+  if ($userInfo === null) {
+    $userInfo = getUserInfoCustom();
+  }
+  $groups = is_array($userInfo['user_groups'] ?? null) ? $userInfo['user_groups'] : [];
+  return in_array(3, $groups);
+}
+
 function getUserID() {
-  return getUserIDCustom();
+  $info = getUserInfo();
+  return $info['user_id'];
 }
 
 function getUserInfo() {
-  return getUserInfoCustom();
+  static $cached = null;
+  if ($cached !== null) return $cached;
+
+  $info = getUserInfoCustom();
+  // Allow admin to operate as another user via testUserID parameter
+  $testUserID = isset($_GET['testUserID']) ? intval($_GET['testUserID']) : 0;
+  if (isAdmin($info) && $testUserID > 1) {
+    $info['user_id'] = $testUserID;
+  }
+  $cached = $info;
+  return $info;
 }
 
 
@@ -46,5 +66,4 @@ function getUserDir($user_id)
 
     return $userDir;
 }
-
 

@@ -8,7 +8,7 @@ import {
     Sit,
     unregisterFrameBlocker
 } from "./Globals";
-import {isLocal} from "./configUtils";
+import {isAdmin} from "./configUtils";
 import {par} from "./par";
 import {ExportProgressWidget, getExportPrefix} from "./utils";
 
@@ -3068,7 +3068,7 @@ function createParamSliders() {
     const trackingFolder = motionFolder.addFolder("Tracking Parameters").close();
     paramControllers.push(trackingFolder);
     
-    if (isLocal || Globals.userID === 1) {
+    if (isAdmin()) {
         const techniqueOptions = Object.values(MOTION_TECHNIQUES);
         paramControllers.push(trackingFolder.add(p, 'technique', techniqueOptions).name("Technique").onChange((newTechnique) => {
             console.log("Technique changed to:", newTechnique);

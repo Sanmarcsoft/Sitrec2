@@ -16,6 +16,7 @@
 
 import {
     FileManager,
+    getEffectiveUserID,
     GlobalDateTimeNode,
     Globals,
     guiMenus,
@@ -28,7 +29,8 @@ import {
     Synth3DManager,
     TrackManager,
     UndoManager,
-    Units
+    Units,
+    withTestUser
 } from "./Globals";
 import {isKeyHeld, toggler} from "./KeyBoardHandler";
 import {ECEFToLLAVD_radii, LLAToECEF} from "./LLA-ECEF-ENU";
@@ -42,7 +44,7 @@ import {UpdateHUD} from "./JetStuff";
 import {degrees, getDateTimeFilename, parseBoolean} from "./utils";
 import {ViewMan} from "./CViewManager";
 import {EventManager} from "./CEventManager";
-import {isLocal, SITREC_APP, SITREC_SERVER} from "./configUtils";
+import {isAdmin, SITREC_APP, SITREC_SERVER} from "./configUtils";
 import {CNodeDisplayTrack} from "./nodes/CNodeDisplayTrack";
 import {DebugArrowAB, elevationAtLL} from "./threeExt";
 import {FeatureManager} from "./CFeatureManager";
@@ -123,7 +125,7 @@ export class CCustomManager {
 
     setupSettingsMenu() {
         // Create Settings folder in the Sitrec menu
-        const tooltipText = Globals.userID > 0
+        const tooltipText = getEffectiveUserID() > 0
             ? "Per-user settings saved to server (with cookie backup)"
             : "Per-user settings saved in browser cookies";
 
@@ -202,7 +204,7 @@ export class CCustomManager {
 
     async fetchAvailableChatModels() {
         try {
-            const res = await fetch(SITREC_SERVER + 'chatbot.php?fetchModels=1');
+            const res = await fetch(withTestUser(SITREC_SERVER + 'chatbot.php?fetchModels=1'));
             const data = await res.json();
             this.availableChatModels = data.models || [];
             this.updateChatModelSelector();
@@ -436,7 +438,7 @@ export class CCustomManager {
 
             this.buttonColor = "#80ff80"
 
-            if (Globals.userID > 0)
+            if (getEffectiveUserID() > 0)
                 this.serializeButton = theGUI.add(this, "serializeMod").name(this.buttonText).setLabelColor(this.buttonColor)
             else
                 this.serializeButton = theGUI.add(this, "loginAttempt").name("Export Disabled (click to log in)").setLabelColor("#FF8080");
@@ -521,11 +523,13 @@ export class CCustomManager {
         // Add GUI mirroring functionality to help menu
         // guiMenus.help.add(this, "showMirrorMenuDemo").name("Mirror Menu Demo").tooltip("Demonstrates how to mirror any GUI menu to create a standalone floating menu");
 
-        if (isLocal || Globals.userID === 1) {
+        if (isAdmin()) {
             const adminFolder = guiMenus.help.addFolder("Admin");
             adminFolder.add(this, "openAdminDashboard").name("Admin Dashboard").tooltip("Open the admin dashboard");
             adminFolder.add(this, "validateSitchNames").name("Validate Sitch Names").tooltip("Check all user sitch names against the validation pattern");
             adminFolder.add(this, "validateAllSitches").name("Validate All Sitches").tooltip("Load all saved sitches with local terrain to check for errors");
+            adminFolder.add(Globals, "testUserID", 0, 99999999, 1).noSlider().name("Test User ID").tooltip("Operate as this user ID (0 = disabled, must be > 1)")
+                .onFinishChange(() => { FileManager.refreshUserSaves(); });
             if (parseBoolean(process.env.SAVE_TO_S3)) {
                 adminFolder.add(this, "addMissingScreenshots").name("Add Missing Screenshots").tooltip("Load each sitch that has no screenshot, render it, and upload a screenshot");
             }
@@ -754,7 +758,7 @@ export class CCustomManager {
         // // Example of mirroring the Flow Orbs menu (or effects menu if no Flow Orbs exist)
         // this.setupFlowOrbsMirrorExample();
 
-        if (!NodeMan.exists("dagView") && (isLocal || Globals.userID === 1)) {
+        if (!NodeMan.exists("dagView") && isAdmin()) {
             new CNodeViewDAG({
                 id: "dagView",
                 visible: false,
@@ -3197,7 +3201,7 @@ export class CCustomManager {
         // Fetch the full sitch list with screenshot info
         let sitchList;
         try {
-            const response = await fetch(SITREC_SERVER + "getsitches.php?get=myfiles", {mode: 'cors'});
+            const response = await fetch(withTestUser(SITREC_SERVER + "getsitches.php?get=myfiles"), {mode: 'cors'});
             if (response.status !== 200) throw new Error(`Server returned ${response.status}`);
             sitchList = await response.json();
         } catch (err) {
@@ -3206,7 +3210,9 @@ export class CCustomManager {
         }
 
         // Filter to sitches without screenshots: entry is [name, date, screenshotUrl|null]
+        // Sort newest first
         const missing = sitchList.filter(entry => !entry[2]);
+        missing.sort((a, b) => new Date(b[1]) - new Date(a[1]));
         if (missing.length === 0) {
             alert("All sitches already have screenshots!");
             return;

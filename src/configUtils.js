@@ -46,6 +46,11 @@ export async function getConfigFromServer() {
 
 export let isLocal = false;
 
+// Admin if real userID is 1 (production) or 99999999 (localhost default)
+export function isAdmin() {
+    return Globals.userID === 1 || (isLocal && Globals.userID === 99999999);
+}
+
 export function checkLocal() {
     const localPatterns = [process.env.LOCALHOST, 'localhost', '192\\.168'];
     const regex = new RegExp(`^(${localPatterns.join('|')})`);

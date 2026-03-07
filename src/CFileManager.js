@@ -26,6 +26,7 @@ import {CRehoster} from "./CRehoster";
 import {CManager} from "./CManager";
 import {
     CustomManager,
+    getEffectiveUserID,
     Globals,
     guiMenus,
     NodeMan,
@@ -33,7 +34,8 @@ import {
     setRenderOne,
     Sit,
     Synth3DManager,
-    TrackManager
+    TrackManager,
+    withTestUser
 } from "./Globals";
 import {fromArrayBuffer as geotiffFromArrayBuffer} from 'geotiff';
 import {DragDropHandler} from "./DragDropHandler";
@@ -115,10 +117,10 @@ export class CFileManager extends CManager {
                     serverName = process.env.S3_BUCKET + ".s3"
                 }
 
-                this.guiServer = this.guiFolder.addFolder("Server (" + serverName + ") "+Globals.userID).perm().open();
+                this.guiServer = this.guiFolder.addFolder("Server (" + serverName + ") "+getEffectiveUserID()).perm().open();
 
                 // Server-side rehosting only for logged-in users
-                if (Globals.userID > 0) {
+                if (getEffectiveUserID() > 0) {
 
                     this.addServerButtons();
 
@@ -220,7 +222,7 @@ export class CFileManager extends CManager {
             if (parseBoolean(process.env.SAVE_TO_LOCAL)) {
                 this.guiLocal.show();
             }
-            if (Globals.userID > 0) {
+            if (getEffectiveUserID() > 0) {
                 if ((parseBoolean(process.env.SAVE_TO_SERVER) || parseBoolean(process.env.SAVE_TO_S3)) && !isServerless) {
                     this.guiServer.show();
                 }
@@ -280,48 +282,39 @@ export class CFileManager extends CManager {
                 .tooltip("Browse all your saved sitches in a searchable, sortable list");
         }
 
-        // get the list of files saved on the server
-        // this is basically a list of the folders in the user's directory
-        let textSitches = [];
-        fetch((SITREC_SERVER + "getsitches.php?get=myfiles"), {mode: 'cors'}).then(response => {
+        this.versionsList = ["-"];
+        this.versionsData = [];
+        this.versionName = "-";
+        this.guiVersions = this.guiServer.add(this, "versionName", this.versionsList).name("Versions").perm().onChange((value) => {
+            this.loadVersion(value);
+        }).moveAfter(this.sitchBrowser ? "Open" : "Save with Permalink")
+            .tooltip("Load a specific version of the currently selected sitch");
+
+        this.refreshUserSaves();
+
+    }
+
+    refreshUserSaves() {
+        fetch(withTestUser(SITREC_SERVER + "getsitches.php?get=myfiles"), {mode: 'cors'}).then(response => {
             if (response.status !== 200) {
                 throw new Error(`Server returned status ${response.status}`);
             }
             return response.text();
         }).then(data => {
-//            console.log("Local files: " + data)
-
             const files = JSON.parse(data);
-            // "files" will be and array of arrays, each with a name (index 0) and a date (index 1)
-            // we just want the names
-            // but first sort them by date, newest first
             files.sort((a, b) => {
                 return new Date(b[1]) - new Date(a[1]);
             });
 
-
             this.userSaves = files.map((file) => {
                 return String(file[0]);
             })
-
-
-            // add a "-" to the start of the userSaves array, so we can have a blank entry
             this.userSaves.unshift("-");
 
-            this.versionsList = ["-"];
-            this.versionsData = [];
-            this.versionName = "-";
-            this.guiVersions = this.guiServer.add(this, "versionName", this.versionsList).name("Versions").perm().onChange((value) => {
-                this.loadVersion(value);
-            }).moveAfter(this.sitchBrowser ? "Open" : "Save with Permalink")
-                .tooltip("Load a specific version of the currently selected sitch");
-
             this.refreshVersions();
-
         }).catch(error => {
             console.error("Could not fetch user files from server (non-critical):", error.message);
         })
-
     }
 
     openBrowseDialog() {
@@ -426,7 +419,7 @@ export class CFileManager extends CManager {
         if (this.sourceUserID) {
             url += "&userid=" + this.sourceUserID;
         }
-        return fetch(url, {mode: 'cors'}).then(response => {
+        return fetch(withTestUser(url), {mode: 'cors'}).then(response => {
             if (response.status !== 200) {
                 throw new Error(`Server returned status ${response.status}`);
             }
@@ -823,7 +816,7 @@ export class CFileManager extends CManager {
         asyncCheckLogin().then(() => {
 
             // if we are alreayd logged in, then don't need to open the login window
-            if (Globals.userID > 0) {
+            if (getEffectiveUserID() > 0) {
                 if (button !== undefined) {
                     button.name(rename).setLabelColor(color)
                 }
@@ -847,8 +840,8 @@ export class CFileManager extends CManager {
 // and if we are, we'll make the permalink
             window.addEventListener('focus', () => {
                 asyncCheckLogin().then(() => {
-                    console.log("After Ridirect, Logged in as " + Globals.userID)
-                    if (Globals.userID > 0) {
+                    console.log("After Ridirect, Logged in as " + getEffectiveUserID())
+                    if (getEffectiveUserID() > 0) {
                         // just change the button text
                         if (button !== undefined) {
                             console.log("Changing button name to " + rename)

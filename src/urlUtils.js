@@ -1,4 +1,5 @@
 import {isLocal, SITREC_SERVER} from "./configUtils";
+import {withTestUser} from "./Globals";
 
 export function writeToClipboard(text) {
     navigator.clipboard.writeText(text).then(() => {
@@ -22,7 +23,7 @@ export async function getShortURL(url) {
     var shortenerUrl = SITREC_SERVER + "shortener.php?url=" + encoded_url;
 
 // Fetch the shortened URL
-    return fetch(shortenerUrl)
+    return fetch(withTestUser(shortenerUrl))
         .then(response => {
             if (!response.ok) {
                 throw new Error('Network response was not ok: ' + response.statusText);

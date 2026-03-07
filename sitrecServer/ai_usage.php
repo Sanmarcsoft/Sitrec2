@@ -6,7 +6,7 @@ require_once __DIR__ . '/user.php';
 
 $userInfo = getUserInfo();
 
-if (!in_array(3, $userInfo['user_groups'])) {
+if (!isAdmin($userInfo)) {
     http_response_code(403);
     die('Admin access required');
 }

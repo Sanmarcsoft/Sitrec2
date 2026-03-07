@@ -1,5 +1,14 @@
 import {Vector3} from "three";
-import {FileManager, GlobalDateTimeNode, Globals, guiMenus, NodeMan, setRenderOne, Sit} from "../Globals";
+import {
+    FileManager,
+    getEffectiveUserID,
+    GlobalDateTimeNode,
+    guiMenus,
+    NodeMan,
+    setRenderOne,
+    Sit,
+    withTestUser
+} from "../Globals";
 import {par} from "../par";
 import {CNodeViewUI} from "../nodes/CNodeViewUI";
 import {AddTimeDisplayToUIOld} from "../UIHelpers";
@@ -149,7 +158,7 @@ export const SitNightSky = {
 
 
 
-        if (Globals.userID > 0)
+        if (getEffectiveUserID() > 0)
             this.permaButton = guiMenus.file.add(this, "makeNightSkyURL").name("SAVE Night Sky Permalink")
         else {
             this.permaButton = guiMenus.file.add(this, "loginAttempt").name("Permalink DISABLED (click to log in)")
@@ -264,7 +273,7 @@ export const SitNightSky = {
                     var shortenerUrl = SITREC_SERVER + "shortener.php?url=" + encoded_url;
 
 // Fetch the shortened URL
-                    fetch(shortenerUrl)
+                    fetch(withTestUser(shortenerUrl))
                         .then(response => {
                             if (!response.ok) {
                                 throw new Error('Network response was not ok: ' + response.statusText);

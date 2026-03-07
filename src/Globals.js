@@ -25,7 +25,8 @@ export const Globals = {
     tileDelay: 0,  // Additional delay before loading tiles (0-5 seconds)
     screenshotting: false, // true during batch screenshot generation (skips menu rebuilds)
     disposing: false, // true during disposeEverything() to suppress side-effects
-    
+    testUserID: 0, // Admin-only: operate as this user ID when > 1
+
     // Granular render debug flags - shared across ALL views
     renderDebugFlags: {
         dbg_clearBackground: true,
@@ -51,6 +52,22 @@ export function setGPUMemoryMonitor(monitor) {
 
 export function setSitchEstablished(bool) {
     Globals.sitchEstablished = bool;
+}
+
+// Returns testUserID if set by admin, otherwise real userID
+export function getEffectiveUserID() {
+    if (Globals.testUserID > 1) return Globals.testUserID;
+    return Globals.userID;
+}
+
+// Append testUserID param to a server URL when testUserID > 1
+// Server validates that the real user is admin before honoring it
+export function withTestUser(url) {
+    if (Globals.testUserID > 1) {
+        const separator = url.includes('?') ? '&' : '?';
+        return url + separator + 'testUserID=' + Globals.testUserID;
+    }
+    return url;
 }
 
 export let Sit;

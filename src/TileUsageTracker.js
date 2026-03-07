@@ -1,4 +1,5 @@
 import {isServerless, SITREC_SERVER} from "./configUtils";
+import {withTestUser} from "./Globals";
 import {parseBoolean} from "./utils";
 
 export const TILE_USAGE_SERVICES = Object.freeze({
@@ -51,7 +52,7 @@ class TileUsageTrackerClass {
 
     async fetchLimits() {
         try {
-            const response = await fetch(SITREC_SERVER + 'tile_usage.php', {
+            const response = await fetch(withTestUser(SITREC_SERVER + 'tile_usage.php'), {
                 credentials: 'include',
             });
             if (!response.ok) return;
@@ -154,7 +155,7 @@ class TileUsageTrackerClass {
         if (totalToReport === 0) return;
         
         try {
-            const response = await fetch(SITREC_SERVER + 'tile_usage.php', {
+            const response = await fetch(withTestUser(SITREC_SERVER + 'tile_usage.php'), {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({usage: toReport}),

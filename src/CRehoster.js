@@ -1,5 +1,6 @@
 import {assert} from "./assert.js";
 import {SITREC_SERVER} from "./configUtils";
+import {withTestUser} from "./Globals";
 import {showError} from "./showError";
 import {initUploadProgress, parseBoolean, updateUploadProgress} from "./utils";
 
@@ -40,7 +41,7 @@ export class CRehoster {
             requestData.contentHash = contentHash;
         }
 
-        const response = await fetch(serverURL, {
+        const response = await fetch(withTestUser(serverURL), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -68,7 +69,7 @@ export class CRehoster {
             requestData.version = version;
         }
 
-        const response = await fetch(serverURL, {
+        const response = await fetch(withTestUser(serverURL), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -240,7 +241,7 @@ export class CRehoster {
 
                 const serverURL = SITREC_SERVER + 'rehost.php?action=getPresignedUrl&unique=' + Date.now();
 
-                let response = await fetch(serverURL, {
+                let response = await fetch(withTestUser(serverURL), {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -365,7 +366,7 @@ export class CRehoster {
         formData.append('delete', 'true');
         const serverURL = SITREC_SERVER +'rehost.php?unique=' + Date.now();
         console.log("Deleting file: ", filename, " with URL: ", serverURL);
-        let response = await fetch(serverURL, {
+        let response = await fetch(withTestUser(serverURL), {
             method: 'POST',
             body: formData,  // Send FormData with file and filename
             cache: 'no-store'  // Ensure we never cache POST responses

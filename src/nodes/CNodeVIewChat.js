@@ -1,5 +1,5 @@
 import {CNodeViewText} from "./CNodeViewText.js";
-import {GlobalDateTimeNode, Globals, guiMenus} from "../Globals";
+import {GlobalDateTimeNode, Globals, guiMenus, withTestUser} from "../Globals";
 import {SITREC_SERVER} from "../configUtils";
 import {sitrecAPI} from "../CSitrecAPI";
 import {parseBoolean} from "../utils";
@@ -311,7 +311,7 @@ class CNodeViewChat extends CNodeViewText {
                 model: model,
             });
 
-            const res = await fetch(SITREC_SERVER + 'chatbot.php', {
+            const res = await fetch(withTestUser(SITREC_SERVER + 'chatbot.php'), {
                 body,
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -343,7 +343,7 @@ class CNodeViewChat extends CNodeViewText {
 
     async logUnhandledLLMCall(prompt, apiCalls, textResponse = null) {
         try {
-            await fetch(SITREC_SERVER + 'logNLU.php', {
+            await fetch(withTestUser(SITREC_SERVER + 'logNLU.php'), {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 credentials: 'include',
@@ -394,7 +394,7 @@ class CNodeViewChat extends CNodeViewText {
                 model,
             });
 
-            const res = await fetch(SITREC_SERVER + 'chatbot.php', {
+            const res = await fetch(withTestUser(SITREC_SERVER + 'chatbot.php'), {
                 body,
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
