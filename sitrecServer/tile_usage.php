@@ -349,7 +349,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     saveUserUsage($userId, $TILE_USAGE_DIR, $currentUsage);
-    
+
+    // Record to 28-day stats history
+    require_once __DIR__ . '/stats_history.php';
+    recordDailyStats($reportedUsage);
+
     $remaining = [];
     foreach ($limits as $service => $limit) {
         $used = $currentUsage['hourly'][$service] ?? 0;

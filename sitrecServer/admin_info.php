@@ -205,7 +205,7 @@ $sitches = getUserSitches($targetUserId);
                 </div>
                 <div class="info-row">
                     <span class="info-label">Last IP</span>
-                    <span class="info-value"><?= htmlspecialchars($targetUserInfo['ip']) ?></span>
+                    <span class="info-value"><a href="https://whatismyipaddress.com/ip/<?= htmlspecialchars($targetUserInfo['ip']) ?>" target="_blank" rel="noopener" style="color:#64ffda;text-decoration:none;"><?= htmlspecialchars($targetUserInfo['ip']) ?></a></span>
                 </div>
             </div>
             

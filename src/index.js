@@ -1170,6 +1170,14 @@ async function initializeOnce() {
     // Initialize tile usage tracking (non-blocking)
     TileUsageTracker.init();
 
+    // Record visit for admin stats (non-blocking)
+    if (!isServerless && parseBoolean(process.env.SITREC_TRACK_STATS)) {
+        const sitchParam = new URLSearchParams(window.location.search).get('sitch') || '';
+        fetch(SITREC_SERVER + 'record_visit.php' + (sitchParam ? '?sitch=' + encodeURIComponent(sitchParam) : ''), {
+            credentials: 'include',
+        }).catch(() => {});
+    }
+
     // Initialize settings early, before any nodes are created
     // This ensures Globals.settings is available for terrain, UI, and other components
 //    console.log('Initializing global settings from storage');

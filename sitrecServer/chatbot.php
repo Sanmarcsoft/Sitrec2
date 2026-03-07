@@ -329,6 +329,8 @@ function getHelpDocContent($docName, $availableDocs) {
 // Log AI request
 if (getenv('SITREC_TRACK_STATS')) {
     logAIRequest($userInfo['user_id'], $prompt, $requestedModel);
+    require_once __DIR__ . '/stats_history.php';
+    recordDailyStats(['ai_requests' => 1]);
 }
 
 // User info already retrieved above for rate limiting

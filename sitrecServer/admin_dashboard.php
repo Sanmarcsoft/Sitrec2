@@ -227,8 +227,46 @@ function getS3Usage() {
     return $result;
 }
 
+require_once __DIR__ . '/stats_history.php';
+
+function renderSparkGraph($statsHistory, $key, $label, $formatFn = 'number_format', $color = '#64ffda') {
+    $values = [];
+    $dates = [];
+    foreach ($statsHistory as $date => $day) {
+        $dates[] = $date;
+        $values[] = $day[$key] ?? 0;
+    }
+    $max = max(1, max($values));
+    $h = 60;
+    $today = end($values);
+
+    $formattedToday = $formatFn === 'formatBytes' ? formatBytes($today) : number_format($today);
+
+    $svg = '<svg viewBox="0 0 280 ' . $h . '" preserveAspectRatio="none" style="width:100%;height:' . $h . 'px;">';
+    foreach ($values as $i => $v) {
+        $barH = ($v / $max) * ($h - 2);
+        $x = $i * (280 / count($values));
+        $bw = (280 / count($values)) - 1;
+        $y = $h - $barH;
+        $opacity = ($i === count($values) - 1) ? '1' : '0.6';
+        $svg .= '<rect x="' . $x . '" y="' . $y . '" width="' . $bw . '" height="' . $barH . '" fill="' . $color . '" opacity="' . $opacity . '">';
+        $formattedVal = $formatFn === 'formatBytes' ? formatBytes($v) : number_format($v);
+        $svg .= '<title>' . htmlspecialchars($dates[$i]) . ': ' . $formattedVal . '</title>';
+        $svg .= '</rect>';
+    }
+    $svg .= '</svg>';
+
+    return '<div class="spark-card">'
+        . '<div class="spark-header"><span class="spark-label">' . htmlspecialchars($label) . '</span>'
+        . '<span class="spark-today">' . $formattedToday . '</span></div>'
+        . $svg
+        . '</div>';
+}
+
 $aiUsage = loadAIUsageData($AI_RATE_LIMIT_DIR);
 $tileUsage = loadTileUsageData($TILE_USAGE_DIR);
+$statsHistory = getStatsHistory28();
+$todayVisits = getVisitDetails(date('Y-m-d'));
 
 $aiTotalHour = array_sum(array_column($aiUsage, 'hour_count'));
 $tileTotalHour = [];
@@ -413,6 +451,17 @@ $userNames = getUserNames($allUserIds);
             font-size: 0.8em;
         }
         .refresh-btn:hover { background: rgba(100, 255, 218, 0.2); }
+        .spark-card { margin-bottom: 8px; }
+        .spark-card:last-child { margin-bottom: 0; }
+        .spark-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px; }
+        .spark-label { font-size: 0.75em; color: #8892b0; text-transform: uppercase; }
+        .spark-today { font-size: 1.1em; font-weight: 600; color: #64ffda; }
+        .spark-card svg { display: block; border-radius: 3px; background: rgba(255,255,255,0.02); }
+        .spark-card svg rect { transition: opacity 0.15s; }
+        .spark-card svg rect:hover { opacity: 1 !important; }
+        .grid-2 { grid-template-columns: repeat(2, 1fr); }
+        @media (min-width: 1400px) { .grid-2 { grid-template-columns: repeat(2, 1fr); } }
+        .visit-ip { font-family: monospace; font-size: 0.85em; color: #8892b0; }
     </style>
 </head>
 <body>
@@ -460,6 +509,73 @@ $userNames = getUserNames($allUserIds);
             </div>
         </div>
         
+        <div class="grid grid-2">
+            <div class="card">
+                <h2>28-Day Usage History</h2>
+                <?= renderSparkGraph($statsHistory, 'visits', 'Visits', 'number_format', '#64ffda') ?>
+                <?= renderSparkGraph($statsHistory, 'unique_users', 'Unique Users', 'number_format', '#7ec8e3') ?>
+                <?= renderSparkGraph($statsHistory, 'unique_ips', 'Unique IPs', 'number_format', '#c084fc') ?>
+                <?= renderSparkGraph($statsHistory, 'ai_requests', 'AI Requests', 'number_format', '#fbbf24') ?>
+            </div>
+            <div class="card">
+                <h2>28-Day Tile History</h2>
+                <?php
+                // Calculate tiles_total (excluding byte services) per day for the graph
+                $tileHistoryForGraph = $statsHistory;
+                $byteKeys = array_flip($byteServices);
+                foreach ($tileHistoryForGraph as $date => &$day) {
+                    $total = 0;
+                    foreach ($day as $k => $v) {
+                        if (!isset($byteKeys[$k]) && !in_array($k, ['ai_requests', 'visits', 'unique_users', 'unique_ips'])) {
+                            $total += $v;
+                        }
+                    }
+                    $day['tiles_total'] = $total;
+                }
+                unset($day);
+                ?>
+                <?= renderSparkGraph($tileHistoryForGraph, 'tiles_total', 'Total Tiles', 'number_format', '#64ffda') ?>
+                <?= renderSparkGraph($statsHistory, 'google_3d_root', 'Google 3D Root', 'number_format', '#f87171') ?>
+                <?= renderSparkGraph($statsHistory, 'google_3d_tiles', 'Google 3D Tiles', 'number_format', '#fb923c') ?>
+                <?= renderSparkGraph($statsHistory, 'cesium_osm_3d_bytes', 'Cesium OSM BW', 'formatBytes', '#a78bfa') ?>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h2>Visitors Today (<?= count($todayVisits['users']) ?> users, <?= count($todayVisits['ips']) ?> IPs)</h2>
+                <table>
+                    <tr><th>User</th><th>Visits</th><th>IP</th><th>IP Visits</th></tr>
+                    <?php
+                    // Merge user and IP data for display
+                    arsort($todayVisits['users']);
+                    $visitUserIds = array_keys($todayVisits['users']);
+                    $visitUserNames = getUserNames(array_map(fn($id) => is_numeric($id) ? (int)$id : $id, $visitUserIds));
+                    foreach (array_slice($todayVisits['users'], 0, 20, true) as $uid => $count):
+                        // Find most recent IP for this user
+                        $userIp = '';
+                        foreach (array_reverse($todayVisits['entries']) as $entry) {
+                            if (strval($entry['user_id']) === strval($uid)) {
+                                $userIp = $entry['ip'];
+                                break;
+                            }
+                        }
+                        $ipCount = $todayVisits['ips'][$userIp] ?? 0;
+                    ?>
+                    <tr>
+                        <td><?= renderUserLink(is_numeric($uid) ? (int)$uid : $uid, $visitUserNames) ?></td>
+                        <td class="highlight"><?= number_format($count) ?></td>
+                        <td class="visit-ip"><a href="https://whatismyipaddress.com/ip/<?= htmlspecialchars($userIp) ?>" target="_blank" rel="noopener" class="sitch-link"><?= htmlspecialchars($userIp) ?></a></td>
+                        <td><?= number_format($ipCount) ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                    <?php if (empty($todayVisits['users'])): ?>
+                    <tr><td colspan="4">No visits recorded today</td></tr>
+                    <?php endif; ?>
+                </table>
+            </div>
+        </div>
+
         <div class="grid">
             <div class="card">
                 <h2>Tiles by Service (Hour)</h2>
