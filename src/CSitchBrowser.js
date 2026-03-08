@@ -1248,10 +1248,12 @@ export class CSitchBrowser {
 
     _makeLabelChips(sitchName) {
         const labels = this.sitchLabels[sitchName];
-        if (!labels || labels.length === 0) return null;
 
+        // Always create a container so we can update it in-place later
         const container = document.createElement("div");
+        container.dataset.labelChips = sitchName;
         Object.assign(container.style, { display: "flex", flexWrap: "wrap", gap: "3px", marginTop: "2px" });
+        if (!labels || labels.length === 0) return container;
 
         for (const labelName of labels) {
             const labelDef = this.userLabels.find(l => l.name === labelName);
@@ -1271,6 +1273,18 @@ export class CSitchBrowser {
             container.appendChild(chip);
         }
         return container;
+    }
+
+    // Update label chips in-place without rebuilding cards/rows (avoids thumbnail flicker)
+    _refreshLabelChips() {
+        const containers = this._contentArea.querySelectorAll("[data-label-chips]");
+        for (const container of containers) {
+            const sitchName = container.dataset.labelChips;
+            container.innerHTML = "";
+            const fresh = this._makeLabelChips(sitchName);
+            // Move children from the new container into the existing one
+            while (fresh.firstChild) container.appendChild(fresh.firstChild);
+        }
     }
 
     // ==================== CUSTOM DRAG (no native DnD) ====================
@@ -1436,6 +1450,11 @@ export class CSitchBrowser {
         this.rebuildContent();
     }
 
+    // Check if a label change affects the current filter and requires a full content rebuild
+    _labelAffectsFilter(labelName) {
+        return labelName === "Deleted" || labelName === "Private" || labelName === this.activeLabel;
+    }
+
     _addLabelToSitches(sitchNames, labelName) {
         const changed = [];
         for (const sn of sitchNames) {
@@ -1447,9 +1466,13 @@ export class CSitchBrowser {
         }
         if (changed.length > 0) {
             this._saveMetadata(changed);
-            this.applyFilterAndSort();
             this._rebuildSidebar();
-            this.rebuildContent();
+            if (this._labelAffectsFilter(labelName)) {
+                this.applyFilterAndSort();
+                this.rebuildContent();
+            } else {
+                this._refreshLabelChips();
+            }
         }
     }
 
@@ -1464,9 +1487,13 @@ export class CSitchBrowser {
         }
         if (changed.length > 0) {
             this._saveMetadata(changed);
-            this.applyFilterAndSort();
             this._rebuildSidebar();
-            this.rebuildContent();
+            if (this._labelAffectsFilter(labelName)) {
+                this.applyFilterAndSort();
+                this.rebuildContent();
+            } else {
+                this._refreshLabelChips();
+            }
         }
     }
 
