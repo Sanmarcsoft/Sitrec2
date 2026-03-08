@@ -432,6 +432,9 @@ test.describe.serial('UI Interaction Tests - Playwright', () => {
 
             await sharedPage.waitForTimeout(3000);
             await waitForSceneToSettle(sharedPage, 45000);
+
+            // Set a fixed frame to avoid datetime inconsistency in screenshots
+            await sharedPage.evaluate(() => { par.frame = 10; });
             await waitForFrames(sharedPage, 50);
 
             await takeSnapshot(sharedPage, 'import-la-features-csv-snapshot', testInfo);
