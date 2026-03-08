@@ -514,18 +514,16 @@ export class CFileManager extends CManager {
                 }
 
             } catch (error) {
-                console.error = originalConsoleError;
                 console.error(`  FAILED: ${sitchName} - ${error.message}`);
-                Globals.screenshotting = false;
-                alert(`Screenshot refresh stopped on error!\n\nDone: ${results.done.length}\nFailed: ${sitchName}\nFile: ${latestVersion}\n\n${error.message}`);
-                return;
+                results.failed.push(sitchName);
             }
         }
 
         console.error = originalConsoleError;
         Globals.screenshotting = false;
-        console.log(`\nScreenshot refresh complete. Done: ${results.done.length}`);
-        alert(`Screenshot refresh complete!\n\nRefreshed: ${results.done.length}`);
+        const failedMsg = results.failed.length > 0 ? `\nFailed: ${results.failed.join(', ')}` : '';
+        console.log(`\nScreenshot refresh complete. Done: ${results.done.length}, Failed: ${results.failed.length}`);
+        alert(`Screenshot refresh complete!\n\nRefreshed: ${results.done.length}\nFailed: ${results.failed.length}${failedMsg}`);
     }
 
     /**
