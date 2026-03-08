@@ -380,36 +380,21 @@ export class CSitchBrowser {
         addBtn.addEventListener("mouseleave", () => addBtn.style.backgroundColor = "transparent");
         addBtn.addEventListener("click", () => this._promptAddLabel());
 
-        // Drop on "Add Label" creates new label and assigns
-        addBtn.addEventListener("dragover", (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "link"; addBtn.style.backgroundColor = "#3a3a5e"; });
-        addBtn.addEventListener("dragleave", () => addBtn.style.backgroundColor = "transparent");
-        addBtn.addEventListener("drop", (e) => {
-            e.preventDefault();
-            addBtn.style.backgroundColor = "transparent";
-            const names = this._parseDragData(e);
-            if (names.length > 0) this._promptAddLabel(names);
+        // Register as custom-drag drop target
+        this._registerDropTarget(addBtn, {
+            onEnter: () => addBtn.style.backgroundColor = "#3a3a5e",
+            onLeave: () => addBtn.style.backgroundColor = "transparent",
+            onDrop: (names) => { addBtn.style.backgroundColor = "transparent"; if (names.length > 0) this._promptAddLabel(names); },
         });
 
         container.appendChild(addBtn);
     }
 
     _makeLabelDropTarget(element, label) {
-        element.addEventListener("dragover", (e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = "link";
-            element.style.backgroundColor = "#3a3a5e";
-            element.style.outline = "2px solid " + label.color;
-        });
-        element.addEventListener("dragleave", () => {
-            element.style.backgroundColor = (this.activeLabel === label.name) ? "#2a2a3e" : "transparent";
-            element.style.outline = "none";
-        });
-        element.addEventListener("drop", (e) => {
-            e.preventDefault();
-            element.style.backgroundColor = (this.activeLabel === label.name) ? "#2a2a3e" : "transparent";
-            element.style.outline = "none";
-            const names = this._parseDragData(e);
-            if (names.length > 0) this._addLabelToSitches(names, label.name);
+        this._registerDropTarget(element, {
+            onEnter: () => { element.style.backgroundColor = "#3a3a5e"; element.style.outline = "2px solid " + label.color; },
+            onLeave: () => { element.style.backgroundColor = (this.activeLabel === label.name) ? "#2a2a3e" : "transparent"; element.style.outline = "none"; },
+            onDrop: (names) => { element.style.backgroundColor = (this.activeLabel === label.name) ? "#2a2a3e" : "transparent"; element.style.outline = "none"; if (names.length > 0) this._addLabelToSitches(names, label.name); },
         });
     }
 
@@ -417,19 +402,10 @@ export class CSitchBrowser {
     _makePermanentLinkDropTarget(element, labelName) {
         const label = PERMANENT_LABELS.find(l => l.name === labelName);
         if (!label) return;
-        element.addEventListener("dragover", (e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = "link";
-            element.style.outline = "2px solid " + label.color;
-        });
-        element.addEventListener("dragleave", () => {
-            element.style.outline = "none";
-        });
-        element.addEventListener("drop", (e) => {
-            e.preventDefault();
-            element.style.outline = "none";
-            const names = this._parseDragData(e);
-            if (names.length > 0) this._addLabelToSitches(names, labelName);
+        this._registerDropTarget(element, {
+            onEnter: () => { element.style.outline = "2px solid " + label.color; },
+            onLeave: () => { element.style.outline = "none"; },
+            onDrop: (names) => { element.style.outline = "none"; if (names.length > 0) this._addLabelToSitches(names, labelName); },
         });
     }
 
@@ -817,6 +793,8 @@ export class CSitchBrowser {
         this._destroyThumbObserver();
         this._hideContextMenu();
         this._contentArea.innerHTML = "";
+        // Prune drop targets whose DOM elements were removed
+        if (this._dropTargets) this._dropTargets = this._dropTargets.filter(t => document.body.contains(t.element));
 
         this._rebuildSidebarLinks();
 
@@ -1169,6 +1147,7 @@ export class CSitchBrowser {
                 Object.assign(img.style, { width: "100%", height: "100%", objectFit: "contain", display: "block" });
                 img.dataset.src = sitch.screenshotUrl;
                 img.alt = sitch.name;
+                img.draggable = false;
                 img.onerror = () => {
                     img.style.display = "none";
                     const ph = document.createElement("div");
@@ -1294,43 +1273,107 @@ export class CSitchBrowser {
         return container;
     }
 
-    _makeDraggable(element, sitchName) {
-        element.draggable = true;
-        element.addEventListener("dragstart", (e) => {
-            // If dragging an unselected item, select just it
-            if (!this.selection.has(sitchName)) {
-                this.selection.clear();
-                this.selection.add(sitchName);
-                this.selectedName = sitchName;
-                this._updateHighlights();
-            }
-            const names = [...this.selection];
-            e.dataTransfer.setData("text/plain", JSON.stringify(names));
-            e.dataTransfer.effectAllowed = "link";
+    // ==================== CUSTOM DRAG (no native DnD) ====================
 
-            // Show drag badge with count
-            if (names.length > 1) {
-                const badge = document.createElement("div");
-                Object.assign(badge.style, {
-                    padding: "4px 12px", backgroundColor: "#4285f4",
-                    color: "#fff", borderRadius: "4px", fontSize: "13px",
-                    position: "absolute", top: "-1000px",
-                });
-                badge.textContent = `${names.length} sitches`;
-                document.body.appendChild(badge);
-                e.dataTransfer.setDragImage(badge, 0, 0);
-                setTimeout(() => document.body.removeChild(badge));
-            }
+    _registerDropTarget(element, handlers) {
+        if (!this._dropTargets) this._dropTargets = [];
+        this._dropTargets.push({ element, ...handlers });
+    }
+
+    _makeDraggable(element, sitchName) {
+        // Prevent native browser drag (images, links) which triggers Chrome split-view
+        element.addEventListener("dragstart", (e) => e.preventDefault());
+
+        let startX, startY, dragging = false;
+
+        element.addEventListener("pointerdown", (e) => {
+            if (e.button !== 0) return; // left button only
+            startX = e.clientX;
+            startY = e.clientY;
+            dragging = false;
+
+            const onMove = (me) => {
+                if (!dragging) {
+                    // Require a small movement threshold before starting drag
+                    if (Math.abs(me.clientX - startX) < 5 && Math.abs(me.clientY - startY) < 5) return;
+                    dragging = true;
+                    this._startCustomDrag(me, sitchName);
+                }
+                if (dragging) this._updateCustomDrag(me);
+            };
+            const onUp = (ue) => {
+                document.removeEventListener("pointermove", onMove);
+                document.removeEventListener("pointerup", onUp);
+                if (dragging) this._endCustomDrag(ue);
+            };
+            document.addEventListener("pointermove", onMove);
+            document.addEventListener("pointerup", onUp);
         });
     }
 
-    _parseDragData(e) {
-        const raw = e.dataTransfer.getData("text/plain");
-        try {
-            const arr = JSON.parse(raw);
-            if (Array.isArray(arr)) return arr.filter(n => typeof n === "string" && n);
-        } catch { /* not JSON */ }
-        return raw ? [raw] : [];
+    _startCustomDrag(e, sitchName) {
+        // Clean up any previous drag state (e.g. if pointerup was lost)
+        if (this._dragGhost) { document.body.removeChild(this._dragGhost); this._dragGhost = null; }
+
+        // If dragging an unselected item, select just it
+        if (!this.selection.has(sitchName)) {
+            this.selection.clear();
+            this.selection.add(sitchName);
+            this.selectedName = sitchName;
+            this._updateHighlights();
+        }
+        this._dragNames = [...this.selection];
+        this._dragHoverTarget = null;
+
+        // Create floating ghost badge
+        const ghost = document.createElement("div");
+        const label = this._dragNames.length > 1 ? `${this._dragNames.length} sitches` : sitchName;
+        ghost.textContent = label;
+        Object.assign(ghost.style, {
+            position: "fixed", pointerEvents: "none", zIndex: "100000",
+            padding: "4px 12px", backgroundColor: "#4285f4",
+            color: "#fff", borderRadius: "4px", fontSize: "13px",
+            whiteSpace: "nowrap",
+        });
+        document.body.appendChild(ghost);
+        this._dragGhost = ghost;
+        this._positionGhost(e);
+        document.body.style.userSelect = "none";
+    }
+
+    _positionGhost(e) {
+        if (!this._dragGhost) return;
+        this._dragGhost.style.left = (e.clientX + 12) + "px";
+        this._dragGhost.style.top = (e.clientY + 12) + "px";
+    }
+
+    _updateCustomDrag(e) {
+        this._positionGhost(e);
+
+        // Hit-test drop targets
+        let hit = null;
+        for (const t of (this._dropTargets || [])) {
+            const r = t.element.getBoundingClientRect();
+            if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+                hit = t;
+                break;
+            }
+        }
+        if (hit !== this._dragHoverTarget) {
+            if (this._dragHoverTarget && this._dragHoverTarget.onLeave) this._dragHoverTarget.onLeave();
+            this._dragHoverTarget = hit;
+            if (hit && hit.onEnter) hit.onEnter();
+        }
+    }
+
+    _endCustomDrag(e) {
+        document.body.style.userSelect = "";
+        if (this._dragGhost) { document.body.removeChild(this._dragGhost); this._dragGhost = null; }
+        if (this._dragHoverTarget) {
+            if (this._dragHoverTarget.onDrop) this._dragHoverTarget.onDrop(this._dragNames || []);
+            this._dragHoverTarget = null;
+        }
+        this._dragNames = null;
     }
 
     _destroyThumbObserver() {
