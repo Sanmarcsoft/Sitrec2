@@ -387,56 +387,8 @@ if (isset($_GET['get'])) {
 
 
     } else if ($_GET['get'] == "validate_names") {
-        global $UPLOAD_PATH;
-        $invalid = array();
-        $pattern = SITCH_NAME_PATTERN;
-        
-        if (!$useAWS) {
-            if (is_dir($UPLOAD_PATH)) {
-                $userDirs = @scandir($UPLOAD_PATH);
-                if ($userDirs !== false) {
-                    foreach ($userDirs as $userDir) {
-                        if ($userDir == '.' || $userDir == '..') continue;
-                        $userPath = $UPLOAD_PATH . $userDir;
-                        if (!is_dir($userPath)) continue;
-                        
-                        $sitchDirs = @scandir($userPath);
-                        if ($sitchDirs !== false) {
-                            foreach ($sitchDirs as $sitchDir) {
-                                if ($sitchDir == '.' || $sitchDir == '..') continue;
-                                if (!is_dir($userPath . '/' . $sitchDir)) continue;
-                                
-                                if (!preg_match($pattern, $sitchDir)) {
-                                    $invalid[] = ['user' => $userDir, 'name' => $sitchDir];
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            $objects = $s3->getIterator('ListObjects', array(
-                "Bucket" => $aws['bucket'],
-                "Prefix" => ''
-            ));
-            $seen = array();
-            foreach ($objects as $object) {
-                $key = $object['Key'];
-                $parts = explode('/', $key);
-                if (count($parts) >= 2 && $parts[0] != '' && $parts[1] != '') {
-                    $userDir = $parts[0];
-                    $sitchDir = $parts[1];
-                    $seenKey = $userDir . '/' . $sitchDir;
-                    if (!isset($seen[$seenKey])) {
-                        $seen[$seenKey] = true;
-                        if (!preg_match($pattern, $sitchDir)) {
-                            $invalid[] = ['user' => $userDir, 'name' => $sitchDir];
-                        }
-                    }
-                }
-            }
-        }
-        echo json_encode(['invalid' => $invalid, 'pattern' => $pattern]);
+        http_response_code(403);
+        echo json_encode(['error' => 'validate_names is disabled']);
         exit();
 
     } else if ($_GET['get'] == "versions") {

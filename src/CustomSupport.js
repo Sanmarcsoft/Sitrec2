@@ -527,7 +527,6 @@ export class CCustomManager {
         if (isAdmin()) {
             const adminFolder = guiMenus.help.addFolder("Admin");
             adminFolder.add(this, "openAdminDashboard").name("Admin Dashboard").tooltip("Open the admin dashboard");
-            adminFolder.add(this, "validateSitchNames").name("Validate Sitch Names").tooltip("Check all user sitch names against the validation pattern");
             adminFolder.add(this, "validateAllSitches").name("Validate All Sitches").tooltip("Load all saved sitches with local terrain to check for errors");
             adminFolder.add(Globals, "testUserID", 0, 99999999, 1).noSlider().name("Test User ID").tooltip("Operate as this user ID (0 = disabled, must be > 1)")
                 .onFinishChange(() => { FileManager.refreshUserSaves(); });
@@ -3074,7 +3073,7 @@ export class CCustomManager {
     }
 
     validateSitchNames() {
-        window.open(SITREC_SERVER + 'getsitches.php?get=validate_names', '_blank');
+        alert("Validate Sitch Names is disabled.");
     }
 
     async validateAllSitches() {
