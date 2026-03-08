@@ -45,7 +45,36 @@ Example entry format:
 
 ---
 
-## 2.31.4
+## Version 2.32.0 (2026-03-08)
+
+### New Features
+- **SAM2 Object Tracking**: Basic framework for SAM2-based object tracking
+- **New File Browser**: Replaced the old "Open" and "Delete" drop-downs with a new browse dialog
+- **Ctrl-N for New Sitch**: Keyboard shortcut to create a new sitch (Cmd-N can't be overridden on Mac)
+
+### Improvements
+- Improved drag and drop onto labels in the Sitch browser
+- Escape key exits sitch browser even when focus is on the search box
+- Refresh screenshot option in sitch browser context menu
+- Don't render hidden canvases in screenshots; display thumbnails full width
+- More detailed user stats on admin dashboard with monthly records
+- Model alias support for older sitches with model names containing spaces
+- Handle old sitches with features, allow creation from KML, then dispose and recreate
+- Filename sanitization consistency
+- Latitude clamping
+- More robust error handling, FOV handling, and screenshotting with retry on errors
+- Changed a non-functional error into a warning for chopped file data at boundaries
+
+### Bug Fixes
+- Fixed flashing text when changing labels
+- Fixed error from loading images that was incorrectly also trying to handle as video
+- Fixed waiting for screenshots
+- Fixed labels uploading
+- Fixed clearing source user ID when screenshotting
+
+---
+
+## Version 2.31.4 (2026-03-05)
 
 ### Bug Fixes
 - Fixed leaking event listener on MQ9 UI
