@@ -416,7 +416,15 @@ export class CFileManager extends CManager {
     }
 
     async refreshScreenshots(sitchNames) {
+        // Skip sitches labeled as Deleted
+        if (this.sitchBrowser) {
+            sitchNames = sitchNames.filter(n => !this.sitchBrowser._sitchHasLabel(n, "Deleted"));
+        }
         const total = sitchNames.length;
+        if (total === 0) {
+            alert("No sitches to refresh (all are labeled Deleted).");
+            return;
+        }
         if (!confirm(`Refresh thumbnails for ${total} sitch(es)?\n\nThis will load each one, render it, and upload a new screenshot.\n\nContinue?`)) {
             return;
         }

@@ -605,7 +605,7 @@ export class CSitchBrowser {
         menu.appendChild(this._makeMenuItem("Refresh Thumbnails", () => {
             this._hideContextMenu();
             this.close();
-            this.fileManager.refreshScreenshots([...selectedNames]);
+            this.fileManager.refreshScreenshots([...selectedNames].filter(n => !this._sitchHasLabel(n, "Deleted")));
         }));
 
         menu.appendChild(this._makeMenuSep());

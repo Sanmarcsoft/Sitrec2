@@ -3209,9 +3209,26 @@ export class CCustomManager {
             return;
         }
 
-        // Filter to sitches without screenshots: entry is [name, date, screenshotUrl|null]
+        // Fetch label metadata so we can skip Deleted sitches
+        let deletedNames = new Set();
+        try {
+            const metaResp = await fetch(withTestUser(SITREC_SERVER + "metadata.php"), {mode: 'cors'});
+            if (metaResp.ok) {
+                const metaData = await metaResp.json();
+                const sitchLabels = metaData.sitchLabels || {};
+                for (const [name, labels] of Object.entries(sitchLabels)) {
+                    if (Array.isArray(labels) && labels.includes("Deleted")) {
+                        deletedNames.add(name);
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn("Could not fetch label metadata, proceeding without filter:", e);
+        }
+
+        // Filter to sitches without screenshots, excluding Deleted: entry is [name, date, screenshotUrl|null]
         // Sort newest first
-        const missing = sitchList.filter(entry => !entry[2]);
+        const missing = sitchList.filter(entry => !entry[2] && !deletedNames.has(String(entry[0])));
         missing.sort((a, b) => new Date(b[1]) - new Date(a[1]));
         if (missing.length === 0) {
             alert("All sitches already have screenshots!");
