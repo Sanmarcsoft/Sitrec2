@@ -129,6 +129,7 @@ import {TileUsageTracker} from "./TileUsageTracker";
 import {debugLog} from "./DebugLog";
 import {FeatureManager} from "./CFeatureManager";
 import {
+    encodeShareParam,
     extractUserIdFromSitrecReference,
     isResolvableSitrecReference,
     resolveSitrecReference,
@@ -1065,7 +1066,7 @@ async function newSitch(situation, customSetup = false ) {
         // set the URL to the default
         if (FileManager.loadURL !== undefined) {
             // Share stable object-key values instead of host-bound storage URLs.
-            url = SITREC_APP + "?custom=" + encodeURIComponent(toShareableCustomValue(FileManager.loadURL));
+            url = SITREC_APP + "?custom=" + encodeShareParam(toShareableCustomValue(FileManager.loadURL));
         } else {
             // loading local sitch, so set to custom sitch
             // we don't have a URL, as it does not make sense to share a local sitch via URL

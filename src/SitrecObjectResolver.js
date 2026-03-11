@@ -160,6 +160,20 @@ export function toShareableCustomValue(value) {
 }
 
 /**
+ * Encodes a share value for use in a URL query parameter, preserving
+ * slashes and spaces for readability in the browser address bar.
+ *
+ * Only characters that break URL query parsing (&, =, #, ?) are encoded.
+ *
+ * @param {string} value
+ * @returns {string}
+ */
+export function encodeShareParam(value) {
+    return encodeURIComponent(value)
+        .replace(/%2F/gi, '/');
+}
+
+/**
  * Extracts the leading numeric user id from any supported reference form.
  *
  * @param {string} value

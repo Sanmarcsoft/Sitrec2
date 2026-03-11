@@ -78,7 +78,7 @@ import {CNodeVideoInfoUI} from "./nodes/CNodeVideoInfoUI";
 import {CNodeOSDDataSeriesController} from "./nodes/CNodeOSDDataSeriesController";
 import {CNodeGUIValue} from "./nodes/CNodeGUIValue";
 import {meanSeaLevelOffset} from "./EGM96Geoid";
-import {resolveURLForFetch, toShareableCustomValue} from "./SitrecObjectResolver";
+import {encodeShareParam, resolveURLForFetch, toShareableCustomValue} from "./SitrecObjectResolver";
 
 export class CCustomManager {
     constructor() {
@@ -3964,7 +3964,7 @@ export class CCustomManager {
                     name = Sit.name + "_mod.js"
                     paramName = "mod"
                 }
-                this.customLink = SITREC_APP + "?" + paramName + "=" + encodeURIComponent(toShareableCustomValue(staticRef));
+                this.customLink = SITREC_APP + "?" + paramName + "=" + encodeShareParam(toShareableCustomValue(staticRef));
                 console.log("  Custom link created:", this.customLink);
 
                 //
