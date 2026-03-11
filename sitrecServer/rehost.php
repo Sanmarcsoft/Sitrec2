@@ -20,6 +20,7 @@ header('Pragma: no-cache');  // HTTP/1.0 compatibility
 header('Expires: 0');        // For older browsers
 
 require('./user.php');
+require_once __DIR__ . '/object_helpers.php';
 
 $aws = null;
 
@@ -42,111 +43,16 @@ function startS3() {
     return $s3;
 }
 
-/**
- * Converts an object key to canonical Sitrec object-ref format.
- *
- * @param string $key
- * @return string
- */
-function makeObjectRef($key) {
-    return 'sitrec://' . $key;
-}
-
-/**
- * Reads a positive integer seconds value from environment with fallback.
- *
- * @param string $name Environment variable name.
- * @param int $default Fallback seconds value.
- * @return int
- */
-function getEnvIntSeconds($name, $default) {
-    $value = getenv($name);
-    if ($value === false || $value === '') return $default;
-    $intValue = intval($value);
-    return $intValue > 0 ? $intValue : $default;
-}
-
-function getEnvString($name, $default = '') {
-    $value = getenv($name);
-    if ($value === false) return $default;
-    $value = trim((string)$value);
-    return $value === '' ? $default : $value;
-}
-
-function getEnvPrefixList($name) {
-    $raw = getEnvString($name, '');
-    if ($raw === '') return [];
-
-    $parts = explode(',', $raw);
-    $prefixes = [];
-    foreach ($parts as $part) {
-        $prefix = rawurldecode(trim($part));
-        $prefix = ltrim($prefix, '/');
-        if ($prefix === '') continue;
-        $prefixes[] = $prefix;
-    }
-    return $prefixes;
-}
-
-function objectKeyMatchesPrefix($key, $prefix) {
-    if ($prefix === '') return false;
-    if (str_ends_with($prefix, '/')) {
-        return str_starts_with($key, $prefix);
-    }
-    return $key === $prefix || str_starts_with($key, $prefix . '/');
-}
-
-function objectKeyMatchesAnyPrefix($key, $prefixes) {
-    foreach ($prefixes as $prefix) {
-        if (objectKeyMatchesPrefix($key, $prefix)) return true;
-    }
-    return false;
-}
-
-function isObjectKeyPublic($key) {
-    $defaultVisibility = strtolower(getEnvString('S3_DEFAULT_VISIBILITY', 'public'));
-    if ($defaultVisibility !== 'public' && $defaultVisibility !== 'private') {
-        $defaultVisibility = 'public';
-    }
-
-    if ($defaultVisibility === 'public') {
-        $privatePrefixes = getEnvPrefixList('S3_PRIVATE_PREFIXES');
-        return !objectKeyMatchesAnyPrefix($key, $privatePrefixes);
-    }
-
-    $publicPrefixes = getEnvPrefixList('S3_PUBLIC_PREFIXES');
-    return objectKeyMatchesAnyPrefix($key, $publicPrefixes);
-}
-
-function encodeObjectKeyForUrl($key) {
-    $segments = explode('/', $key);
-    $encoded = array_map(fn($segment) => rawurlencode($segment), $segments);
-    return implode('/', $encoded);
-}
-
-function buildBucketS3ObjectUrl($key) {
-    global $aws;
-    return 'https://' . $aws['bucket'] . '.s3.' . $aws['region'] . '.amazonaws.com/' . encodeObjectKeyForUrl($key);
-}
-
-function buildPublicObjectUrl($key) {
-    $publicBase = getEnvString('S3_PUBLIC_BASE_URL', '');
-    if ($publicBase !== '') {
-        return rtrim($publicBase, '/') . '/' . encodeObjectKeyForUrl($key);
-    }
-    return buildBucketS3ObjectUrl($key);
-}
-
 function buildObjectAccessUrl($key) {
     if (isObjectKeyPublic($key)) {
         return buildPublicObjectUrl($key);
     }
-    return buildBucketS3ObjectUrl($key);
+    return buildDefaultS3ObjectUrl($key);
 }
 
 function getUploadAclForKey($key) {
-    global $aws;
-    $publicAcl = getEnvString('S3_PUBLIC_OBJECT_ACL', $aws['acl'] ?? 'public-read');
+    global $s3creds;
+    $publicAcl = getEnvString('S3_PUBLIC_OBJECT_ACL', $s3creds['acl'] ?? 'public-read');
     $privateAcl = getEnvString('S3_PRIVATE_OBJECT_ACL', 'private');
     return isObjectKeyPublic($key) ? $publicAcl : $privateAcl;
 }
@@ -322,7 +228,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'getPresignedUrl') {
             $objectUrl = buildObjectAccessUrl($s3Path);
             echo json_encode([
                 'exists' => true,
-                'objectRef' => makeObjectRef($s3Path),
+                'objectRef' => canonicalObjectRef($s3Path),
                 'objectUrl' => $objectUrl
             ]);
             exit();
@@ -346,7 +252,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'getPresignedUrl') {
         $objectUrl = buildObjectAccessUrl($s3Path);
         
         echo json_encode([
-            'objectRef' => makeObjectRef($s3Path),
+            'objectRef' => canonicalObjectRef($s3Path),
             'presignedUrl' => $presignedUrl,
             'objectUrl' => $objectUrl
         ]);
@@ -422,7 +328,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'initiateMultipart') {
             $objectUrl = buildObjectAccessUrl($s3Path);
             echo json_encode([
                 'exists' => true,
-                'objectRef' => makeObjectRef($s3Path),
+                'objectRef' => canonicalObjectRef($s3Path),
                 'objectUrl' => $objectUrl
             ]);
             exit();
@@ -459,7 +365,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'initiateMultipart') {
         echo json_encode([
             'uploadId' => $uploadId,
             'uploadUrls' => $uploadUrls,
-            'objectRef' => makeObjectRef($s3Path),
+            'objectRef' => canonicalObjectRef($s3Path),
             'objectUrl' => $objectUrl
         ]);
     } catch (Exception $e) {
@@ -536,7 +442,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'completeMultipart') {
         $objectUrl = buildObjectAccessUrl($s3Path);
         
         echo json_encode([
-            'objectRef' => makeObjectRef($s3Path),
+            'objectRef' => canonicalObjectRef($s3Path),
             'objectUrl' => $objectUrl,
             'eTag' => $result['ETag']
         ]);

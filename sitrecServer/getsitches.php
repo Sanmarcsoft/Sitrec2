@@ -38,18 +38,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/config_paths.php';
+require_once __DIR__ . '/object_helpers.php';
 
 define('SITCH_NAME_PATTERN', '/^[^\/\\\\<>\x00-\x1f]+$/u');
-
-/**
- * Converts an object key to canonical Sitrec object-ref format.
- *
- * @param string $key
- * @return string
- */
-function canonicalObjectRef($key) {
-    return 'sitrec://' . $key;
-}
 
 $storagePath = $UPLOAD_URL; // from config.php
 
