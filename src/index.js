@@ -1,3 +1,12 @@
+/**
+ * Module: main Sitrec browser entrypoint.
+ *
+ * Responsibilities:
+ * - Bootstrap globals, configuration, managers, and rendering.
+ * - Load built-in or custom sitches from URL parameters.
+ * - Integrate object-reference resolution for `custom`/`mod` loading and sharing.
+ * - Coordinate startup lifecycle, GUI initialization, and main loop wiring.
+ */
 import {ColorManagement, Group, REVISION, Scene, WebGLRenderer,} from "three";
 import "./js/uPlot/uPlot.css"
 import {makeDraggable} from "./DragResizeUtils";
@@ -119,6 +128,13 @@ import {arModeManager} from "./ARMode";
 import {TileUsageTracker} from "./TileUsageTracker";
 import {debugLog} from "./DebugLog";
 import {FeatureManager} from "./CFeatureManager";
+import {
+    extractUserIdFromSitrecReference,
+    isResolvableSitrecReference,
+    resolveSitrecReference,
+    toCanonicalSitrecRef,
+    toShareableCustomValue
+} from "./SitrecObjectResolver";
 
 // Initialize debug log capture BEFORE any console output
 debugLog.init();
@@ -355,6 +371,15 @@ if (urlParams.get("frame") !== null) {
     Globals.fixedFrame = parseInt(urlParams.get("frame"));
 }
 
+let customSitch = null;
+// Stable canonical ref for custom sitches (`sitrec://...`) used for loadURL/version lookup/share links.
+let customSitchRef = null;
+
+// for legacy reasons either "custom" or "mod" can be used
+// and we'll check for the modding parameter in the sitch object
+if (urlParams.get("custom")) customSitch = urlParams.get("custom");
+if (urlParams.get("mod")) customSitch = urlParams.get("mod");
+
 await initializeOnce();
 if (!initRendering()) {
     // we failed to create a renderer, so we can't continue
@@ -365,35 +390,16 @@ if (!initRendering()) {
 
 }
 
-
-
-let customSitch = null
-
-// for legacy reasons either "custom" or "mod" can be used
-// and we'll check for the modding parameter in the sitch object
-if (urlParams.get("custom")) customSitch = urlParams.get("custom");
-if (urlParams.get("mod")) customSitch = urlParams.get("mod");
-
-
-
 if (customSitch !== null) {
-    if (customSitch.endsWith('/')) {
-        const s3Match = customSitch.match(/https:\/\/sitrec\.s3[^\/]*\.amazonaws\.com\/(\d+)\/([^\/]+)\/$/);
-        if (s3Match) {
-            const userId = s3Match[1];
-            const sitchName = decodeURIComponent(s3Match[2]);
-            const latestUrl = SITREC_SERVER + "getsitches.php?get=latestversion&userid=" + userId + "&name=" + encodeURIComponent(sitchName);
-            await fetch(latestUrl, {mode: 'cors'}).then(response => response.json()).then(data => {
-                if (data.latest) {
-                    customSitch = customSitch + data.latest;
-                    console.log("Resolved folder to latest version: " + customSitch);
-                } else {
-                    throw new Error("No versions found in folder: " + customSitch);
-                }
-            });
-        } else {
-            throw new Error("Folder URL not recognized: " + customSitch);
-        }
+    if (isResolvableSitrecReference(customSitch)) {
+        // Resolve to a temporary fetch URL for this session while preserving a stable canonical ref.
+        const resolvedCustom = await resolveSitrecReference(customSitch);
+        customSitchRef = resolvedCustom.ref;
+        customSitch = resolvedCustom.url;
+        console.log("Resolved custom sitch to temporary fetch URL from ref: " + customSitchRef);
+    } else {
+        // Keep non-resolved custom URLs in canonical-ref form when possible for downstream comparisons.
+        customSitchRef = toCanonicalSitrecRef(customSitch);
     }
 
     let customSitchLoaded = false;
@@ -1058,7 +1064,8 @@ async function newSitch(situation, customSetup = false ) {
     } else {
         // set the URL to the default
         if (FileManager.loadURL !== undefined) {
-            url = SITREC_APP + "?custom=" + FileManager.loadURL;
+            // Share stable object-key values instead of host-bound storage URLs.
+            url = SITREC_APP + "?custom=" + encodeURIComponent(toShareableCustomValue(FileManager.loadURL));
         } else {
             // loading local sitch, so set to custom sitch
             // we don't have a URL, as it does not make sense to share a local sitch via URL
@@ -1474,11 +1481,11 @@ async function initializeOnce() {
     
     const customURL = urlParams.get("custom") || urlParams.get("mod");
     if (customURL) {
-        FileManager.loadURL = customURL;
-        // Extract the source user ID from S3 URLs so version listings use the correct user
-        const s3UserMatch = customURL.match(/https:\/\/sitrec\.s3[^\/]*\.amazonaws\.com\/(\d+)\//);
-        if (s3UserMatch) {
-            FileManager.sourceUserID = s3UserMatch[1];
+        // `loadURL` should track a stable ref/key when available, not the short-lived resolved fetch URL.
+        FileManager.loadURL = customSitchRef || toCanonicalSitrecRef(customURL);
+        const sourceUserID = extractUserIdFromSitrecReference(FileManager.loadURL);
+        if (sourceUserID) {
+            FileManager.sourceUserID = sourceUserID;
         }
     }
 

@@ -1,3 +1,12 @@
+/**
+ * Module: client-side upload/rehost transport.
+ *
+ * Responsibilities:
+ * - Upload buffers to the backend using direct POST or presigned S3 URLs.
+ * - Orchestrate multipart uploads for large objects.
+ * - Surface upload progress and normalize server responses.
+ * - Return stable object references (preferred) or compatibility URLs to callers.
+ */
 import {assert} from "./assert.js";
 import {SITREC_SERVER} from "./configUtils";
 import {withTestUser} from "./Globals";
@@ -27,6 +36,19 @@ export class CRehoster {
         this.rehostPromises = [];
     }
 
+    /**
+     * Starts a multipart upload session on the server and retrieves presigned part URLs.
+     *
+     * Response may include:
+     * - `exists=true` when the target object already exists
+     * - `objectRef` (preferred stable identifier) and/or `objectUrl` (legacy)
+     *
+     * @param {string} filename
+     * @param {string|undefined} version
+     * @param {number} totalParts
+     * @param {string|null|undefined} contentHash
+     * @returns {Promise<object>}
+     */
     async initiateMultipartUpload(filename, version, totalParts, contentHash) {
         const serverURL = SITREC_SERVER + 'rehost.php?action=initiateMultipart&unique=' + Date.now();
         
@@ -57,6 +79,19 @@ export class CRehoster {
         return await response.json();
     }
 
+    /**
+     * Completes a multipart upload using uploaded part ETags.
+     *
+     * Server response includes the final object location and may include both:
+     * - `objectRef` (stable, host-agnostic)
+     * - `objectUrl` (legacy direct URL)
+     *
+     * @param {string} filename
+     * @param {string|undefined} version
+     * @param {string} uploadId
+     * @param {Array<{ETag: string, PartNumber: number}>} parts
+     * @returns {Promise<object>}
+     */
     async completeMultipartUpload(filename, version, uploadId, parts) {
         const serverURL = SITREC_SERVER + 'rehost.php?action=completeMultipart&unique=' + Date.now();
         
@@ -87,6 +122,18 @@ export class CRehoster {
 
     // Function to promise to rehostFile the file from the client to the server
     //
+    /**
+     * Uploads content and returns a stable reference string for storage in sitch data.
+     *
+     * In S3/presigned mode this prefers `objectRef` from the backend and falls back to `objectUrl`
+     * for compatibility. Returned value is URL-escaped for safe embedding in JSON/URLs.
+     *
+     * @param {string} filename
+     * @param {ArrayBuffer|string|TypedArray} data
+     * @param {string|undefined} version
+     * @param {{skipHash?: boolean}} [options]
+     * @returns {Promise<string>} Stable object reference or URL.
+     */
     async rehostFilePromise(filename, data, version, {skipHash = false} = {}) {
         assert(filename !== undefined, "rehostFile needs a filename")
 
@@ -109,11 +156,12 @@ export class CRehoster {
                     const initResult = await this.initiateMultipartUpload(filename, version, totalParts, contentHash);
                     
                     if (initResult.exists) {
-                        console.log('File already exists on S3:', initResult.objectUrl);
-                        return initResult.objectUrl.replace(/ /g, "%20");
+                        const existingRef = (initResult.objectRef || initResult.objectUrl).replace(/ /g, "%20");
+                        console.log('File already exists on S3:', existingRef);
+                        return existingRef;
                     }
                     
-                    const { uploadId, uploadUrls, objectUrl } = initResult;
+                    const { uploadId, uploadUrls } = initResult;
                     console.log(`[Multipart Upload] Initiated with uploadId: ${uploadId}`);
 
                     const uploadedBytesPerPart = new Array(totalParts).fill(0);
@@ -211,7 +259,7 @@ export class CRehoster {
                     console.log(`[Multipart Upload] All parts uploaded, completing multipart upload...`);
                     const result = await this.completeMultipartUpload(filename, version, uploadId, uploadedParts);
 
-                    const resultUrl = result.objectUrl.replace(/ /g, "%20");
+                    const resultUrl = (result.objectRef || result.objectUrl).replace(/ /g, "%20");
                     
                     console.log(`[Multipart Upload] Success! File uploaded to: ${resultUrl}`);
                     console.log(`  Sent: ${filename} (version: ${version || 'none'})`);
@@ -257,11 +305,12 @@ export class CRehoster {
                 let presignedData = await response.json();
                 
                 if (presignedData.exists) {
-                    console.log('File already exists on S3:', presignedData.objectUrl);
-                    return presignedData.objectUrl.replace(/ /g, "%20");
+                    const existingRef = (presignedData.objectRef || presignedData.objectUrl).replace(/ /g, "%20");
+                    console.log('File already exists on S3:', existingRef);
+                    return existingRef;
                 }
                 
-                const { presignedUrl, objectUrl } = presignedData;
+                const { presignedUrl } = presignedData;
 
                 await new Promise((resolve, reject) => {
                     const xhr = new XMLHttpRequest();
@@ -290,9 +339,9 @@ export class CRehoster {
                     xhr.send(data);
                 });
 
-                console.log('File uploaded to S3:', objectUrl);
+                console.log('File uploaded to S3:', presignedData.objectRef || presignedData.objectUrl);
 
-                const resultUrl = objectUrl.replace(/ /g, "%20");
+                const resultUrl = (presignedData.objectRef || presignedData.objectUrl).replace(/ /g, "%20");
 
                 console.log(`  Sent: ${filename} (version: ${version || 'none'})`);
                 console.log(`  Received: ${resultUrl}`);

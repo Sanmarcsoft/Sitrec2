@@ -1,3 +1,12 @@
+/**
+ * Module: custom sitch and mod support.
+ *
+ * Responsibilities:
+ * - Serialize/deserialize custom sitches and mod state.
+ * - Coordinate save/share flows with FileManager and rehosting.
+ * - Generate share links and keep URL state in sync with saved content.
+ * - Provide advanced UI helpers, including GUI mirroring utilities.
+ */
 // Support functions for the custom sitches and mods
 // 
 // GUI Mirroring Functionality:
@@ -69,6 +78,7 @@ import {CNodeVideoInfoUI} from "./nodes/CNodeVideoInfoUI";
 import {CNodeOSDDataSeriesController} from "./nodes/CNodeOSDDataSeriesController";
 import {CNodeGUIValue} from "./nodes/CNodeGUIValue";
 import {meanSeaLevelOffset} from "./EGM96Geoid";
+import {resolveURLForFetch, toShareableCustomValue} from "./SitrecObjectResolver";
 
 export class CCustomManager {
     constructor() {
@@ -3807,6 +3817,20 @@ export class CCustomManager {
         return this.serialize(name, todayDateTimeFilename);
     }
 
+    /**
+     * Serializes and saves the current sitch.
+     *
+     * Reference-aware behavior for server saves:
+     * - Any current `FileManager.loadURL` is resolved to a fetchable URL before content comparison.
+     * - Newly rehosted sitches store/share the stable object reference returned by the backend
+     *   (not a storage-host-specific URL), and the generated `?custom=` / `?mod=` link uses
+     *   the share-safe object key value.
+     *
+     * @param {string} name - Logical sitch name (without version suffix).
+     * @param {string} version - Version token (typically datetime-based).
+     * @param {boolean} [local=false] - If true, save locally without server rehosting.
+     * @returns {Promise<void>}
+     */
     serialize(name, version, local = false) {
         console.log("Serializing custom sitch")
 
@@ -3899,7 +3923,8 @@ export class CCustomManager {
 
             if (FileManager.loadURL) {
                 try {
-                    const currentResponse = await fetch(FileManager.loadURL);
+                    const currentFetchURL = await resolveURLForFetch(FileManager.loadURL);
+                    const currentResponse = await fetch(currentFetchURL);
                     const currentContent = await currentResponse.text();
                     if (currentContent === str) {
                         console.log("No changes to save - content identical to current version");
@@ -3910,17 +3935,17 @@ export class CCustomManager {
                 }
             }
 
-            return FileManager.rehoster.rehostFile(name, str, version + ".js").then((staticURL) => {
-                console.log("✓ Sitch rehosted as " + staticURL);
+            return FileManager.rehoster.rehostFile(name, str, version + ".js").then((staticRef) => {
+                console.log("✓ Sitch rehosted as " + staticRef);
 
                 // Defensive check: detect if we got a cached response from a previous upload
                 // This can happen if rehost.php was called multiple times rapidly
                 // and the browser's fetch cache returned a stale response
-                if (staticURL.endsWith('.mp4') || staticURL.endsWith('.mov')) {
+                if (staticRef.endsWith('.mp4') || staticRef.endsWith('.mov')) {
                     console.error("ERROR: Sitch URL contains VIDEO indicator - likely a CACHED response!");
                     console.error("  This happens when rehost.php is called rapidly and browser caches POST responses");
                     console.error("  Expected: .js file URL (e.g., /sitrec/custom/...Custom.js.1.js)");
-                    console.error("  Got:", staticURL);
+                    console.error("  Got:", staticRef);
                     // Log current state for debugging
                     if (NodeMan.exists("video")) {
                         const videoNode = NodeMan.get("video");
@@ -3930,8 +3955,8 @@ export class CCustomManager {
                     console.error("  If this persists, check browser DevTools Network tab for 304 responses");
                 }
 
-                this.staticURL = staticURL;
-                FileManager.loadURL = staticURL;
+                this.staticURL = staticRef;
+                FileManager.loadURL = staticRef;
 
                 // and make a URL that points to the new sitch
                 let paramName = "custom"
@@ -3939,7 +3964,7 @@ export class CCustomManager {
                     name = Sit.name + "_mod.js"
                     paramName = "mod"
                 }
-                this.customLink = SITREC_APP + "?" + paramName + "=" + staticURL;
+                this.customLink = SITREC_APP + "?" + paramName + "=" + encodeURIComponent(toShareableCustomValue(staticRef));
                 console.log("  Custom link created:", this.customLink);
 
                 //

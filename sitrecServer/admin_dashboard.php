@@ -706,7 +706,7 @@ $userNames = getUserNames($allUserIds);
                     $s3Url = 'https://' . $s3Usage['bucket'] . '.s3.' . $s3Usage['region'] . '.amazonaws.com/' . $key;
                     $keyParts = explode('/', $key);
                     $isSitch = count($keyParts) >= 3 && is_numeric($keyParts[0]) && str_ends_with($key, '.js');
-                    $linkUrl = $isSitch ? '../?custom=' . urlencode($s3Url) : $s3Url;
+                    $linkUrl = $isSitch ? '../?custom=' . urlencode($key) : $s3Url;
                 ?>
                 <div class="disk-item">
                     <div class="disk-label">

@@ -9,6 +9,7 @@
  * - Synchronizes audio playback with video frames
  * - Manages video loading states and error display
  * - Supports drag-and-drop video file loading
+ * - Resolves Sitrec object references to temporary fetch URLs while preserving stable refs for serialization
  * 
  * Mouse controls:
  * - Wheel: Zoom in/out
@@ -52,6 +53,7 @@ import {
     getBestFormatForResolution,
     getVideoExtension
 } from "../VideoExporter";
+import {isResolvableSitrecReference, resolveURLForFetch} from "../SitrecObjectResolver";
 
 
 export class CNodeVideoView extends CNodeViewCanvas2D {
@@ -140,7 +142,31 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         return this.videoData?.originalVideoHeight || this.videoHeight;
     }
 
-    newVideo(fileName, clearFrames = true) {
+    /**
+     * Loads a video (or image-as-video) into this view.
+     *
+     * Reference-aware behavior:
+     * - If `fileName` is a Sitrec object reference and `storedRef` is omitted, the method first resolves
+     *   a temporary fetch URL and then re-enters itself with `storedRef` set to the original reference.
+     * - `staticURL` is set to the stable reference (`storedRef`) when available so serialization/share links
+     *   preserve host-agnostic object identity instead of short-lived presigned URLs.
+     *
+     * @param {string} fileName - Concrete URL/path or resolvable Sitrec reference.
+     * @param {boolean} [clearFrames=true] - Whether to invalidate global frame count.
+     * @param {string|undefined} [storedRef=undefined] - Stable original ref for serialization/restoration.
+     * @returns {void}
+     */
+    newVideo(fileName, clearFrames = true, storedRef = undefined) {
+        if (storedRef === undefined && isResolvableSitrecReference(fileName)) {
+            resolveURLForFetch(fileName).then(resolvedUrl => {
+                this.newVideo(resolvedUrl, clearFrames, fileName);
+            }).catch(error => {
+                console.error(`[VideoNew] Failed to resolve video ref: ${fileName}`, error);
+                this.errorCallback(error);
+            });
+            return;
+        }
+
         if (clearFrames) {
             Sit.frames = undefined; // need to recalculate this
         }
@@ -214,7 +240,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         this.videoData._loadingId = videoDataId;
 
         // loaded from a URL, so we can set the staticURL
-        this.staticURL = this.fileName;
+        this.staticURL = storedRef || this.fileName;
 
         // Add to videos array immediately (not during restore - that's handled by continueVideoRestore)
         if (!this.pendingVideoRestore) {
@@ -396,7 +422,22 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         return url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:');
     }
     
-    loadVideoFromEntry(entry) {
+    /**
+     * Restores/loads a video entry from serialized multi-video state.
+     *
+     * For remote media, `entry.staticURL` (or fallback `entry.fileName`) may be a Sitrec reference.
+     * This method resolves it to a temporary fetch URL while preserving the original stable reference
+     * for subsequent serialization (`staticURL`).
+     *
+     * @param {{
+     *   fileName: string,
+     *   staticURL?: string,
+     *   isImage?: boolean,
+     *   imageFileID?: string
+     * }} entry
+     * @returns {Promise<void>}
+     */
+    async loadVideoFromEntry(entry) {
         const nextIdx = this.videos.length;
         console.log(`[VideoLoad] loadVideoFromEntry[${nextIdx}]: "${entry.fileName}", isImage=${entry.isImage}, staticURL=${entry.staticURL?.substring(0, 50)}...`);
         
@@ -434,10 +475,14 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
                 this.skipCurrentVideoRestore();
             }
         } else {
-            const url = entry.staticURL || entry.fileName;
+            const storedRef = entry.staticURL || entry.fileName;
+            const url = await resolveURLForFetch(storedRef).catch(error => {
+                console.error(`[VideoLoad] Failed to resolve video[${nextIdx}] "${entry.fileName}":`, error);
+                return null;
+            });
             if (this.isValidVideoURL(url)) {
                 console.log(`[VideoLoad] Loading video[${nextIdx}] from URL: ${url.substring(0, 80)}...`);
-                this.newVideo(url, false);
+                this.newVideo(url, false, storedRef);
             } else {
                 console.warn(`[VideoLoad] Cannot restore video[${nextIdx}] "${entry.fileName}" - invalid URL (local files must be re-imported)`);
                 this.skipCurrentVideoRestore();

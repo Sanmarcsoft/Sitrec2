@@ -1,4 +1,10 @@
-// utils.js - a variety of useful functions and shortcuts
+/**
+ * Module: shared utility helpers.
+ *
+ * Responsibilities:
+ * - Provide general-purpose math, string, file, hashing, and UI utility helpers.
+ * - Centralize small cross-module helpers used throughout the Sitrec client.
+ */
 import {infoDiv, Sit, SitchMan} from "./Globals";
 import * as LAYER from "./LayerMasks";
 import {assert} from "./assert.js";
@@ -466,6 +472,8 @@ export function isHttpOrHttps(url) {
 }
 
 export function getFileExtension(filename) {
+    // Strip URL query/hash so presigned/cached URLs still map to the underlying file extension.
+    filename = filename.split('#')[0].split('?')[0];
     let splitDot = filename.toLowerCase().split('.')
     let fileExt = splitDot.pop();
     // if the extension ends in a / then we are probably trying to load an attachment

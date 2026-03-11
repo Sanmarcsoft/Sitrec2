@@ -1,3 +1,11 @@
+/**
+ * Module: ground overlay node.
+ *
+ * Responsibilities:
+ * - Render georeferenced image overlays on terrain/globe geometry.
+ * - Support interactive corner/position editing and cloud extraction processing.
+ * - Load overlay textures from local files, URLs, and Sitrec object references.
+ */
 import {CNode3DGroup} from "./CNode3DGroup";
 import {
     BufferGeometry,
@@ -29,6 +37,7 @@ import {degrees, radians, scaleF2M} from "../utils";
 import {sharedUniforms} from "../js/map33/material/SharedUniforms";
 import {assert} from "../assert";
 import {LoadingManager} from "../CLoadingManager";
+import {resolveURLForFetch} from "../SitrecObjectResolver";
 
 export class CNodeGroundOverlay extends CNode3DGroup {
     constructor(v) {
@@ -140,7 +149,15 @@ export class CNodeGroundOverlay extends CNode3DGroup {
         });
     }
     
-    loadTexture() {
+    /**
+     * Loads/reloads the overlay texture.
+     *
+     * If the source URL is a Sitrec object reference (or legacy resolvable form), it is resolved to
+     * a temporary fetch URL before passing it to Three.js `TextureLoader`.
+     *
+     * @returns {Promise<void>}
+     */
+    async loadTexture() {
         let textureURL = this.imageURL;
         if (this.imageFileID && FileManager.exists(this.imageFileID)) {
             const fileEntry = FileManager.list[this.imageFileID];
@@ -161,6 +178,11 @@ export class CNodeGroundOverlay extends CNode3DGroup {
 
         const loadingId = `overlay-${this.overlayID}-${Date.now()}`;
         LoadingManager.registerLoading(loadingId, textureURL, "Image");
+
+        textureURL = await resolveURLForFetch(textureURL).catch(error => {
+            console.warn(`Failed to resolve overlay texture URL: ${textureURL}`, error);
+            return textureURL;
+        });
 
         const loader = new TextureLoader();
         loader.load(textureURL, (texture) => {

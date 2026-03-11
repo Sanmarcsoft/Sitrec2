@@ -1,3 +1,11 @@
+/**
+ * Module: WebCodec-backed video view node.
+ *
+ * Responsibilities:
+ * - Extend CNodeVideoView with codec-specific upload/open/download behavior.
+ * - Instantiate the appropriate video data implementation for media type.
+ * - Resolve stored Sitrec object references when downloading/restoring remote video assets.
+ */
 import {CNodeVideoView} from "./CNodeVideoView";
 import {par} from "../par";
 import {FileManager, Globals} from "../Globals";
@@ -8,6 +16,7 @@ import {CVideoH264Data} from "../CVideoH264Data";
 import {CVideoAudioOnly} from "../CVideoAudioOnly";
 import {isAudioOnlyFormat} from "../AudioFormats";
 import {VideoLoadingManager} from "../CVideoLoadingManager";
+import {resolveURLForFetch} from "../SitrecObjectResolver";
 
 export class CNodeVideoWebCodecView extends CNodeVideoView {
     constructor(v) {
@@ -68,7 +77,7 @@ export class CNodeVideoWebCodecView extends CNodeVideoView {
 
         // Define an object to hold button functions
         const obj = {
-            openURL: () => {
+            openURL: async () => {
                 // we have a url to the video file and want to let the user download it
                 // so we create a link and click it.
                 // this will download the file.
@@ -76,7 +85,9 @@ export class CNodeVideoWebCodecView extends CNodeVideoView {
                 // Temporarily set flag to allow unload without dialog
                 Globals.allowUnload = true;
                 
-                const url = this.staticURL || getAbsolutePath(this.fileName, SITREC_APP);
+                // `staticURL` may now hold an object ref (sitrec:// or raw key), so resolve it before download.
+                const storedRef = this.staticURL || getAbsolutePath(this.fileName, SITREC_APP);
+                const url = await resolveURLForFetch(storedRef).catch(() => storedRef);
                 const link = document.createElement('a');
 
                 // Don't encode the URL if it's already encoded (e.g., from S3)
@@ -85,7 +96,7 @@ export class CNodeVideoWebCodecView extends CNodeVideoView {
                 const isAlreadyEncoded = /%[0-9A-Fa-f]{2}/.test(url);
                 link.href = isAlreadyEncoded ? url : encodeURI(url);
 
-                link.download = this.fileName;
+                link.download = this.videos?.[this.currentVideoIndex]?.fileName || this.fileName;
 
                 console.log("Downloading: " + link.href + " as " + link.download)
 

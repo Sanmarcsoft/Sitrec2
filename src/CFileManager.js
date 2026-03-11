@@ -1,3 +1,12 @@
+/**
+ * Module: client file lifecycle manager.
+ *
+ * Responsibilities:
+ * - Load and parse local and remote assets used by sitches.
+ * - Track dynamic vs static sources and manage rehosting.
+ * - Resolve Sitrec object references to fetch URLs when loading assets/sitches.
+ * - Drive save/load/version UI flows for user sitches.
+ */
 import {
     areArrayBuffersEqual,
     cleanCSVText,
@@ -74,6 +83,7 @@ import {convertTiffBufferToPngImage} from "./TIFFUtils";
 import {extractFlightClubInfo, flightClubToCSVStrings, isFlightClubJSON} from "./ParseFlightClubJSON";
 import {CSitchBrowser} from "./CSitchBrowser";
 import {ViewMan} from "./CViewManager";
+import {isResolvableSitrecReference, resolveURLForFetch, toCanonicalSitrecRef} from "./SitrecObjectResolver";
 
 const trackFileClasses = [
     CTrackFileKML,
@@ -564,7 +574,9 @@ export class CFileManager extends CManager {
     /**
      * Fetches all saved versions of a sitch from the server.
      * @param {string} name - The name of the sitch to get versions for
-     * @returns {Promise<Array<{version: string, url: string}>>} Array of version objects with version and url properties
+     * @returns {Promise<Array<{version: string, ref: string, url?: string}>>}
+     * Array of version objects normalized to always include `ref`.
+     * `url` is retained for backwards compatibility with older server responses.
      */
     getVersions(name) {
         let url = SITREC_SERVER + "getsitches.php?get=versions&name=" + name;
@@ -578,9 +590,12 @@ export class CFileManager extends CManager {
             return response.text();
         }).then(data => {
 //            console.log("versions: " + data)
-            this.versions = JSON.parse(data) // will give an array of local files
+            this.versions = JSON.parse(data).map(version => ({
+                ...version,
+                ref: version.ref || version.url
+            })); // will give an array of local files
             if (this.versions.length > 0) {
-                console.log("Parsed Versions url \n" + this.versions[0].url)
+                console.log("Parsed Versions ref \n" + this.versions[0].ref)
             }
 
 
@@ -643,6 +658,8 @@ export class CFileManager extends CManager {
      * Loads the most recent version of a saved sitch from the server.
      * Fetches the sitch file, parses it, and initializes a new situation with it.
      * @param {string} name - The name of the sitch to load
+     * @param {string|null} [sourceUserID=null] - Optional owner user ID for cross-user shared sitches.
+     * If provided, version listing and latest-resolution are performed against that owner's folder.
      */
     loadSavedFile(name, sourceUserID = null) {
         this.loadName = name;
@@ -665,12 +682,13 @@ export class CFileManager extends CManager {
                 return;
             }
 
-            const latestVersion = versions[versions.length - 1].url;
-            console.log("Loading " + name + " version " + latestVersion)
+            const latestVersion = versions[versions.length - 1];
+            const latestRef = latestVersion.ref || latestVersion.url;
+            console.log("Loading " + name + " version " + latestRef)
 
-            this.loadURL = latestVersion;
-            fetch(latestVersion).then(response => response.arrayBuffer()).then(data => {
-                console.log("Loaded " + name + " version " + latestVersion)
+            this.loadURL = latestRef;
+            resolveURLForFetch(latestRef).then(fetchUrl => fetch(fetchUrl)).then(response => response.arrayBuffer()).then(data => {
+                console.log("Loaded " + name + " version " + latestRef)
 
                 const decoder = new TextDecoder('utf-8');
                 const decodedString = decoder.decode(data);
@@ -682,6 +700,14 @@ export class CFileManager extends CManager {
         })
     }
 
+    /**
+     * Rebuilds the versions dropdown from server data.
+     *
+     * Each version entry may include both `ref` and `url`; display labels are derived from `version`.
+     *
+     * @param {Array<{version: string, ref?: string, url?: string}>} versions
+     * @returns {void}
+     */
     updateVersionsDropdown(versions) {
         if (!this.guiVersions) return;
         
@@ -712,6 +738,14 @@ export class CFileManager extends CManager {
         this.setVersionFromLoadURL();
     }
     
+    /**
+     * Selects the active dropdown entry based on the current `loadURL`.
+     *
+     * Comparison uses canonicalized refs (`sitrec://...`) so legacy URLs, raw keys, and canonical refs
+     * all map to the same version entry.
+     *
+     * @returns {void}
+     */
     setVersionFromLoadURL() {
         if (!this.guiVersions || !this.loadURL || !this.versionsData.length) {
             this.versionName = "-";
@@ -719,9 +753,9 @@ export class CFileManager extends CManager {
             return;
         }
         
-        const decodedLoadURL = decodeURIComponent(this.loadURL);
+        const decodedLoadURL = decodeURIComponent(toCanonicalSitrecRef(this.loadURL));
         for (let i = 0; i < this.versionsData.length; i++) {
-            const decodedVersionURL = decodeURIComponent(this.versionsData[i].url);
+            const decodedVersionURL = decodeURIComponent(toCanonicalSitrecRef(this.versionsData[i].ref || this.versionsData[i].url));
             if (decodedVersionURL === decodedLoadURL) {
                 const versionIndex = this.versionsData.length - 1 - i;
                 this.versionName = this.versionsList[versionIndex + 1];
@@ -734,6 +768,14 @@ export class CFileManager extends CManager {
         this.guiVersions.updateDisplay();
     }
 
+    /**
+     * Loads a specific saved version selected from the versions dropdown.
+     *
+     * If the entry is an object reference, it is resolved to a temporary fetch URL before loading.
+     *
+     * @param {string} displayName - Dropdown label from `versionsList`.
+     * @returns {void}
+     */
     loadVersion(displayName) {
         if (displayName === "-" || !this.versionsData.length) return;
         
@@ -745,10 +787,11 @@ export class CFileManager extends CManager {
         
         if (!versionData) return;
         
-        console.log("Loading version: " + versionData.version + " from " + versionData.url);
+        const versionRef = versionData.ref || versionData.url;
+        console.log("Loading version: " + versionData.version + " from " + versionRef);
         
-        this.loadURL = versionData.url;
-        fetch(versionData.url).then(response => response.arrayBuffer()).then(data => {
+        this.loadURL = versionRef;
+        resolveURLForFetch(versionRef).then(fetchUrl => fetch(fetchUrl)).then(response => response.arrayBuffer()).then(data => {
             console.log("Loaded version " + versionData.version)
 
             const decoder = new TextDecoder('utf-8');
@@ -848,7 +891,8 @@ export class CFileManager extends CManager {
     }
 
     refreshVersions() {
-        if (!Sit.sitchName) return Promise.resolve();
+        // During early startup, Sit may not be initialized yet.
+        if (!Sit?.sitchName) return Promise.resolve();
         return this.getVersions(Sit.sitchName).then((versions) => {
             this.updateVersionsDropdown(versions);
         }).catch((error) => {
@@ -1290,6 +1334,11 @@ export class CFileManager extends CManager {
      * Filename prefixes:
      * - "!" prefix marks as dynamic link (needs rehosting on save)
      * - "data/" prefix is stripped automatically
+     *
+     * Resolver-aware sources:
+     * - Canonical object refs: `sitrec://<userId>/...`
+     * - Raw object keys: `<userId>/...`
+     * - Legacy S3 URLs containing Sitrec keys
      * 
      * @param {string} filename - Path, URL, or local filename to load
      * @param {string} [id] - Unique identifier for storage (defaults to filename)
@@ -1390,8 +1439,10 @@ export class CFileManager extends CManager {
             // either a dynamic link (like to the current Starlink TLE) or a static link
             // so fetch it and parse it
 
+            // Sitrec references (sitrec://, raw object key, legacy S3 URL) are resolved via object.php.
+            const isResolvableRef = isResolvableSitrecReference(filename);
             var isUrl = isHttpOrHttps(filename);
-            if (!isUrl) {
+            if (!isUrl && !isResolvableRef) {
                 // legacy sitches have videos specified as: "../sitrec-videos/public/2 - Gimbal-WMV2PRORES-CROP-428x428.mp4"
                 // and in that case it's relative to SITREC_APP wihtout the data folder
                 if (filename.startsWith("../sitrec-videos/")) {
@@ -1401,7 +1452,7 @@ export class CFileManager extends CManager {
                     //filename = "./data/" + filename;
                     filename = SITREC_APP + "data/" + filename;
                 }
-            } else {
+            } else if (isUrl) {
                 // if it's a URL, we need to check if it's got a "localhost" in it
                 // Regardless of whether we are on local or not
                 // add the SITREC_DOMAIN to the start of the URL
@@ -1429,7 +1480,7 @@ export class CFileManager extends CManager {
 
             var bufferPromise = null;
             let fetchOperationId = null; // Track for cleanup
-            if(!isUrl && isConsole) {
+            if(!isUrl && !isResolvableRef && isConsole) {
                 // read the asset from the local filesystem if this is not running inside a browser
                 bufferPromise = import('node:fs')
                 .then(fs => {
@@ -1438,30 +1489,6 @@ export class CFileManager extends CManager {
             } else {
                 // URL-encode the path components (especially filenames with spaces)
                 // Split URL into base and query string if present
-                const [urlBase, queryString] = filename.split('?');
-
-
-                let encodedUrlBase = urlBase;
-
-                // WE DON'T DO THIS AS IT MESSES WITH KNOWN GOOD URLS ON S3
-                // // Encode each path segment while preserving slashes
-                // encodedUrlBase = urlBase.split('/').map(segment => {
-                //     // Don't encode protocol part (http:, https:) or empty segments
-                //     if (segment.endsWith(':') || segment === '') return segment;
-                //     return encodeURIComponent(segment);
-                // }).join('/');
-
-
-
-                
-                // Reconstruct with query string if it existed
-                const encodedFilename = queryString ? `${encodedUrlBase}?${queryString}` : encodedUrlBase;
-                
-                // add a version string to the filename, so we can force a reload when a new version is deployed
-                // the filename is the URL to the file, so we can just add a query string
-                // unless it already has one, in which case we add a &v=1
-                const versionExtension = (encodedFilename.includes("?") ? "&" : "?") + "v=1" + versionString;
-                
                 // Create AbortController for this fetch and register it
                 const fetchController = new AbortController();
                 fetchOperationId = asyncOperationRegistry.registerAbortable(
@@ -1469,25 +1496,41 @@ export class CFileManager extends CManager {
                     'fetch',
                     `loadAsset: ${filename}`
                 );
+                const originalFetchSource = filename;
 
-                // If this is an S3 URL then do NOT use the version extension
-                const isS3Url = encodedFilename.includes("s3.amazonaws.com") || encodedFilename.includes(".s3.");
-                const fetchUrl = isS3Url ? encodedFilename : encodedFilename + versionExtension;
+                bufferPromise = Promise.resolve(filename)
+                    .then(fetchSource => {
+                        if (isResolvableSitrecReference(fetchSource)) {
+                            return resolveURLForFetch(fetchSource);
+                        }
+                        return fetchSource;
+                    })
+                    .then(fetchSource => {
+                        const [urlBase, queryString] = fetchSource.split('?');
+                        const encodedUrlBase = urlBase;
+                        const encodedFilename = queryString ? `${encodedUrlBase}?${queryString}` : encodedUrlBase;
+                        const versionExtension = (encodedFilename.includes("?") ? "&" : "?") + "v=1" + versionString;
 
-                // Use custom fetch wrapper that supports File System Access API
-                bufferPromise = fileSystemFetch(fetchUrl, { signal: fetchController.signal })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-                    return response.arrayBuffer(); // Return the promise for the next then()
-                })
-                .finally(() => {
-                    // CRITICAL: Unregister the fetch operation when complete (success or error)
-                    if (fetchOperationId !== null) {
-                        asyncOperationRegistry.unregister(fetchOperationId);
-                    }
-                })
+                        // Sitrec object refs and S3 URLs are already immutable/versioned.
+                        const isDirectObjectFetch = isResolvableSitrecReference(originalFetchSource);
+                        const isS3Url = encodedFilename.includes("s3.amazonaws.com") || encodedFilename.includes(".s3.");
+                        const fetchUrl = (isDirectObjectFetch || isS3Url) ? encodedFilename : encodedFilename + versionExtension;
+
+                        // Use custom fetch wrapper that supports File System Access API
+                        return fileSystemFetch(fetchUrl, {signal: fetchController.signal})
+                            .then(response => {
+                                if (!response.ok) {
+                                    throw new Error('Network response was not ok');
+                                }
+                                return response.arrayBuffer();
+                            });
+                    })
+                    .finally(() => {
+                        // CRITICAL: Unregister the fetch operation when complete (success or error)
+                        if (fetchOperationId !== null) {
+                            asyncOperationRegistry.unregister(fetchOperationId);
+                        }
+                    })
             }
 
             Globals.pendingActions++;

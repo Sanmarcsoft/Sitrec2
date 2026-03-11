@@ -1,4 +1,14 @@
 <?php
+/*
+ * Module: Sitrec upload/rehost API.
+ *
+ * Responsibilities:
+ * - Handle authenticated user upload and deletion operations.
+ * - Support filesystem uploads and S3 uploads (single-part and multipart).
+ * - Mint presigned upload URLs and complete multipart uploads.
+ * - Return stable object references (`sitrec://...`) alongside legacy direct URLs.
+ * - Expose user capability/quota metadata via `getuser`.
+ */
 // need to modify php.ini?
 // /opt/homebrew/etc/php/8.4/php.ini
 // brew services restart php
@@ -30,6 +40,115 @@ function startS3() {
         'credentials' => $credentials
     ]);
     return $s3;
+}
+
+/**
+ * Converts an object key to canonical Sitrec object-ref format.
+ *
+ * @param string $key
+ * @return string
+ */
+function makeObjectRef($key) {
+    return 'sitrec://' . $key;
+}
+
+/**
+ * Reads a positive integer seconds value from environment with fallback.
+ *
+ * @param string $name Environment variable name.
+ * @param int $default Fallback seconds value.
+ * @return int
+ */
+function getEnvIntSeconds($name, $default) {
+    $value = getenv($name);
+    if ($value === false || $value === '') return $default;
+    $intValue = intval($value);
+    return $intValue > 0 ? $intValue : $default;
+}
+
+function getEnvString($name, $default = '') {
+    $value = getenv($name);
+    if ($value === false) return $default;
+    $value = trim((string)$value);
+    return $value === '' ? $default : $value;
+}
+
+function getEnvPrefixList($name) {
+    $raw = getEnvString($name, '');
+    if ($raw === '') return [];
+
+    $parts = explode(',', $raw);
+    $prefixes = [];
+    foreach ($parts as $part) {
+        $prefix = rawurldecode(trim($part));
+        $prefix = ltrim($prefix, '/');
+        if ($prefix === '') continue;
+        $prefixes[] = $prefix;
+    }
+    return $prefixes;
+}
+
+function objectKeyMatchesPrefix($key, $prefix) {
+    if ($prefix === '') return false;
+    if (str_ends_with($prefix, '/')) {
+        return str_starts_with($key, $prefix);
+    }
+    return $key === $prefix || str_starts_with($key, $prefix . '/');
+}
+
+function objectKeyMatchesAnyPrefix($key, $prefixes) {
+    foreach ($prefixes as $prefix) {
+        if (objectKeyMatchesPrefix($key, $prefix)) return true;
+    }
+    return false;
+}
+
+function isObjectKeyPublic($key) {
+    $defaultVisibility = strtolower(getEnvString('S3_DEFAULT_VISIBILITY', 'public'));
+    if ($defaultVisibility !== 'public' && $defaultVisibility !== 'private') {
+        $defaultVisibility = 'public';
+    }
+
+    if ($defaultVisibility === 'public') {
+        $privatePrefixes = getEnvPrefixList('S3_PRIVATE_PREFIXES');
+        return !objectKeyMatchesAnyPrefix($key, $privatePrefixes);
+    }
+
+    $publicPrefixes = getEnvPrefixList('S3_PUBLIC_PREFIXES');
+    return objectKeyMatchesAnyPrefix($key, $publicPrefixes);
+}
+
+function encodeObjectKeyForUrl($key) {
+    $segments = explode('/', $key);
+    $encoded = array_map(fn($segment) => rawurlencode($segment), $segments);
+    return implode('/', $encoded);
+}
+
+function buildBucketS3ObjectUrl($key) {
+    global $aws;
+    return 'https://' . $aws['bucket'] . '.s3.' . $aws['region'] . '.amazonaws.com/' . encodeObjectKeyForUrl($key);
+}
+
+function buildPublicObjectUrl($key) {
+    $publicBase = getEnvString('S3_PUBLIC_BASE_URL', '');
+    if ($publicBase !== '') {
+        return rtrim($publicBase, '/') . '/' . encodeObjectKeyForUrl($key);
+    }
+    return buildBucketS3ObjectUrl($key);
+}
+
+function buildObjectAccessUrl($key) {
+    if (isObjectKeyPublic($key)) {
+        return buildPublicObjectUrl($key);
+    }
+    return buildBucketS3ObjectUrl($key);
+}
+
+function getUploadAclForKey($key) {
+    global $aws;
+    $publicAcl = getEnvString('S3_PUBLIC_OBJECT_ACL', $aws['acl'] ?? 'public-read');
+    $privateAcl = getEnvString('S3_PRIVATE_OBJECT_ACL', 'private');
+    return isObjectKeyPublic($key) ? $publicAcl : $privateAcl;
 }
 
 function getGoogle3DRootDailyLimitForGroups($userGroups) {
@@ -200,9 +319,10 @@ if (isset($_GET['action']) && $_GET['action'] === 'getPresignedUrl') {
                 'Bucket' => $aws['bucket'],
                 'Key' => $s3Path
             ]);
-            $objectUrl = 'https://' . $aws['bucket'] . '.s3.' . $aws['region'] . '.amazonaws.com/' . $s3Path;
+            $objectUrl = buildObjectAccessUrl($s3Path);
             echo json_encode([
                 'exists' => true,
+                'objectRef' => makeObjectRef($s3Path),
                 'objectUrl' => $objectUrl
             ]);
             exit();
@@ -211,19 +331,22 @@ if (isset($_GET['action']) && $_GET['action'] === 'getPresignedUrl') {
     }
     
     try {
+        $uploadAcl = getUploadAclForKey($s3Path);
         $cmd = $s3->getCommand('PutObject', [
             'Bucket' => $aws['bucket'],
             'Key' => $s3Path,
-            'ACL' => $aws['acl']
+            'ACL' => $uploadAcl
         ]);
         
-        $request = $s3->createPresignedRequest($cmd, '+15 minutes');
+        $putExpirySeconds = getEnvIntSeconds('S3_PRESIGNED_PUT_EXPIRY_SECONDS', 900);
+        $request = $s3->createPresignedRequest($cmd, '+' . $putExpirySeconds . ' seconds');
         
         $presignedUrl = (string) $request->getUri();
         
-        $objectUrl = 'https://' . $aws['bucket'] . '.s3.' . $aws['region'] . '.amazonaws.com/' . $s3Path;
+        $objectUrl = buildObjectAccessUrl($s3Path);
         
         echo json_encode([
+            'objectRef' => makeObjectRef($s3Path),
             'presignedUrl' => $presignedUrl,
             'objectUrl' => $objectUrl
         ]);
@@ -296,9 +419,10 @@ if (isset($_GET['action']) && $_GET['action'] === 'initiateMultipart') {
                 'Bucket' => $aws['bucket'],
                 'Key' => $s3Path
             ]);
-            $objectUrl = 'https://' . $aws['bucket'] . '.s3.' . $aws['region'] . '.amazonaws.com/' . $s3Path;
+            $objectUrl = buildObjectAccessUrl($s3Path);
             echo json_encode([
                 'exists' => true,
+                'objectRef' => makeObjectRef($s3Path),
                 'objectUrl' => $objectUrl
             ]);
             exit();
@@ -307,10 +431,11 @@ if (isset($_GET['action']) && $_GET['action'] === 'initiateMultipart') {
     }
     
     try {
+        $uploadAcl = getUploadAclForKey($s3Path);
         $result = $s3->createMultipartUpload([
             'Bucket' => $aws['bucket'],
             'Key' => $s3Path,
-            'ACL' => $aws['acl']
+            'ACL' => $uploadAcl
         ]);
         
         $uploadId = $result['UploadId'];
@@ -324,15 +449,17 @@ if (isset($_GET['action']) && $_GET['action'] === 'initiateMultipart') {
                 'PartNumber' => $partNumber
             ]);
             
-            $request = $s3->createPresignedRequest($cmd, '+60 minutes');
+            $multipartExpirySeconds = getEnvIntSeconds('S3_PRESIGNED_MULTIPART_EXPIRY_SECONDS', 3600);
+            $request = $s3->createPresignedRequest($cmd, '+' . $multipartExpirySeconds . ' seconds');
             $uploadUrls[] = (string) $request->getUri();
         }
         
-        $objectUrl = 'https://' . $aws['bucket'] . '.s3.' . $aws['region'] . '.amazonaws.com/' . $s3Path;
+        $objectUrl = buildObjectAccessUrl($s3Path);
         
         echo json_encode([
             'uploadId' => $uploadId,
             'uploadUrls' => $uploadUrls,
+            'objectRef' => makeObjectRef($s3Path),
             'objectUrl' => $objectUrl
         ]);
     } catch (Exception $e) {
@@ -406,9 +533,10 @@ if (isset($_GET['action']) && $_GET['action'] === 'completeMultipart') {
             ]
         ]);
         
-        $objectUrl = 'https://' . $aws['bucket'] . '.s3.' . $aws['region'] . '.amazonaws.com/' . $s3Path;
+        $objectUrl = buildObjectAccessUrl($s3Path);
         
         echo json_encode([
+            'objectRef' => makeObjectRef($s3Path),
             'objectUrl' => $objectUrl,
             'eTag' => $result['ETag']
         ]);
@@ -571,8 +699,9 @@ if ($useAWS) {
     // Using upload instead of putObject to allow for larger files
     // putObject was giving odd timeout errors.
     try {
-        $result = $s3->upload($aws['bucket'], $s3Path, $fileStream, $aws['acl']);
-        echo $result['ObjectURL'];
+        $uploadAcl = getUploadAclForKey($s3Path);
+        $s3->upload($aws['bucket'], $s3Path, $fileStream, $uploadAcl);
+        echo buildObjectAccessUrl($s3Path);
     } catch (Aws\Exception\S3Exception $e) {
         // Catch an S3 specific exception.
         http_response_code(555);

@@ -1,5 +1,14 @@
 <?php
 
+/*
+ * Module: Sitrec sitch listing and version metadata API.
+ *
+ * Responsibilities:
+ * - Return built-in sitch definitions and user sitch lists.
+ * - Serve version listings for user sitches across filesystem/S3 storage backends.
+ * - Include canonical object references for versioned files so clients can resolve via object.php.
+ */
+
 header('Content-Type: application/json');
 
 // SECURITY: Restrict CORS to own origin and the configured dev host (LOCALHOST env var).
@@ -31,6 +40,16 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/config_paths.php';
 
 define('SITCH_NAME_PATTERN', '/^[^\/\\\\<>\x00-\x1f]+$/u');
+
+/**
+ * Converts an object key to canonical Sitrec object-ref format.
+ *
+ * @param string $key
+ * @return string
+ */
+function canonicalObjectRef($key) {
+    return 'sitrec://' . $key;
+}
 
 $storagePath = $UPLOAD_URL; // from config.php
 
@@ -417,7 +436,11 @@ if (isset($_GET['get'])) {
                     if (is_file($dir . '/' . $file) && $file != '.' && $file != '..' && $file != '.DS_Store' && $file !== 'screenshot.jpg' && $file !== 'metadata.json') {
                         $url = $storagePath . $userID . '/' . $name. '/' . $file;
                         // add to the array and object that contains the url and the version
-                        $versions[] = array('version' => $file, 'url' => $url);
+                        $versions[] = array(
+                            'version' => $file,
+                            'ref' => canonicalObjectRef($userID . '/' . $name . '/' . $file),
+                            'url' => $url
+                        );
                     }
                 }
                 echo json_encode($versions);
@@ -441,7 +464,11 @@ if (isset($_GET['get'])) {
                             $url = $s3->getObjectUrl($aws['bucket'], $prefix . $key);
 
                             // add to the array and object that contains the url and the version
-                            $versions[] = array('version' => $key, 'url' => $url);
+                            $versions[] = array(
+                                'version' => $key,
+                                'ref' => canonicalObjectRef($prefix . $key),
+                                'url' => $url
+                            );
 
                         }
                     }
