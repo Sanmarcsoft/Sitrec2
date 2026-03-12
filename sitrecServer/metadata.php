@@ -190,6 +190,52 @@ function writeLocalJson($path, $data) {
     file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT));
 }
 
+function readFeaturedData($s3Data = null) {
+    global $useAWS, $UPLOAD_PATH;
+
+    if ($useAWS) {
+        if ($s3Data === null) {
+            $s3Data = startS3();
+        }
+        return readS3Json($s3Data['s3'], $s3Data['aws'], 'metadata/featured.json');
+    }
+
+    return readLocalJson($UPLOAD_PATH . 'metadata/featured.json');
+}
+
+function writeFeaturedData($data, $s3Data = null) {
+    global $useAWS, $UPLOAD_PATH;
+
+    if ($useAWS) {
+        if ($s3Data === null) {
+            $s3Data = startS3();
+        }
+        writeS3Json($s3Data['s3'], $s3Data['aws'], 'metadata/featured.json', $data);
+        return;
+    }
+
+    writeLocalJson($UPLOAD_PATH . 'metadata/featured.json', $data);
+}
+
+function buildScreenshotUrl($userID, $sitchName, $version = null, $s3Data = null) {
+    global $useAWS, $UPLOAD_URL;
+
+    if ($useAWS) {
+        if ($s3Data === null) {
+            $s3Data = startS3();
+        }
+        $url = $s3Data['s3']->getObjectUrl($s3Data['aws']['bucket'], $userID . '/' . $sitchName . '/screenshot.jpg');
+    } else {
+        $url = $UPLOAD_URL . $userID . '/' . $sitchName . '/screenshot.jpg';
+    }
+
+    if ($version !== null && intval($version) > 0) {
+        $url .= (strpos($url, '?') !== false ? '&' : '?') . 'v=' . intval($version);
+    }
+
+    return $url;
+}
+
 // ============================
 // Handle GET - Fetch metadata
 // ============================
@@ -198,13 +244,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     // Returns [{name, userID, screenshotUrl}] so any user can browse and load featured sitches.
     if (isset($_GET['featured'])) {
         try {
-            global $useAWS, $UPLOAD_PATH, $UPLOAD_URL;
-            if ($useAWS) {
-                $s3Data = startS3();
-                $raw = readS3Json($s3Data['s3'], $s3Data['aws'], 'metadata/featured.json');
-            } else {
-                $raw = readLocalJson($UPLOAD_PATH . 'metadata/featured.json');
-            }
+            global $useAWS;
+            $s3Data = $useAWS ? startS3() : null;
+            $raw = readFeaturedData($s3Data);
             $sitches = [];
             if (isset($raw['sitches']) && is_array($raw['sitches'])) {
                 foreach ($raw['sitches'] as $entry) {
@@ -212,26 +254,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                     $name = basename(strval($entry['name']));
                     $uid = intval($entry['userID']);
                     if ($uid <= 0 || !isValidSitchName($name)) continue;
-
-                    $screenshotUrl = null;
-                    if ($useAWS) {
-                        // Construct S3 screenshot URL
-                        $ssKey = $uid . '/' . $name . '/screenshot.jpg';
-                        try {
-                            $s3Data['s3']->headObject(['Bucket' => $s3Data['aws']['bucket'], 'Key' => $ssKey]);
-                            $screenshotUrl = $s3Data['s3']->getObjectUrl($s3Data['aws']['bucket'], $ssKey);
-                        } catch (Exception $e) { /* no screenshot */ }
-                    } else {
-                        $ssPath = $UPLOAD_PATH . $uid . '/' . $name . '/screenshot.jpg';
-                        if (is_file($ssPath)) {
-                            $screenshotUrl = $UPLOAD_URL . $uid . '/' . $name . '/screenshot.jpg';
-                        }
-                    }
-
-                    $sitches[] = ['name' => $name, 'userID' => $uid, 'screenshotUrl' => $screenshotUrl];
+                    $version = isset($entry['screenshotVersion']) ? intval($entry['screenshotVersion']) : null;
+                    $sitches[] = [
+                        'name' => $name,
+                        'userID' => $uid,
+                        // Avoid an S3 HEAD per sitch on the hot path. Missing screenshots are
+                        // handled by the browser UI's img.onerror fallback.
+                        'screenshotUrl' => buildScreenshotUrl($uid, $name, $version, $s3Data),
+                    ];
                 }
             }
-            echo json_encode(['sitches' => $sitches]);
+            $payload = json_encode(['sitches' => $sitches]);
+            $etag = '"' . sha1($payload) . '"';
+            header('Cache-Control: public, max-age=60, stale-while-revalidate=300');
+            header('ETag: ' . $etag);
+            if (isset($_SERVER['HTTP_IF_NONE_MATCH']) && trim($_SERVER['HTTP_IF_NONE_MATCH']) === $etag) {
+                http_response_code(304);
+                exit();
+            }
+            echo $payload;
         } catch (Exception $e) {
             http_response_code(500);
             echo json_encode(['error' => 'Server error: ' . $e->getMessage()]);
@@ -276,6 +317,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             global $useAWS;
             $metaKey = $useAWS ? ('metadata/' . $user_id . '.json') : null;
             $metaPath = $useAWS ? null : ($GLOBALS['UPLOAD_PATH'] . 'metadata/' . $user_id . '.json');
+            $s3Data = null;
 
             // Read existing
             if ($useAWS) {
@@ -288,11 +330,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Bump versions
             $versions = (array)($existing['screenshotVersions'] ?? []);
+            $bumpedNames = [];
             foreach ($input['bumpScreenshotVersions'] as $rawName) {
                 if (!is_string($rawName)) continue;
                 $sitchName = basename($rawName);
                 if (!isValidSitchName($sitchName)) continue;
                 $versions[$sitchName] = ($versions[$sitchName] ?? 0) + 1;
+                $bumpedNames[$sitchName] = ($bumpedNames[$sitchName] ?? 0) + 1;
             }
             $existing['screenshotVersions'] = empty($versions) ? new \stdClass() : $versions;
 
@@ -301,6 +345,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 writeS3Json($s3Data['s3'], $s3Data['aws'], $metaKey, $existing);
             } else {
                 writeLocalJson($metaPath, $existing);
+            }
+
+            // Keep featured screenshot cache-busters in sync so featured GET does not need
+            // to probe storage for screenshot existence/version.
+            if (!empty($bumpedNames)) {
+                $featured = readFeaturedData($s3Data);
+                $featuredChanged = false;
+                if (isset($featured['sitches']) && is_array($featured['sitches'])) {
+                    foreach ($featured['sitches'] as &$entry) {
+                        if (!is_array($entry) || !isset($entry['name']) || !isset($entry['userID'])) continue;
+                        $name = basename(strval($entry['name']));
+                        $uid = intval($entry['userID']);
+                        if ($uid !== $user_id || !isset($bumpedNames[$name])) continue;
+                        $entry['screenshotVersion'] = intval($entry['screenshotVersion'] ?? 0) + $bumpedNames[$name];
+                        $featuredChanged = true;
+                    }
+                    unset($entry);
+                }
+                if ($featuredChanged) {
+                    writeFeaturedData($featured, $s3Data);
+                }
             }
 
             echo json_encode(['success' => true, 'screenshotVersions' => $existing['screenshotVersions']]);
@@ -328,15 +393,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
             }
+            $existingFeatured = readFeaturedData();
+            $existingVersions = [];
+            if (isset($existingFeatured['sitches']) && is_array($existingFeatured['sitches'])) {
+                foreach ($existingFeatured['sitches'] as $existingEntry) {
+                    if (!is_array($existingEntry) || !isset($existingEntry['name']) || !isset($existingEntry['userID'])) continue;
+                    $existingName = basename(strval($existingEntry['name']));
+                    $existingUserID = intval($existingEntry['userID']);
+                    if ($existingUserID <= 0 || !isValidSitchName($existingName)) continue;
+                    $existingVersions[$existingUserID . ':' . $existingName] = intval($existingEntry['screenshotVersion'] ?? 0);
+                }
+            }
+            foreach ($sitches as &$entry) {
+                $key = $entry['userID'] . ':' . $entry['name'];
+                $entry['screenshotVersion'] = $existingVersions[$key] ?? 0;
+            }
+            unset($entry);
             $featuredData = ['sitches' => $sitches];
 
             global $useAWS;
             if ($useAWS) {
                 $s3Data = startS3();
-                writeS3Json($s3Data['s3'], $s3Data['aws'], 'metadata/featured.json', $featuredData);
+                writeFeaturedData($featuredData, $s3Data);
             } else {
-                global $UPLOAD_PATH;
-                writeLocalJson($UPLOAD_PATH . 'metadata/featured.json', $featuredData);
+                writeFeaturedData($featuredData);
             }
 
             echo json_encode(['success' => true, 'featured' => $featuredData]);

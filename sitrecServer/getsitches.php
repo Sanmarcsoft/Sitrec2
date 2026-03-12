@@ -324,11 +324,9 @@ if (isset($_GET['get'])) {
                             }
                         }
                         $lastDate = $newestTime ? date('Y-m-d H:i:s', $newestTime) : '1970-01-01 00:00:00';
-                        $screenshotPath = $sitchPath . '/screenshot.jpg';
-                        $screenshotUrl = null;
-                        if (is_file($screenshotPath)) {
-                            $screenshotUrl = $storagePath . $userID . '/' . $file . '/screenshot.jpg';
-                        }
+                        // Avoid a per-sitch screenshot existence check on this hot path.
+                        // The browser already falls back gracefully if an image is missing.
+                        $screenshotUrl = $storagePath . $userID . '/' . $file . '/screenshot.jpg';
                         $folders[] = [$file, $lastDate, $screenshotUrl, $latestVersion];
                     }
                 }
@@ -347,7 +345,6 @@ if (isset($_GET['get'])) {
                     "Prefix" => $dir . '/'
                 ));
                 $folderDates = array();
-                $folderScreenshots = array();
                 $folderLatest = array();
                 foreach ($objects as $object) {
                     $key = $object['Key'];
@@ -362,12 +359,10 @@ if (isset($_GET['get'])) {
                         $lastModified = $object['LastModified'];
                         $lastDate = $lastModified->format('Y-m-d H:i:s');
 
-                        // Check if this object is a screenshot or metadata
+                        // Ignore screenshot/metadata for date calculations.
                         $fileName = substr($key, strlen($folderName) + 1);
-                        if ($fileName === 'screenshot.jpg') {
-                            $folderScreenshots[$folderName] = $s3->getObjectUrl($aws['bucket'], $dir . '/' . $folderName . '/screenshot.jpg');
-                        } else if ($fileName === 'metadata.json') {
-                            // Skip metadata.json for date calculations
+                        if ($fileName === 'screenshot.jpg' || $fileName === 'metadata.json') {
+                            // Skip non-version files
                         } else {
                             if (!isset($folderDates[$folderName]) || $lastDate > $folderDates[$folderName]) {
                                 $folderDates[$folderName] = $lastDate;
@@ -379,7 +374,9 @@ if (isset($_GET['get'])) {
 
                 $folders = array();
                 foreach ($folderDates as $name => $date) {
-                    $screenshotUrl = isset($folderScreenshots[$name]) ? $folderScreenshots[$name] : null;
+                    // Avoid a separate screenshot existence test. Missing screenshots are
+                    // handled client-side via img.onerror.
+                    $screenshotUrl = $s3->getObjectUrl($aws['bucket'], $dir . '/' . $name . '/screenshot.jpg');
                     $latestVersion = isset($folderLatest[$name]) ? $folderLatest[$name] : null;
                     $folders[] = [$name, $date, $screenshotUrl, $latestVersion];
                 }

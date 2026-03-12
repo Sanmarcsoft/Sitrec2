@@ -49,11 +49,14 @@ export class CSitchBrowser {
 
         // When true, open() will be called soon — other code should skip redundant fetches.
         this.pendingOpen = false;
+        this._featuredFetchPromise = null;
+        this.hideCancelButton = false;
     }
 
-    open() {
+    open(options = {}) {
         if (this.overlay) return;
         this.pendingOpen = false;
+        this.hideCancelButton = !!options.hideCancelButton;
         this.fetchFromServer();
     }
 
@@ -122,11 +125,27 @@ export class CSitchBrowser {
         }
     }
 
+    _fetchFeaturedData() {
+        if (this._featuredFetchPromise) {
+            return this._featuredFetchPromise;
+        }
+
+        const request = fetch(SITREC_SERVER + "metadata.php?featured=1", {mode: "cors"})
+            .then(r => r.ok ? r.json() : Promise.reject(new Error(`featured reload returned ${r.status}`)))
+            .finally(() => {
+                if (this._featuredFetchPromise === request) {
+                    this._featuredFetchPromise = null;
+                }
+            });
+
+        this._featuredFetchPromise = request;
+        return request;
+    }
+
     _reloadFeaturedFromServer(fallbackFeatured = null) {
         // Skip if open() is about to fetch everything
         if (this.pendingOpen) return Promise.resolve();
-        return fetch(SITREC_SERVER + "metadata.php?featured=1", {mode: "cors"})
-            .then(r => r.ok ? r.json() : Promise.reject(new Error(`featured reload returned ${r.status}`)))
+        return this._fetchFeaturedData()
             .then(featuredData => {
                 this._setFeaturedSitchesFromArray(featuredData.sitches);
                 this._refreshFeaturedState();
@@ -144,8 +163,7 @@ export class CSitchBrowser {
         const loggedIn = this._isLoggedIn();
 
         // Always fetch featured (no auth required)
-        const featuredP = fetch(SITREC_SERVER + "metadata.php?featured=1", {mode: 'cors'})
-            .then(r => r.ok ? r.json() : {sitches: []})
+        const featuredP = this._fetchFeaturedData()
             .catch(() => ({sitches: []}));
 
         // Only fetch user sitches and metadata if logged in
@@ -446,14 +464,16 @@ export class CSitchBrowser {
             sidebar.appendChild(loginBtn);
         }
 
-        const cancelBtn = document.createElement("button");
-        cancelBtn.textContent = "Cancel";
-        Object.assign(cancelBtn.style, {
-            padding: "10px 16px", backgroundColor: "#333", color: "#e0e0e0",
-            border: "1px solid #555", borderRadius: "6px", cursor: "pointer", fontSize: "14px",
-        });
-        cancelBtn.addEventListener("click", () => this.close());
-        sidebar.appendChild(cancelBtn);
+        if (!this.hideCancelButton) {
+            const cancelBtn = document.createElement("button");
+            cancelBtn.textContent = "Cancel";
+            Object.assign(cancelBtn.style, {
+                padding: "10px 16px", backgroundColor: "#333", color: "#e0e0e0",
+                border: "1px solid #555", borderRadius: "6px", cursor: "pointer", fontSize: "14px",
+            });
+            cancelBtn.addEventListener("click", () => this.close());
+            sidebar.appendChild(cancelBtn);
+        }
 
         overlay.appendChild(sidebar);
 

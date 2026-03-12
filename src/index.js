@@ -174,9 +174,9 @@ console.log ("SITREC START " + process.env.BUILD_VERSION_STRING);
 // Detect if this is an explicit new sitch creation via ?action=new
 const isNewSitchAction = !isConsole && new URLSearchParams(window.location.search).get("action") === "new";
 
-// Default to "empty" for fast startup (sitch browser will open on top).
-// When ?action=new, use "custom" to give the full new-sitch experience.
-let situation = isNewSitchAction ? "custom" : "empty";
+// Start from the normal custom sitch, and switch to "empty" later only if the
+// browser can actually auto-open for this request.
+let situation = "custom";
 
 // Some (essentially) global variables
 let urlParams;
@@ -367,6 +367,32 @@ setGlobalURLParams(urlParams)
 
 Globals.regression = urlParams.get("regression") === "1";
 
+const hasExplicitStartupRequest = isNewSitchAction
+    || !!urlParams.get("sitch")
+    || !!urlParams.get("sit")
+    || !!urlParams.get("custom")
+    || !!urlParams.get("mod")
+    || !!urlParams.get("test")
+    || !!urlParams.get("testAll");
+
+const shouldAutoOpenBrowser = !isConsole
+    && parseBoolean(process.env.SAVE_TO_S3)
+    && !isServerless
+    && !Globals.regression
+    && !hasExplicitStartupRequest;
+
+if (!hasExplicitStartupRequest) {
+    if (shouldAutoOpenBrowser) {
+        situation = "empty";
+    } else if (isLocal) {
+        situation = localSituation;
+    }
+}
+
+// This must be set before initializeOnce() creates CFileManager so startup
+// fetches can be suppressed when the browser will immediately fetch the same data.
+Globals.sitchBrowserWillOpen = shouldAutoOpenBrowser;
+
 // a count of async pending actions, so we can tell when a level has fully loaded and settled up
 Globals.pendingActions = 0;
 
@@ -553,12 +579,6 @@ if (Sit.TerrainModel) {
     }
 }
 
-// Pre-compute whether the sitch browser will auto-open, so CFileManager can skip redundant fetches
-Globals.sitchBrowserWillOpen = !isConsole && !isNewSitchAction && !Globals.regression && !testing
-    && !urlParams.get("sitch") && !urlParams.get("sit")
-    && !urlParams.get("custom") && !urlParams.get("mod")
-    && !urlParams.get("test") && !urlParams.get("testAll");
-
 legacySetup();
 await setupFunctions();
 
@@ -623,7 +643,7 @@ startAnimating(Sit.fps);
 
 // Auto-open sitch browser when no explicit sitch/action is specified
 if (Globals.sitchBrowserWillOpen && FileManager.sitchBrowser) {
-    FileManager.sitchBrowser.open();
+    FileManager.sitchBrowser.open({hideCancelButton: Sit.name === "empty"});
 }
 Globals.sitchBrowserWillOpen = false;
 
@@ -1356,13 +1376,6 @@ async function initializeOnce() {
 
 
 ///////////////////////////////////////////////////////////////////////
-// But if it's local, we default to the local situation, defined in config.js
-// Only override if the user explicitly requested a new sitch or a specific sitch via URL params
-    if (isLocal && isNewSitchAction) {
-        situation = localSituation
-//        console.log("LOCAL TEST MODE: " + situation + ", isLocal = " + isLocal)
-    }
-
     // note in lil-gui.esm.js I changed
 //   --name-width: 45%;
 // to
