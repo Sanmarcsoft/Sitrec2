@@ -278,7 +278,9 @@ export function initKeyboard() {
 
         if ((e.ctrlKey || e.metaKey) && keyCode === 'KeyS') {
             e.preventDefault();
-            if (FileManager && FileManager.saveSitchFromMenu) {
+            if (FileManager && FileManager.handleSaveShortcut) {
+                FileManager.handleSaveShortcut();
+            } else if (FileManager && FileManager.saveSitchFromMenu) {
                 FileManager.saveSitchFromMenu();
             }
             return;

@@ -68,7 +68,7 @@ import {initializeSettings, SettingsSaver} from "./SettingsManager";
 import {CNodeCurveEditor2} from "./nodes/CNodeCurveEdit2";
 import {CNodeViewDAG} from "./nodes/CNodeViewDAG";
 import {CNodeNotes} from "./nodes/CNodeNotes";
-import {createCustomModalWithCopy, saveFilePrompted} from "./FileUtils";
+import {createCustomModalWithCopy, saveFilePrompted, saveFileToDirectory, saveFileToHandle} from "./FileUtils";
 import {deserializeMotionAnalysis, serializeMotionAnalysis} from "./CMotionAnalysis";
 import {deserializeAutoTracking, serializeAutoTracking} from "./CObjectTracking";
 import {getCursorPositionFromTopView} from "./mouseMoveView";
@@ -3832,9 +3832,11 @@ export class CCustomManager {
      * @param {string} name - Logical sitch name (without version suffix).
      * @param {string} version - Version token (typically datetime-based).
      * @param {boolean} [local=false] - If true, save locally without server rehosting.
-     * @returns {Promise<void>}
+     * @param {FileSystemDirectoryHandle} [directoryHandle=null] - If provided (and local=true), save directly into this directory.
+     * @param {FileSystemFileHandle} [fileHandle=null] - If provided (and local=true), save directly into this file.
+     * @returns {Promise<{savedName?: string, fileHandle?: FileSystemFileHandle}|void>}
      */
-    serialize(name, version, local = false) {
+    serialize(name, version, local = false, directoryHandle = null, fileHandle = null) {
         console.log("Serializing custom sitch")
 
         assert(Sit.canMod || Sit.isCustom, "one of Sit.canMod or Sit.isCustom must be true to serialize a sitch")
@@ -3894,16 +3896,37 @@ export class CCustomManager {
             // re-stringify
             str = JSON.stringify(sitchObj, null, 2);
 
-            // save it with a dialog to select the name
+            const blob = new Blob([str]);
+            const filename = name + ".json";
+
+            if (fileHandle) {
+                // Save directly into a previously selected file
+                return saveFileToHandle(blob, fileHandle).then(() => {
+                    Sit.sitchName = fileHandle.name.replace(".json", "");
+                    console.log("Saved to existing local file handle as " + fileHandle.name);
+                    return {savedName: fileHandle.name, fileHandle};
+                });
+            }
+
+            if (directoryHandle) {
+                // Save directly into the working folder
+                return saveFileToDirectory(blob, directoryHandle, filename).then(() => {
+                    Sit.sitchName = name;
+                    console.log("Saved to working folder as " + filename);
+                    return {savedName: filename};
+                });
+            }
+
+            // Fall back to save-file picker dialog
             return new Promise((resolve, reject) => {
-                saveFilePrompted(new Blob([str]), name + ".json").then((filename) => {
-                    console.log("Saved as " + filename)
+                saveFilePrompted(blob, filename).then(({name: savedName, fileHandle: savedFileHandle}) => {
+                    console.log("Saved as " + savedName)
                     // change sit.name to the filename
                     // with .sitch.js removed
-                    Sit.sitchName = filename.replace(".json", "")
+                    Sit.sitchName = savedName.replace(".json", "")
 
                     console.log("Setting Sit.sitchName to " + Sit.sitchName)
-                    resolve(filename);
+                    resolve({savedName, fileHandle: savedFileHandle});
                 }).catch((error) => {
                     console.log("Error or cancel in saving file local:", error);
                     reject(error);

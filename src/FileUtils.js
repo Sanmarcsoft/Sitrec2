@@ -1,6 +1,42 @@
 import {writeToClipboard} from "./urlUtils";
 import {par} from "./par";
 
+/**
+ * Save contents directly to a file handle in a directory, without showing a picker.
+ * @param {Blob} contents - The content to write
+ * @param {FileSystemDirectoryHandle} directoryHandle - The directory to write into
+ * @param {string} filename - The filename to create/overwrite
+ * @returns {Promise<string>} The filename that was saved
+ */
+export async function saveFileToDirectory(contents, directoryHandle, filename) {
+    const fileHandle = await directoryHandle.getFileHandle(filename, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(contents);
+    await writable.close();
+    console.log('File saved to working folder:', filename);
+    return filename;
+}
+
+/**
+ * Save contents directly to an existing file handle, without showing a picker.
+ * @param {Blob} contents - The content to write
+ * @param {FileSystemFileHandle} fileHandle - The target file handle
+ * @returns {Promise<string>} The filename that was saved
+ */
+export async function saveFileToHandle(contents, fileHandle) {
+    const writable = await fileHandle.createWritable();
+    await writable.write(contents);
+    await writable.close();
+    console.log('File saved to existing handle:', fileHandle.name);
+    return fileHandle.name;
+}
+
+/**
+ * Prompt for a file location and save there.
+ * @param {Blob} contents - The content to write
+ * @param {string} [suggestedName='download.txt'] - Suggested filename in picker
+ * @returns {Promise<{name: string, fileHandle: FileSystemFileHandle}>}
+ */
 export async function saveFilePrompted(contents, suggestedName = 'download.txt') {
     try {
         // 1. Prompt user with the "save file" dialog
@@ -26,14 +62,10 @@ export async function saveFilePrompted(contents, suggestedName = 'download.txt')
 
         console.log('File saved successfully!');
 
-        // return a promise that resolved to the the name of the file
-        return new Promise((resolve, reject) => {
-            resolve(fileHandle.name);
-        })
-
-
-        ///return fileHandle.name;
-
+        return {
+            name: fileHandle.name,
+            fileHandle
+        };
 
     } catch (err) {
         console.warn('Save canceled or failed:', err);

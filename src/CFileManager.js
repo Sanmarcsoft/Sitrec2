@@ -70,7 +70,7 @@ import {
 import {findColumn, stripDuplicateTimes} from "./ParseUtils";
 import {isConsole, isLocal, isServerless, SITREC_APP, SITREC_DOMAIN, SITREC_SERVER} from "./configUtils";
 import {TSParser} from "./TSParser";
-import {showError} from "./showError";
+import {showError, showErrorOnce} from "./showError";
 import {asyncOperationRegistry} from "./AsyncOperationRegistry";
 import {ECEFToLLAVD_radii} from "./LLA-ECEF-ENU";
 import {projectedBoundsToWGS84} from "./proj4Loader";
@@ -93,6 +93,67 @@ const trackFileClasses = [
     CTrackFileMISB,
 ];
 
+// ── IndexedDB helpers for persisting working folder handle ──────────────
+function openSitrecIDB() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open('SitrecStorage', 1);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains('handles')) {
+                db.createObjectStore('handles');
+            }
+        };
+    });
+}
+
+async function saveToIDB(key, value) {
+    const db = await openSitrecIDB();
+    const tx = db.transaction(['handles'], 'readwrite');
+    const store = tx.objectStore('handles');
+    await new Promise((resolve, reject) => {
+        const req = store.put(value, key);
+        req.onsuccess = resolve;
+        req.onerror = reject;
+    });
+    db.close();
+}
+
+async function loadFromIDB(key) {
+    const db = await openSitrecIDB();
+    const tx = db.transaction(['handles'], 'readonly');
+    const store = tx.objectStore('handles');
+    const value = await new Promise((resolve, reject) => {
+        const req = store.get(key);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = reject;
+    });
+    db.close();
+    return value;
+}
+
+function isAbortLikeError(error) {
+    if (!error) return false;
+    if (error.name === "AbortError") return true;
+    if (typeof error === "string" && error.includes("Cancelled")) return true;
+    return false;
+}
+
+function supportsDirectoryPicker() {
+    return typeof window !== "undefined" && typeof window.showDirectoryPicker === "function";
+}
+
+function supportsOpenFilePicker() {
+    return typeof window !== "undefined" && typeof window.showOpenFilePicker === "function";
+}
+
+function showLocalFolderAccessUnsupportedMessage() {
+    const message = "Local folder access is not supported in this browser.\n\nPlease use Chrome or Microsoft Edge for Local Folder save/load features.";
+    showErrorOnce("local-folder-access-unsupported", message);
+    console.warn(message);
+}
+
 
 /**
  * The file manager is a singleton that manages all the files.
@@ -110,6 +171,10 @@ export class CFileManager extends CManager {
         super()
         this.rawFiles = [];
         this.rehostedStarlink = false;
+        // Only true when the currently active sitch has a valid local overwrite target.
+        this.localSaveTargetArmed = false;
+        // Last successful save intent. Used by Cmd/Ctrl+S to repeat expected behavior.
+        this.lastSaveAction = null;
 
         this.rehoster = new CRehoster();
 
@@ -147,9 +212,25 @@ export class CFileManager extends CManager {
             if (parseBoolean(process.env.SAVE_TO_LOCAL)) {
                 // Local save/load is always available for the custom sitch, regardless of login status
                 this.guiLocal = this.guiFolder.addFolder("Local").perm().open();
-                this.guiLocal.add(this, "saveLocal").name("Save Local Sitch File").perm().tooltip("Save a local version of the sitch, so you can use \"Open Local Sitch Folder\" to load it\nThis must be in the same folder as the files you use like the tracks and the video");
-                this.guiLocal.add(this, "openDirectory").name("Open Local Sitch Folder").perm()
-                    .tooltip("Open a folder on your local system and load the sitch .json file and any assets in it. If there is more than on .json file you will be prompted to select one ");
+                this._saveLocalController = this.guiLocal.add(this, "saveLocal").name("Save Local").perm()
+                    .tooltip("Save into the working folder (or prompts for a location if none is set)");
+                this._saveLocalAsController = this.guiLocal.add(this, "saveLocalAs").name("Save Local As...").perm()
+                    .tooltip("Save a local sitch file, choosing the location");
+                this._openLocalSitchController = this.guiLocal.add(this, "openLocalSitch").name("Open Local Sitch").perm()
+                    .tooltip("Open a sitch file from the current working folder");
+                this._openLocalFolderController = this.guiLocal.add(this, "openDirectory").name("Select Local Sitch Folder").perm()
+                    .tooltip("Select a working folder for local save/load operations");
+                this._reconnectController = this.guiLocal.add(this, "reconnectWorkingFolder")
+                    .name("Reconnect Folder").perm()
+                    .tooltip("Re-grant access to the previously used working folder");
+                // Hide only this controller row (not the shared folder children container).
+                this._saveLocalController.domElement.style.display = "none";
+                this._saveLocalAsController.domElement.style.display = "none";
+                this._openLocalSitchController.domElement.style.display = "none";
+                this._reconnectController.domElement.style.display = "none";
+
+                // Try to restore a previously saved working folder
+                this.restoreWorkingFolder();
             }
 
 
@@ -257,18 +338,12 @@ export class CFileManager extends CManager {
     sitchChanged() {
     // update the UI based on the sitch name
         if (Sit.isCustom) {
-            if (parseBoolean(process.env.SAVE_TO_LOCAL)) {
-                this.guiLocal.show();
-            }
             if (getEffectiveUserID() > 0) {
                 if ((parseBoolean(process.env.SAVE_TO_SERVER) || parseBoolean(process.env.SAVE_TO_S3)) && !isServerless) {
                     this.guiServer.show();
                 }
             }
         } else {
-            if (parseBoolean(process.env.SAVE_TO_LOCAL)) {
-                this.guiLocal.hide();
-            }
             if ((parseBoolean(process.env.SAVE_TO_SERVER) || parseBoolean(process.env.SAVE_TO_S3)) && !isServerless) {
                 this.guiServer.hide();
             }
@@ -584,6 +659,7 @@ export class CFileManager extends CManager {
      * Reloads the page with ?action=new to create a fresh sitch.
      */
     newSitch() {
+        this.localSaveTargetArmed = false;
         // we just jump to the "custom" sitch, which is a blank sitch
         // that the user can modify and save
         // doing it as a URL to ensure a clean slate
@@ -681,6 +757,7 @@ export class CFileManager extends CManager {
      * If provided, version listing and latest-resolution are performed against that owner's folder.
      */
     loadSavedFile(name, sourceUserID = null) {
+        this.localSaveTargetArmed = false;
         this.loadName = name;
         // If a sourceUserID is provided (e.g. loading a featured sitch), use it;
         // otherwise clear any stale override (e.g. from a ?custom=S3-URL at page load)
@@ -797,6 +874,7 @@ export class CFileManager extends CManager {
      */
     loadVersion(displayName) {
         if (displayName === "-" || !this.versionsData.length) return;
+        this.localSaveTargetArmed = false;
         
         const index = this.versionsList.indexOf(displayName);
         if (index <= 0) return;
@@ -861,30 +939,69 @@ export class CFileManager extends CManager {
     /**
      * GUI menu handler for the "Save" button.
      * Wraps saveSitch() and suppresses errors for GUI use.
-     * @returns {Promise<void>}
+     * @returns {Promise<boolean>}
      */
     saveSitchFromMenu() {
         return this.saveSitch().then(() => {
+            this.lastSaveAction = "server";
             console.log("Sitch saved as " + Sit.sitchName);
+            return true;
         }).catch((error) => {
             console.log("Error in saveSitchFromMenu:", error);
+            return false;
         })
+    }
+
+    /**
+     * Save action invoked by Cmd/Ctrl+S.
+     * Repeats the last successful save intent when possible.
+     * Falls back to local Save As if server saving is unavailable.
+     * @returns {Promise<boolean>}
+     */
+    async handleSaveShortcut() {
+        const canServerSave = this.hasServerBackedSaves();
+        const canLocalSave = parseBoolean(process.env.SAVE_TO_LOCAL);
+
+        if (this.lastSaveAction === "local" && canLocalSave) {
+            return this.saveLocal({recordAction: true});
+        }
+
+        if (this.lastSaveAction === "localAs" && canLocalSave) {
+            return this.saveLocalAs({recordAction: true});
+        }
+
+        if (this.lastSaveAction === "server" && canServerSave) {
+            return this.saveSitchFromMenu();
+        }
+
+        if (canServerSave) {
+            return this.saveSitchFromMenu();
+        }
+
+        if (canLocalSave) {
+            return this.saveLocal({recordAction: true});
+        }
+
+        console.warn("No save target available for keyboard shortcut.");
+        return false;
     }
 
     /**
      * Saves the current sitch. Prompts for a name if one isn't set.
      * Updates GUI dropdowns with the new save entry.
      * @param {boolean} [local=false] - If true, saves locally instead of to server
+     * @param {FileSystemDirectoryHandle|null} [directoryHandle=null] - Target working folder for local saves
+     * @param {FileSystemFileHandle|null} [fileHandle=null] - Target file for local saves
      * @returns {Promise<void>} Resolves when save completes
      */
-    saveSitch(local = false) {
+    saveSitch(local = false, directoryHandle = null, fileHandle = null) {
         // Once the user saves, versions should reflect their own user, not the source
         if (!local) {
             this.sourceUserID = null;
         }
         if (Sit.sitchName === undefined) {
             return this.inputSitchName().then(() => {
-                return this.saveSitchNamed(Sit.sitchName, local);  // return the Promise here
+                return this.saveSitchNamed(Sit.sitchName, local, directoryHandle, fileHandle);  // return the Promise here
             }).then(() => {
                 if (!local) {
                     if (this.guiLoad) addOptionToGUIMenu(this.guiLoad, Sit.sitchName);
@@ -893,18 +1010,19 @@ export class CFileManager extends CManager {
                     return this.refreshVersions();
                 }
             }).catch((error) => {
-                console.log("Failed to input sitch name:", error);
+                console.log("Save cancelled or failed during naming flow:", error);
                 // propogate the error
                 throw error;
             });
         } else {
-            return this.saveSitchNamed(Sit.sitchName, local).then(() => {
+            return this.saveSitchNamed(Sit.sitchName, local, directoryHandle, fileHandle).then(() => {
                 console.log("Sitch saved as " + Sit.sitchName);
                 if (!local) {
                     return this.refreshVersions();
                 }
             }).catch((error) => {
                 console.log("Error in saveSitchNamed:", error);
+                throw error;
             })
         }
     }
@@ -944,6 +1062,7 @@ export class CFileManager extends CManager {
         Sit.sitchName = undefined;
         return this.saveSitch()
             .then(() => {
+                this.lastSaveAction = "server";
                 console.log("Sitch saved under a new name.");
             })
             .catch((error) => {
@@ -958,9 +1077,11 @@ export class CFileManager extends CManager {
      * Saves the sitch with a specific name. Serializes and uploads to server or creates local download.
      * @param {string} sitchName - The name to save the sitch under
      * @param {boolean} [local=false] - If true, creates a local downloadable file instead of server upload
+     * @param {FileSystemDirectoryHandle|null} [directoryHandle=null] - Target working folder for local saves
+     * @param {FileSystemFileHandle|null} [fileHandle=null] - Target file for local saves
      * @returns {Promise<void>} Resolves when save is complete
      */
-    saveSitchNamed(sitchName, local = false) {
+    saveSitchNamed(sitchName, local = false, directoryHandle = null, fileHandle = null) {
 
         // and then save the sitch to the server where it will be versioned by data in a folder named for this sitch, for this user
         console.log("Saving sitch as " + sitchName)
@@ -970,6 +1091,7 @@ export class CFileManager extends CManager {
 
         const oldPaused = par.paused;
         par.paused = true;
+        const savingIndicatorStartMs = Date.now();
         disableAllInput("SAVING");
 
         // Capture the screenshot before serialization starts (viewport is still rendered)
@@ -977,8 +1099,29 @@ export class CFileManager extends CManager {
             ? this.captureViewportScreenshot()
             : Promise.resolve(null);
 
-        return CustomManager.serialize(sitchName, todayDateTimeFilename, local)
-            .then(() => {
+        let saveSucceeded = false;
+        return CustomManager.serialize(sitchName, todayDateTimeFilename, local, directoryHandle, fileHandle)
+            .then(async (serializeResult) => {
+                if (local) {
+                    if (serializeResult?.fileHandle) {
+                        this.localSitchEntry = serializeResult.fileHandle;
+                    } else if (directoryHandle) {
+                        try {
+                            this.localSitchEntry = await directoryHandle.getFileHandle(sitchName + ".json");
+                        } catch (error) {
+                            console.warn("Could not refresh local sitch file handle after save:", error);
+                        }
+                    }
+                    if (directoryHandle) {
+                        try {
+                            await this.persistWorkingFolder();
+                        } catch (persistError) {
+                            console.warn("Saved locally, but failed to persist working folder info:", persistError);
+                        }
+                    }
+                    this.localSaveTargetArmed = true;
+                }
+                saveSucceeded = true;
                 Globals.sitchDirty = false;
                 // After sitch is saved, upload the screenshot to the same folder
                 if (!local) {
@@ -996,9 +1139,20 @@ export class CFileManager extends CManager {
                     });
                 }
             })
-            .catch((error) => {})
-            .finally(() => {
-                this.guiFolder.close();
+            .catch((error) => {
+                if (!isAbortLikeError(error)) {
+                    console.warn("Save failed:", error);
+                }
+                throw error;
+            })
+            .finally(async () => {
+                const elapsedMs = Date.now() - savingIndicatorStartMs;
+                if (elapsedMs < 500) {
+                    await new Promise(resolve => setTimeout(resolve, 500 - elapsedMs));
+                }
+                if (saveSucceeded) {
+                    this.guiFolder.close();
+                }
                 par.paused = oldPaused
                 enableAllInput();
             })
@@ -1006,16 +1160,314 @@ export class CFileManager extends CManager {
     }
 
     /**
-     * GUI menu handler to save the sitch locally.
-     * Sets a default name of "Local" if none exists.
+     * Save to the working folder if available, otherwise fall back to a file picker.
+     * @param {{recordAction?: boolean}} [options]
+     * @returns {Promise<boolean>}
      */
-    saveLocal() {
-
-        if (Sit.sitchName === undefined) {
-            Sit.sitchName = "Local";
+    async saveLocal({recordAction = true} = {}) {
+        if (!this.directoryHandle && this._pendingHandle) {
+            await this.reconnectWorkingFolder({loadSitch: false});
+            if (!this.directoryHandle) {
+                return false;
+            }
         }
 
-        this.saveSitch(true);
+        // Require a working folder for local save operations.
+        if (!this.directoryHandle) {
+            if (!(await this.pickWorkingFolderForLocalSave())) {
+                return false;
+            }
+        }
+
+        if (!(await this.ensureWorkingFolderWriteAccess())) {
+            return false;
+        }
+
+        // After a New Sitch or a server-loaded sitch, Save Local should behave like Save Local As.
+        const canOverwriteCurrentLocalTarget = this.localSaveTargetArmed && !!this.localSitchEntry;
+        if (!canOverwriteCurrentLocalTarget) {
+            const ok = await this.saveLocalAs({recordAction: false});
+            if (ok && recordAction) {
+                this.lastSaveAction = "local";
+            }
+            return ok;
+        }
+
+        const previousSitchName = Sit.sitchName;
+        let assignedTemporaryName = false;
+        if (Sit.sitchName === undefined) {
+            // Derive name from the loaded sitch file, or default to "Local"
+            if (this.localSitchEntry) {
+                Sit.sitchName = this.localSitchEntry.name.replace(/\.json$/, "");
+            } else {
+                Sit.sitchName = "Local";
+            }
+            assignedTemporaryName = true;
+        }
+
+        const targetDirectoryHandle = this.directoryHandle || null;
+        const targetFileHandle = targetDirectoryHandle ? null : this.localSitchEntry || null;
+        try {
+            await this.saveSitch(true, targetDirectoryHandle, targetFileHandle);
+            if (recordAction) {
+                this.lastSaveAction = "local";
+            }
+            this.updateLocalGUI();
+            return true;
+        } catch (error) {
+            if (assignedTemporaryName) {
+                Sit.sitchName = previousSitchName;
+            }
+            if (!isAbortLikeError(error)) {
+                console.warn("Save Local failed:", error);
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Save with a new local name in the working folder.
+     * @param {{recordAction?: boolean}} [options]
+     * @returns {Promise<boolean>}
+     */
+    async saveLocalAs({recordAction = true} = {}) {
+        const previousSitchName = Sit.sitchName;
+        if (!this.directoryHandle) {
+            if (!(await this.pickWorkingFolderForLocalSave())) {
+                return false;
+            }
+        }
+
+        Sit.sitchName = undefined;
+        try {
+            await this.saveSitch(true, this.directoryHandle, null);
+            if (recordAction) {
+                this.lastSaveAction = "localAs";
+            }
+            this.updateLocalGUI();
+            return true;
+        } catch (error) {
+            Sit.sitchName = previousSitchName;
+            if (!isAbortLikeError(error)) {
+                console.warn("Save Local As failed:", error);
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Persist the working folder handle and sitch filename to IndexedDB.
+     */
+    async persistWorkingFolder() {
+        try {
+            if (this.directoryHandle) {
+                await saveToIDB('workingFolderHandle', this.directoryHandle);
+            }
+            if (this.localSitchEntry) {
+                await saveToIDB('workingFolderSitchFile', this.localSitchEntry.name);
+            } else {
+                await saveToIDB('workingFolderSitchFile', null);
+            }
+            console.log("Working folder persisted to IndexedDB");
+        } catch (err) {
+            console.warn("Failed to persist working folder:", err);
+        }
+    }
+
+    /**
+     * Restore the working folder handle from IndexedDB on startup.
+     * Uses queryPermission (no prompt). Shows reconnect button if permission needs re-granting.
+     */
+    async restoreWorkingFolder() {
+        try {
+            const handle = await loadFromIDB('workingFolderHandle');
+            if (!handle) return;
+
+            const permission = await handle.queryPermission({ mode: 'readwrite' });
+            if (permission === 'granted') {
+                this.directoryHandle = handle;
+                const sitchFilename = await loadFromIDB('workingFolderSitchFile');
+                if (sitchFilename) {
+                    try {
+                        this.localSitchEntry = await this.directoryHandle.getFileHandle(sitchFilename);
+                    } catch (e) {
+                        console.warn("Previous sitch file not found in folder:", sitchFilename);
+                    }
+                }
+                console.log("Working folder restored:", handle.name);
+            } else {
+                // Stash for reconnect — requires a user gesture to re-grant
+                this._pendingHandle = handle;
+                this._pendingSitchFilename = await loadFromIDB('workingFolderSitchFile');
+                console.log("Working folder found but needs reconnect:", handle.name);
+            }
+            this.updateLocalGUI();
+        } catch (err) {
+            console.warn("Failed to restore working folder:", err);
+        }
+    }
+
+    /**
+     * Re-grant access to a previously saved working folder. Must be called from a user gesture.
+     * @param {{loadSitch?: boolean}} [options]
+     * @returns {Promise<boolean>} True if reconnect succeeded.
+     */
+    async reconnectWorkingFolder({loadSitch = true} = {}) {
+        if (!this._pendingHandle) return false;
+        try {
+            const permission = await this._pendingHandle.requestPermission({ mode: 'readwrite' });
+            if (permission === 'granted') {
+                this.directoryHandle = this._pendingHandle;
+                const handle = this._pendingHandle;
+                this._pendingHandle = null;
+
+                if (this._pendingSitchFilename) {
+                    try {
+                        this.localSitchEntry = await this.directoryHandle.getFileHandle(this._pendingSitchFilename);
+                        if (loadSitch) {
+                            this.checkForNewLocalSitch();
+                        }
+                    } catch (e) {
+                        console.warn("Could not find previous sitch file:", this._pendingSitchFilename);
+                    } finally {
+                        this._pendingSitchFilename = null;
+                    }
+                }
+
+                console.log("Working folder reconnected:", handle.name);
+                this.updateLocalGUI();
+                try {
+                    await this.persistWorkingFolder();
+                } catch (persistError) {
+                    console.warn("Reconnected folder, but failed to persist state:", persistError);
+                }
+                return true;
+            }
+            this.updateLocalGUI();
+            return false;
+        } catch (err) {
+            console.warn("Reconnect failed:", err);
+            return false;
+        }
+    }
+
+    /**
+     * Ensure readwrite access to the current working folder, if one is set.
+     * If access is lost, switch to pending/reconnect state.
+     * @returns {Promise<boolean>} True if save can proceed.
+     */
+    async ensureWorkingFolderWriteAccess() {
+        if (!this.directoryHandle) {
+            return true;
+        }
+
+        try {
+            let permission = await this.directoryHandle.queryPermission({ mode: 'readwrite' });
+            if (permission !== 'granted') {
+                permission = await this.directoryHandle.requestPermission({ mode: 'readwrite' });
+            }
+
+            if (permission === 'granted') {
+                return true;
+            }
+        } catch (err) {
+            console.warn("Working folder permission check failed:", err);
+        }
+
+        this._pendingHandle = this.directoryHandle;
+        this._pendingSitchFilename = this.localSitchEntry ? this.localSitchEntry.name : null;
+        this.directoryHandle = null;
+        this.updateLocalGUI();
+        return false;
+    }
+
+    /**
+     * Prompt for a working folder to use for local saves.
+     * @returns {Promise<boolean>} True if a folder was selected.
+     */
+    async pickWorkingFolderForLocalSave() {
+        if (!supportsDirectoryPicker()) {
+            showLocalFolderAccessUnsupportedMessage();
+            return false;
+        }
+        try {
+            this.directoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+            this._pendingHandle = null;
+            this._pendingSitchFilename = null;
+            await this.persistWorkingFolder();
+            this.updateLocalGUI();
+            return true;
+        } catch (err) {
+            if (!isAbortLikeError(err)) {
+                console.warn("pickWorkingFolderForLocalSave() error", err.name, err.message);
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Update the Local GUI section to reflect current working folder state.
+     */
+    updateLocalGUI() {
+        if (!this.guiLocal) return;
+        const hasWorkingFolder = !!this.directoryHandle;
+
+        // Update folder title to show working folder name
+        if (hasWorkingFolder) {
+            this.guiLocal.title("Local: " + this.directoryHandle.name);
+        } else if (this._pendingHandle) {
+            this.guiLocal.title("Local: " + this._pendingHandle.name + " (reconnect)");
+        } else {
+            this.guiLocal.title("Local");
+        }
+
+        // Show/hide reconnect button
+        if (this._reconnectController) {
+            const show = !!this._pendingHandle && !this.directoryHandle;
+            // Toggle only the reconnect row.
+            this._reconnectController.domElement.style.display = show ? "" : "none";
+        }
+
+        if (this._openLocalFolderController) {
+            this._openLocalFolderController.name("Select Local Sitch Folder");
+        }
+
+        if (this._openLocalSitchController) {
+            this._openLocalSitchController.domElement.style.display = hasWorkingFolder ? "" : "none";
+            if (hasWorkingFolder) {
+                this._openLocalSitchController.tooltip(`Open a sitch file from ${this.directoryHandle.name}`);
+            } else {
+                this._openLocalSitchController.tooltip("Open a sitch file from the current working folder");
+            }
+        }
+
+        if (this._saveLocalController) {
+            this._saveLocalController.domElement.style.display = hasWorkingFolder ? "" : "none";
+            if (hasWorkingFolder) {
+                this._saveLocalController
+                    .name("Save Local")
+                    .tooltip(this.localSaveTargetArmed && this.localSitchEntry
+                        ? `Save back to ${this.localSitchEntry.name} in ${this.directoryHandle.name}`
+                        : `Save into ${this.directoryHandle.name} (prompts for sitch name)`);
+            } else if (this.localSitchEntry && this.localSaveTargetArmed) {
+                this._saveLocalController
+                    .name("Save Local")
+                    .tooltip(`Save back to ${this.localSitchEntry.name}`);
+            } else {
+                this._saveLocalController
+                    .name("Save Local")
+                    .tooltip("Save a local sitch file (prompts for name/location)");
+            }
+        }
+
+        if (this._saveLocalAsController) {
+            this._saveLocalAsController.domElement.style.display = hasWorkingFolder ? "" : "none";
+            if (hasWorkingFolder) {
+                this._saveLocalAsController.tooltip("Save with a new filename in the current working folder");
+            } else {
+                this._saveLocalAsController.tooltip("Save a local sitch file, choosing the location");
+            }
+        }
     }
 
     /**
@@ -1178,64 +1630,87 @@ export class CFileManager extends CManager {
     }
 
     /**
-     * Opens a local directory using the File System Access API.
-     * Finds and loads a .json or .js sitch file from the directory.
-     * If multiple sitch files exist, prompts user to select one.
+     * Selects a working folder for local save/load operations.
+     * Does not auto-load any sitch file.
      * @async
      */
     async openDirectory() {
+        if (!supportsDirectoryPicker()) {
+            showLocalFolderAccessUnsupportedMessage();
+            return;
+        }
         try {
-            // 1) Prompt for the directory
-            this.directoryHandle = await window.showDirectoryPicker();
+            // Prompt for the directory with readwrite access
+            this.directoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+            this._pendingHandle = null;
+            this._pendingSitchFilename = null;
+            // Selecting a folder alone should not imply a current sitch file target.
+            this.localSitchEntry = null;
+            this.localSaveTargetArmed = false;
+            this.lastLocalSitchBuffer = undefined;
+            this.localSitchBuffer = undefined;
 
-            // 2) Collect all .json or .js files
-            const validEntries = [];
-            for await (const entry of this.directoryHandle.values()) {
-                if (
-                    entry.kind === "file" &&
-                    (entry.name.endsWith(".json") || entry.name.endsWith(".js"))
-                ) {
-                    validEntries.push(entry);
-                }
-            }
-
-            // 3) If exactly one file was found, use that. Otherwise, prompt for a file.
-            if (validEntries.length === 1) {
-                // We know exactly which file to use:
-                this.localSitchEntry = validEntries[0];
-                console.log("Using sole matching file:", this.localSitchEntry.name);
-            } else {
-                // If there's multiple or none, we ask the user to pick one file.
-                console.log(
-                    `Found ${validEntries.length} matching files. Prompting user to pick one.`
-                );
-
-                // The showOpenFilePicker approach can be configured to “startIn” the directory handle (if supported).
-                const [fileHandle] = await window.showOpenFilePicker({
-                    startIn: this.directoryHandle, // Experimental in some browsers
-                    multiple: false,
-                    types: [
-                        {
-                            description: "JSON or JS files",
-                            accept: {
-                                "application/json": [".json"],
-                                "text/javascript": [".js"]
-                            }
-                        }
-                    ]
-                });
-
-                this.localSitchEntry = fileHandle;
-                console.log("User selected file:", this.localSitchEntry.name);
-            }
-
-            // 4) Use your file handle (e.g., re-host, read content, etc.)
-            // Example: call your existing method to process it
-            this.checkForNewLocalSitch();
+            // Persist the working folder for future sessions
+            await this.persistWorkingFolder();
+            this.updateLocalGUI();
 
         } catch (err) {
-            console.warn("openDirectory() error or cancelled", err.name, err.message);
-            this.guiFolder.close();
+            if (!isAbortLikeError(err)) {
+                console.warn("openDirectory() error", err.name, err.message);
+            }
+        }
+    }
+
+    /**
+     * Opens a sitch file from the current working folder.
+     * Useful when a folder contains multiple local sitches.
+     * @async
+     */
+    async openLocalSitch() {
+        if (!supportsOpenFilePicker()) {
+            showLocalFolderAccessUnsupportedMessage();
+            return;
+        }
+        if (!this.directoryHandle && this._pendingHandle) {
+            await this.reconnectWorkingFolder({loadSitch: false});
+            if (!this.directoryHandle) {
+                return;
+            }
+        }
+
+        if (!this.directoryHandle) {
+            console.warn("No working folder selected. Use 'Select Local Sitch Folder' first.");
+            return;
+        }
+
+        if (!(await this.ensureWorkingFolderWriteAccess())) {
+            return;
+        }
+
+        try {
+            const [fileHandle] = await window.showOpenFilePicker({
+                startIn: this.directoryHandle,
+                multiple: false,
+                types: [
+                    {
+                        description: "JSON or JS files",
+                        accept: {
+                            "application/json": [".json"],
+                            "text/javascript": [".js"]
+                        }
+                    }
+                ]
+            });
+
+            this.localSitchEntry = fileHandle;
+            console.log("User selected local sitch:", this.localSitchEntry.name);
+            await this.persistWorkingFolder();
+            this.updateLocalGUI();
+            await this.checkForNewLocalSitch();
+        } catch (err) {
+            if (!isAbortLikeError(err)) {
+                console.warn("openLocalSitch() error", err.name, err.message);
+            }
         }
     }
 
@@ -1254,8 +1729,10 @@ export class CFileManager extends CManager {
 
         if (this.lastLocalSitchBuffer === undefined ||
             !areArrayBuffersEqual(this.lastLocalSitchBuffer, this.localSitchBuffer)) {
+            this.localSaveTargetArmed = true;
             this.lastLocalSitchBuffer = this.localSitchBuffer;
             this.parseResult(file.name, this.localSitchBuffer);
+            this.updateLocalGUI();
         }
 
         // This was for when we were continually loading the local sitch
