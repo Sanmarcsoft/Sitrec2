@@ -22,12 +22,13 @@ const PERMANENT_LABELS = [
 export class CSitchBrowser {
     constructor(fileManager) {
         this.fileManager = fileManager;
-        this.sitches = [];      // [{name, date, screenshotUrl, ownerUserID?, featuredOnly?}]
+        this.sitches = [];      // [{key, name, date, screenshotUrl, ownerUserID?, featuredOnly?}]
+        this.sitchesByKey = new Map();
         this.filtered = [];
         this.sortColumn = "date";
         this.sortAsc = false;
         this.searchText = "";
-        this.selectedName = null; // focused item (for preview, keyboard nav)
+        this.selectedKey = null; // focused item (for preview, keyboard nav)
         this.overlay = null;
         this.viewMode = "thumbnails";
         this.thumbColumns = 4;
@@ -36,7 +37,7 @@ export class CSitchBrowser {
         // Labels
         this.userLabels = [];    // [{name, color, permanent?}, ...]
         this.sitchLabels = {};   // {sitchName: [labelName, ...]}
-        this.featuredSitches = new Map(); // name -> {userID, screenshotUrl} (global, shared)
+        this.featuredSitches = new Map(); // key -> {name, userID, screenshotUrl} (global, shared)
         this.activeLabel = null; // sidebar filter, or null = All
 
         // Multi-selection
@@ -70,16 +71,39 @@ export class CSitchBrowser {
         return this._isLoggedIn() && isAdmin();
     }
 
+    _makeSitchKey(name, ownerUserID) {
+        return `${ownerUserID || 0}:${name}`;
+    }
+
+    _reindexSitches() {
+        this.sitchesByKey = new Map(this.sitches.map(s => [s.key, s]));
+    }
+
+    _getSitch(sitchOrKey) {
+        if (!sitchOrKey) return null;
+        if (typeof sitchOrKey === "string") {
+            return this.sitchesByKey.get(sitchOrKey) || null;
+        }
+        return sitchOrKey;
+    }
+
+    _isOwnSitch(sitchOrKey) {
+        const sitch = this._getSitch(sitchOrKey);
+        return !!sitch && sitch.ownerUserID === getEffectiveUserID();
+    }
+
     _cloneFeaturedSitches(map = this.featuredSitches) {
-        return new Map([...map.entries()].map(([name, info]) => [name, {...info}]));
+        return new Map([...map.entries()].map(([key, info]) => [key, {...info}]));
     }
 
     _setFeaturedSitchesFromArray(featuredArr) {
         this.featuredSitches = new Map();
         const entries = Array.isArray(featuredArr) ? featuredArr : [];
         for (const entry of entries) {
-            if (entry && entry.name) {
-                this.featuredSitches.set(entry.name, {
+            if (entry && entry.name && entry.userID) {
+                const key = this._makeSitchKey(entry.name, entry.userID);
+                this.featuredSitches.set(key, {
+                    name: entry.name,
                     userID: entry.userID,
                     screenshotUrl: entry.screenshotUrl || null,
                 });
@@ -88,32 +112,32 @@ export class CSitchBrowser {
     }
 
     _syncFeaturedSitchesIntoList() {
-        const byName = new Map(this.sitches.map(s => [s.name, s]));
+        const byKey = new Map(this.sitches.map(s => [s.key, s]));
 
-        for (const [name, info] of this.featuredSitches) {
-            if (!byName.has(name)) {
+        for (const [sitchKey, info] of this.featuredSitches) {
+            if (!byKey.has(sitchKey)) {
                 const featuredOnlySitch = {
-                    name,
+                    key: sitchKey,
+                    name: info.name,
                     date: "",
                     screenshotUrl: info.screenshotUrl || null,
                     ownerUserID: info.userID,
                     featuredOnly: true,
                 };
                 this.sitches.push(featuredOnlySitch);
-                byName.set(name, featuredOnlySitch);
+                byKey.set(sitchKey, featuredOnlySitch);
                 continue;
             }
 
-            const existing = byName.get(name);
-            if (existing.featuredOnly) {
-                existing.ownerUserID = info.userID;
-                if (!existing.screenshotUrl && info.screenshotUrl) {
-                    existing.screenshotUrl = info.screenshotUrl;
-                }
+            const existing = byKey.get(sitchKey);
+            existing.ownerUserID = info.userID;
+            if (!existing.screenshotUrl && info.screenshotUrl) {
+                existing.screenshotUrl = info.screenshotUrl;
             }
         }
 
-        this.sitches = this.sitches.filter(s => !s.featuredOnly || this.featuredSitches.has(s.name));
+        this.sitches = this.sitches.filter(s => !s.featuredOnly || this.featuredSitches.has(s.key));
+        this._reindexSitches();
     }
 
     _refreshFeaturedState() {
@@ -183,15 +207,17 @@ export class CSitchBrowser {
                 this.sitches = sitchData.map(e => {
                     let screenshotUrl = e[2] || null;
                     const name = String(e[0]);
+                    const ownerUserID = getEffectiveUserID();
                     const ver = ssVersions[name];
                     if (screenshotUrl && ver) {
                         screenshotUrl += (screenshotUrl.includes("?") ? "&" : "?") + "v=" + ver;
                     }
                     return {
+                        key: this._makeSitchKey(name, ownerUserID),
                         name,
                         date: String(e[1]),
                         screenshotUrl,
-                        ownerUserID: getEffectiveUserID(),
+                        ownerUserID,
                         featuredOnly: false,
                     };
                 });
@@ -213,7 +239,10 @@ export class CSitchBrowser {
 
                 // Share sitch list with FileManager so it doesn't need a separate fetch
                 if (this.fileManager && loggedIn) {
-                    this.fileManager.userSaves = ["-", ...this.sitches.map(s => s.name)];
+                    const ownNames = [...new Set(this.sitches
+                        .filter(s => this._isOwnSitch(s) && !s.featuredOnly)
+                        .map(s => s.name))];
+                    this.fileManager.userSaves = ["-", ...ownNames];
                     this.fileManager.refreshVersions();
                 }
 
@@ -245,23 +274,27 @@ export class CSitchBrowser {
         return PERMANENT_LABELS.some(l => l.name === name);
     }
 
-    _sitchHasLabel(sitchName, labelName) {
-        if (labelName === "Featured") return this.featuredSitches.has(sitchName);
-        return this.sitchLabels[sitchName]?.includes(labelName) ?? false;
+    _sitchHasLabel(sitchOrKey, labelName) {
+        const sitch = this._getSitch(sitchOrKey);
+        if (!sitch) return false;
+        if (labelName === "Featured") return this.featuredSitches.has(sitch.key);
+        if (!this._isOwnSitch(sitch)) return false;
+        return this.sitchLabels[sitch.name]?.includes(labelName) ?? false;
     }
 
-    _isFeatured(sitchName) {
-        return this.featuredSitches.has(sitchName);
+    _isFeatured(sitchOrKey) {
+        const sitch = this._getSitch(sitchOrKey);
+        return !!sitch && this.featuredSitches.has(sitch.key);
     }
 
-    _loadSitch(sitchName) {
+    _loadSitch(sitchKey) {
+        const sitchInfo = this._getSitch(sitchKey);
+        if (!sitchInfo) return;
         // If sitch is featured and belongs to another user, pass sourceUserID so
         // getVersions fetches from the owner's directory.
-        const featuredInfo = this.featuredSitches.get(sitchName);
-        const sitchInfo = this.sitches.find(s => s.name === sitchName);
-        const ownerID = featuredInfo?.userID ?? sitchInfo?.ownerUserID;
+        const ownerID = sitchInfo.ownerUserID;
         const sourceUserID = (ownerID && ownerID !== getEffectiveUserID()) ? ownerID : null;
-        this.fileManager.loadSavedFile(sitchName, sourceUserID);
+        this.fileManager.loadSavedFile(sitchInfo.name, sourceUserID);
     }
 
     // ==================== FILTER / SORT ====================
@@ -270,37 +303,38 @@ export class CSitchBrowser {
         let list = this.sitches;
 
         if (this.activeLabel === "Deleted") {
-            list = list.filter(s => this._sitchHasLabel(s.name, "Deleted"));
+            list = list.filter(s => this._sitchHasLabel(s, "Deleted"));
         } else if (this.activeLabel === "Private") {
             list = list.filter(s =>
-                this._sitchHasLabel(s.name, "Private") && !this._sitchHasLabel(s.name, "Deleted"));
+                this._sitchHasLabel(s, "Private") && !this._sitchHasLabel(s, "Deleted"));
         } else if (this.activeLabel === "Featured") {
             // Featured view: has Featured, not Deleted, not Private
             list = list.filter(s => {
-                if (this._sitchHasLabel(s.name, "Deleted")) return false;
-                if (this._sitchHasLabel(s.name, "Private")) return false;
-                return this._isFeatured(s.name);
+                if (this._sitchHasLabel(s, "Deleted")) return false;
+                if (this._sitchHasLabel(s, "Private")) return false;
+                return this._isFeatured(s);
             });
         } else if (this.activeLabel === "Unlabeled") {
             // Unlabeled view: no labels at all (not Featured, Private, Deleted, or any custom label)
             list = list.filter(s => {
-                if (this._sitchHasLabel(s.name, "Deleted")) return false;
-                if (this._sitchHasLabel(s.name, "Private")) return false;
-                if (this._isFeatured(s.name)) return false;
+                if (this._sitchHasLabel(s, "Deleted")) return false;
+                if (this._sitchHasLabel(s, "Private")) return false;
+                if (this._isFeatured(s)) return false;
+                if (!this._isOwnSitch(s)) return true;
                 const labels = this.sitchLabels[s.name];
                 return !labels || labels.length === 0;
             });
         } else if (this.activeLabel) {
             // Custom label view: has label, not Deleted, not Private
             list = list.filter(s => {
-                if (this._sitchHasLabel(s.name, "Deleted")) return false;
-                if (this._sitchHasLabel(s.name, "Private")) return false;
-                return this._sitchHasLabel(s.name, this.activeLabel);
+                if (this._sitchHasLabel(s, "Deleted")) return false;
+                if (this._sitchHasLabel(s, "Private")) return false;
+                return this._sitchHasLabel(s, this.activeLabel);
             });
         } else {
             // All: exclude Deleted + Private
             list = list.filter(s =>
-                !this._sitchHasLabel(s.name, "Deleted") && !this._sitchHasLabel(s.name, "Private"));
+                !this._sitchHasLabel(s, "Deleted") && !this._sitchHasLabel(s, "Private"));
         }
 
         if (this.searchText) {
@@ -321,7 +355,7 @@ export class CSitchBrowser {
 
     show() {
         if (this.overlay) this.close();
-        this.selectedName = null;
+        this.selectedKey = null;
         this.selection.clear();
 
         const overlay = document.createElement("div");
@@ -371,7 +405,7 @@ export class CSitchBrowser {
 
         // Featured link (always visible)
         const featuredCount = this.sitches.filter(s =>
-            this._isFeatured(s.name) && !this._sitchHasLabel(s.name, "Deleted") && !this._sitchHasLabel(s.name, "Private")).length;
+            this._isFeatured(s) && !this._sitchHasLabel(s, "Deleted") && !this._sitchHasLabel(s, "Private")).length;
         this._featuredLink = this._makeSidebarLink(
             "Featured" + (featuredCount ? ` (${featuredCount})` : ""),
             () => { this.activeLabel = "Featured"; this._onFilterChanged(); },
@@ -386,7 +420,7 @@ export class CSitchBrowser {
         this._unlabeledLink = null;
         if (loggedIn) {
             const privateCount = this.sitches.filter(s =>
-                this._sitchHasLabel(s.name, "Private") && !this._sitchHasLabel(s.name, "Deleted")).length;
+                this._sitchHasLabel(s, "Private") && !this._sitchHasLabel(s, "Deleted")).length;
             this._privateLink = this._makeSidebarLink(
                 "Private" + (privateCount ? ` (${privateCount})` : ""),
                 () => { this.activeLabel = "Private"; this._onFilterChanged(); },
@@ -396,7 +430,7 @@ export class CSitchBrowser {
             sidebar.appendChild(this._privateLink);
 
             // Deleted link (logged-in only)
-            const deletedCount = this.sitches.filter(s => this._sitchHasLabel(s.name, "Deleted")).length;
+            const deletedCount = this.sitches.filter(s => this._sitchHasLabel(s, "Deleted")).length;
             this._deletedLink = this._makeSidebarLink(
                 "Deleted" + (deletedCount ? ` (${deletedCount})` : ""),
                 () => { this.activeLabel = "Deleted"; this._onFilterChanged(); },
@@ -407,9 +441,10 @@ export class CSitchBrowser {
 
             // Unlabeled link (logged-in only)
             const unlabeledCount = this.sitches.filter(s => {
-                if (this._sitchHasLabel(s.name, "Deleted")) return false;
-                if (this._sitchHasLabel(s.name, "Private")) return false;
-                if (this._isFeatured(s.name)) return false;
+                if (this._sitchHasLabel(s, "Deleted")) return false;
+                if (this._sitchHasLabel(s, "Private")) return false;
+                if (this._isFeatured(s)) return false;
+                if (!this._isOwnSitch(s)) return true;
                 const labels = this.sitchLabels[s.name];
                 return !labels || labels.length === 0;
             }).length;
@@ -495,7 +530,7 @@ export class CSitchBrowser {
 
     _onFilterChanged() {
         this.selection.clear();
-        this.selectedName = null;
+        this.selectedKey = null;
         this.applyFilterAndSort();
         this._rebuildSidebar();
         this.rebuildContent();
@@ -526,23 +561,24 @@ export class CSitchBrowser {
         // Update counts
         if (this._featuredLink) {
             const c = this.sitches.filter(s =>
-                this._isFeatured(s.name) && !this._sitchHasLabel(s.name, "Deleted") && !this._sitchHasLabel(s.name, "Private")).length;
+                this._isFeatured(s) && !this._sitchHasLabel(s, "Deleted") && !this._sitchHasLabel(s, "Private")).length;
             this._featuredLink.textContent = "Featured" + (c ? ` (${c})` : "");
         }
         if (this._privateLink) {
             const c = this.sitches.filter(s =>
-                this._sitchHasLabel(s.name, "Private") && !this._sitchHasLabel(s.name, "Deleted")).length;
+                this._sitchHasLabel(s, "Private") && !this._sitchHasLabel(s, "Deleted")).length;
             this._privateLink.textContent = "Private" + (c ? ` (${c})` : "");
         }
         if (this._deletedLink) {
-            const c = this.sitches.filter(s => this._sitchHasLabel(s.name, "Deleted")).length;
+            const c = this.sitches.filter(s => this._sitchHasLabel(s, "Deleted")).length;
             this._deletedLink.textContent = "Deleted" + (c ? ` (${c})` : "");
         }
         if (this._unlabeledLink) {
             const c = this.sitches.filter(s => {
-                if (this._sitchHasLabel(s.name, "Deleted")) return false;
-                if (this._sitchHasLabel(s.name, "Private")) return false;
-                if (this._isFeatured(s.name)) return false;
+                if (this._sitchHasLabel(s, "Deleted")) return false;
+                if (this._sitchHasLabel(s, "Private")) return false;
+                if (this._isFeatured(s)) return false;
+                if (!this._isOwnSitch(s)) return true;
                 const labels = this.sitchLabels[s.name];
                 return !labels || labels.length === 0;
             }).length;
@@ -677,10 +713,10 @@ export class CSitchBrowser {
 
         if (e.metaKey || e.ctrlKey) {
             // Toggle individual
-            if (this.selection.has(sitch.name)) {
-                this.selection.delete(sitch.name);
+            if (this.selection.has(sitch.key)) {
+                this.selection.delete(sitch.key);
             } else {
-                this.selection.add(sitch.name);
+                this.selection.add(sitch.key);
             }
             this._lastClickedIndex = idx;
         } else if (e.shiftKey && this._lastClickedIndex >= 0) {
@@ -689,16 +725,16 @@ export class CSitchBrowser {
             const end = Math.max(this._lastClickedIndex, idx);
             // Don't clear existing selection when extending with shift
             for (let i = start; i <= end; i++) {
-                if (this.filtered[i]) this.selection.add(this.filtered[i].name);
+                if (this.filtered[i]) this.selection.add(this.filtered[i].key);
             }
         } else {
             // Single select
             this.selection.clear();
-            this.selection.add(sitch.name);
+            this.selection.add(sitch.key);
             this._lastClickedIndex = idx;
         }
 
-        this.selectedName = sitch.name;
+        this.selectedKey = sitch.key;
         this._updateHighlights();
         if (this.viewMode === "list") this.updatePreview(sitch);
     }
@@ -715,10 +751,10 @@ export class CSitchBrowser {
         if (!sitch) return;
 
         // If right-clicking an unselected item, select just it
-        if (!this.selection.has(sitch.name)) {
+        if (!this.selection.has(sitch.key)) {
             this.selection.clear();
-            this.selection.add(sitch.name);
-            this.selectedName = sitch.name;
+            this.selection.add(sitch.key);
+            this.selectedKey = sitch.key;
             this._lastClickedIndex = idx;
             this._updateHighlights();
             if (this.viewMode === "list") this.updatePreview(sitch);
@@ -751,19 +787,19 @@ export class CSitchBrowser {
             e.preventDefault();
             // Select all
             this.selection.clear();
-            for (const s of this.filtered) this.selection.add(s.name);
+            for (const s of this.filtered) this.selection.add(s.key);
             this._updateHighlights();
             return;
         }
 
         if ((e.key === "Delete" || e.key === "Backspace") && this._isLoggedIn()) {
             if (this.selection.size > 0) {
-                const names = [...this.selection];
-                const allDeleted = names.every(n => this._sitchHasLabel(n, "Deleted"));
+                const keys = [...this.selection];
+                const allDeleted = keys.every(k => this._sitchHasLabel(k, "Deleted"));
                 if (allDeleted) {
-                    this._removeLabelFromSitches(names, "Deleted");
+                    this._removeLabelFromSitches(keys, "Deleted");
                 } else {
-                    this._addLabelToSitches(names, "Deleted");
+                    this._addLabelToSitches(keys, "Deleted");
                 }
             }
             return;
@@ -773,7 +809,7 @@ export class CSitchBrowser {
         if (arrows.includes(e.key)) {
             e.preventDefault();
             if (this.filtered.length === 0) return;
-            let idx = this.filtered.findIndex(s => s.name === this.selectedName);
+            let idx = this.filtered.findIndex(s => s.key === this.selectedKey);
 
             if (idx === -1) {
                 const forward = (e.key === "ArrowDown" || e.key === "ArrowRight");
@@ -801,15 +837,15 @@ export class CSitchBrowser {
                 const end = Math.max(this._lastClickedIndex, idx);
                 this.selection.clear();
                 for (let i = start; i <= end; i++) {
-                    if (this.filtered[i]) this.selection.add(this.filtered[i].name);
+                    if (this.filtered[i]) this.selection.add(this.filtered[i].key);
                 }
             } else {
                 this.selection.clear();
-                this.selection.add(sitch.name);
+                this.selection.add(sitch.key);
                 this._lastClickedIndex = idx;
             }
 
-            this.selectedName = sitch.name;
+            this.selectedKey = sitch.key;
             this._updateHighlights();
             if (this.viewMode === "list") this.updatePreview(sitch);
 
@@ -820,9 +856,9 @@ export class CSitchBrowser {
             }
         }
 
-        if (e.key === "Enter" && this.selectedName) {
+        if (e.key === "Enter" && this.selectedKey) {
             this.close();
-            this._loadSitch(this.selectedName);
+            this._loadSitch(this.selectedKey);
         }
     }
 
@@ -843,29 +879,35 @@ export class CSitchBrowser {
             fontSize: "13px", color: "#e0e0e0",
         });
 
-        const selectedNames = [...this.selection];
-        if (selectedNames.length === 0) return;
+        const selectedKeys = [...this.selection];
+        if (selectedKeys.length === 0) return;
 
         // Header showing count
-        if (selectedNames.length > 1) {
+        if (selectedKeys.length > 1) {
             const countDiv = document.createElement("div");
             Object.assign(countDiv.style, { padding: "4px 16px 4px", fontSize: "11px", color: "#888" });
-            countDiv.textContent = `${selectedNames.length} sitches selected`;
+            countDiv.textContent = `${selectedKeys.length} sitches selected`;
             menu.appendChild(countDiv);
             menu.appendChild(this._makeMenuSep());
         }
 
-        const allDeleted = selectedNames.every(n => this._sitchHasLabel(n, "Deleted"));
+        const allDeleted = selectedKeys.every(k => this._sitchHasLabel(k, "Deleted"));
         menu.appendChild(this._makeMenuItem(allDeleted ? "Undelete" : "Delete", () => {
-            if (allDeleted) this._removeLabelFromSitches(selectedNames, "Deleted");
-            else this._addLabelToSitches(selectedNames, "Deleted");
+            if (allDeleted) this._removeLabelFromSitches(selectedKeys, "Deleted");
+            else this._addLabelToSitches(selectedKeys, "Deleted");
             this._hideContextMenu();
         }));
 
         menu.appendChild(this._makeMenuItem("Refresh Thumbnails", () => {
             this._hideContextMenu();
             this.close();
-            this.fileManager.refreshScreenshots([...selectedNames].filter(n => !this._sitchHasLabel(n, "Deleted")));
+            const ownSitchNames = selectedKeys
+                .map(k => this._getSitch(k))
+                .filter(s => s && this._isOwnSitch(s) && !this._sitchHasLabel(s, "Deleted"))
+                .map(s => s.name);
+            if (ownSitchNames.length > 0) {
+                this.fileManager.refreshScreenshots(ownSitchNames);
+            }
         }));
 
         menu.appendChild(this._makeMenuSep());
@@ -874,14 +916,14 @@ export class CSitchBrowser {
         for (const label of this.userLabels) {
             if (label.name === "Deleted") continue;
             if (label.name === "Featured" && !this._canManageFeatured()) continue;
-            const hasCount = selectedNames.filter(n => this._sitchHasLabel(n, label.name)).length;
-            const all = hasCount === selectedNames.length;
+            const hasCount = selectedKeys.filter(k => this._sitchHasLabel(k, label.name)).length;
+            const all = hasCount === selectedKeys.length;
             const none = hasCount === 0;
             const indeterminate = !all && !none;
 
             menu.appendChild(this._makeMenuCheckbox(label, all, indeterminate, () => {
-                if (all) this._removeLabelFromSitches(selectedNames, label.name);
-                else this._addLabelToSitches(selectedNames, label.name);
+                if (all) this._removeLabelFromSitches(selectedKeys, label.name);
+                else this._addLabelToSitches(selectedKeys, label.name);
                 this._hideContextMenu();
             }));
         }
@@ -1025,8 +1067,8 @@ export class CSitchBrowser {
                     const cardY = cr.top - contRect.top + scrollContainer.scrollTop;
                     const overlaps = !(cardX + cr.width < bx || cardX > bx + bw ||
                         cardY + cr.height < by || cardY > by + bh);
-                    const name = this.filtered[i]?.name;
-                    if (name && overlaps) this.selection.add(name);
+                    const key = this.filtered[i]?.key;
+                    if (key && overlaps) this.selection.add(key);
                 }
                 this._updateHighlights();
             };
@@ -1200,7 +1242,7 @@ export class CSitchBrowser {
         }
         if (this._previewLabels) {
             this._previewLabels.innerHTML = "";
-            const chips = this._makeLabelChips(sitch.name);
+            const chips = this._makeLabelChips(sitch);
             if (chips) this._previewLabels.appendChild(chips);
         }
     }
@@ -1222,23 +1264,23 @@ export class CSitchBrowser {
             });
 
             const setHighlight = () => {
-                const sel = this.selection.has(sitch.name);
+                const sel = this.selection.has(sitch.key);
                 row.style.backgroundColor = sel ? "#2a3a5e" : "transparent";
             };
             setHighlight();
             row.addEventListener("mouseenter", () => {
-                if (!this.selection.has(sitch.name)) row.style.backgroundColor = "#2a2a3e";
+                if (!this.selection.has(sitch.key)) row.style.backgroundColor = "#2a2a3e";
             });
             row.addEventListener("mouseleave", () => setHighlight());
 
-            this._makeDraggable(row, sitch.name);
+            this._makeDraggable(row, sitch.key);
 
             const nameCell = document.createElement("div");
             nameCell.style.flex = "3"; nameCell.style.fontSize = "14px";
             const nameText = document.createElement("div");
             nameText.textContent = sitch.name;
             nameCell.appendChild(nameText);
-            const chips = this._makeLabelChips(sitch.name);
+            const chips = this._makeLabelChips(sitch);
             if (chips) nameCell.appendChild(chips);
 
             const dateCell = document.createElement("div");
@@ -1249,14 +1291,14 @@ export class CSitchBrowser {
 
             row.addEventListener("click", (e) => this._handleItemClick(e, idx));
             row.addEventListener("mousedown", (e) => this._handleItemMouseDown(e, idx));
-            row.addEventListener("dblclick", () => { this.close(); this._loadSitch(sitch.name); });
+            row.addEventListener("dblclick", () => { this.close(); this._loadSitch(sitch.key); });
 
             row._setHighlight = setHighlight;
             tbody.appendChild(row);
         });
 
-        if (this.selectedName) {
-            const idx = this.filtered.findIndex(s => s.name === this.selectedName);
+        if (this.selectedKey) {
+            const idx = this.filtered.findIndex(s => s.key === this.selectedKey);
             if (idx >= 0 && tbody.children[idx]) tbody.children[idx].scrollIntoView({block: "nearest"});
         }
     }
@@ -1320,8 +1362,8 @@ export class CSitchBrowser {
             colLabel.textContent = `Columns: ${this.thumbColumns}`;
 
             let selectedCard = null, offsetFromViewport = 0;
-            if (this.selectedName && this._thumbGrid) {
-                const i = this.filtered.findIndex(s => s.name === this.selectedName);
+            if (this.selectedKey && this._thumbGrid) {
+                const i = this.filtered.findIndex(s => s.key === this.selectedKey);
                 if (i >= 0) {
                     selectedCard = this._thumbGrid.children[i];
                     if (selectedCard) {
@@ -1397,18 +1439,18 @@ export class CSitchBrowser {
             });
 
             const setHighlight = () => {
-                const sel = this.selection.has(sitch.name);
+                const sel = this.selection.has(sitch.key);
                 card.style.borderColor = sel ? "#8ab4f8" : "#333";
                 card.style.backgroundColor = sel ? "#252540" : "#1e1e2e";
             };
             setHighlight();
 
             card.addEventListener("mouseenter", () => {
-                if (!this.selection.has(sitch.name)) card.style.borderColor = "#555";
+                if (!this.selection.has(sitch.key)) card.style.borderColor = "#555";
             });
             card.addEventListener("mouseleave", () => setHighlight());
 
-            this._makeDraggable(card, sitch.name);
+            this._makeDraggable(card, sitch.key);
 
             // Thumbnail
             const imgWrap = document.createElement("div");
@@ -1449,20 +1491,20 @@ export class CSitchBrowser {
             Object.assign(dateDiv.style, { fontSize: "11px", color: "#888", marginTop: "2px" });
             dateDiv.textContent = sitch.date;
             info.appendChild(dateDiv);
-            const chips = this._makeLabelChips(sitch.name);
+            const chips = this._makeLabelChips(sitch);
             if (chips) info.appendChild(chips);
             card.appendChild(info);
 
             card.addEventListener("click", (e) => this._handleItemClick(e, idx));
             card.addEventListener("mousedown", (e) => this._handleItemMouseDown(e, idx));
-            card.addEventListener("dblclick", () => { this.close(); this._loadSitch(sitch.name); });
+            card.addEventListener("dblclick", () => { this.close(); this._loadSitch(sitch.key); });
 
             card._setHighlight = setHighlight;
             this._thumbGrid.appendChild(card);
         });
 
-        if (this.selectedName) {
-            const idx = this.filtered.findIndex(s => s.name === this.selectedName);
+        if (this.selectedKey) {
+            const idx = this.filtered.findIndex(s => s.key === this.selectedKey);
             if (idx >= 0 && this._thumbGrid.children[idx]) {
                 this._thumbGrid.children[idx].scrollIntoView({block: "nearest"});
             }
@@ -1520,13 +1562,15 @@ export class CSitchBrowser {
         return nameLower.includes(searchText.toLowerCase());
     }
 
-    _makeLabelChips(sitchName) {
-        const labels = this.sitchLabels[sitchName] || [];
-        const isFeatured = this._isFeatured(sitchName);
+    _makeLabelChips(sitchOrKey) {
+        const sitch = this._getSitch(sitchOrKey);
+        if (!sitch) return null;
+        const labels = this._isOwnSitch(sitch) ? (this.sitchLabels[sitch.name] || []) : [];
+        const isFeatured = this._isFeatured(sitch);
 
         // Always create a container so we can update it in-place later
         const container = document.createElement("div");
-        container.dataset.labelChips = sitchName;
+        container.dataset.labelChips = sitch.key;
         Object.assign(container.style, { display: "flex", flexWrap: "wrap", gap: "3px", marginTop: "2px" });
         if (labels.length === 0 && !isFeatured) return container;
 
@@ -1571,11 +1615,11 @@ export class CSitchBrowser {
     _refreshLabelChips() {
         const containers = this._contentArea.querySelectorAll("[data-label-chips]");
         for (const container of containers) {
-            const sitchName = container.dataset.labelChips;
+            const sitchKey = container.dataset.labelChips;
             container.innerHTML = "";
-            const fresh = this._makeLabelChips(sitchName);
+            const fresh = this._makeLabelChips(sitchKey);
             // Move children from the new container into the existing one
-            while (fresh.firstChild) container.appendChild(fresh.firstChild);
+            while (fresh && fresh.firstChild) container.appendChild(fresh.firstChild);
         }
     }
 
@@ -1586,7 +1630,7 @@ export class CSitchBrowser {
         this._dropTargets.push({ element, ...handlers });
     }
 
-    _makeDraggable(element, sitchName) {
+    _makeDraggable(element, sitchKey) {
         // Prevent native browser drag (images, links) which triggers Chrome split-view
         element.addEventListener("dragstart", (e) => e.preventDefault());
 
@@ -1603,7 +1647,7 @@ export class CSitchBrowser {
                     // Require a small movement threshold before starting drag
                     if (Math.abs(me.clientX - startX) < 5 && Math.abs(me.clientY - startY) < 5) return;
                     dragging = true;
-                    this._startCustomDrag(me, sitchName);
+                    this._startCustomDrag(me, sitchKey);
                 }
                 if (dragging) this._updateCustomDrag(me);
             };
@@ -1617,15 +1661,15 @@ export class CSitchBrowser {
         });
     }
 
-    _startCustomDrag(e, sitchName) {
+    _startCustomDrag(e, sitchKey) {
         // Clean up any previous drag state (e.g. if pointerup was lost)
         if (this._dragGhost) { document.body.removeChild(this._dragGhost); this._dragGhost = null; }
 
         // If dragging an unselected item, select just it
-        if (!this.selection.has(sitchName)) {
+        if (!this.selection.has(sitchKey)) {
             this.selection.clear();
-            this.selection.add(sitchName);
-            this.selectedName = sitchName;
+            this.selection.add(sitchKey);
+            this.selectedKey = sitchKey;
             this._updateHighlights();
         }
         this._dragNames = [...this.selection];
@@ -1633,7 +1677,8 @@ export class CSitchBrowser {
 
         // Create floating ghost badge
         const ghost = document.createElement("div");
-        const label = this._dragNames.length > 1 ? `${this._dragNames.length} sitches` : sitchName;
+        const sitch = this._getSitch(sitchKey);
+        const label = this._dragNames.length > 1 ? `${this._dragNames.length} sitches` : (sitch?.name || sitchKey);
         ghost.textContent = label;
         Object.assign(ghost.style, {
             position: "fixed", pointerEvents: "none", zIndex: "100000",
@@ -1707,11 +1752,13 @@ export class CSitchBrowser {
 
         const changed = [];
         if (assignToSitches && assignToSitches.length > 0) {
-            for (const sn of assignToSitches) {
-                if (!this.sitchLabels[sn]) this.sitchLabels[sn] = [];
-                if (!this.sitchLabels[sn].includes(trimmed)) {
-                    this.sitchLabels[sn].push(trimmed);
-                    changed.push(sn);
+            for (const sitchKey of assignToSitches) {
+                const sitch = this._getSitch(sitchKey);
+                if (!sitch || !this._isOwnSitch(sitch)) continue;
+                if (!this.sitchLabels[sitch.name]) this.sitchLabels[sitch.name] = [];
+                if (!this.sitchLabels[sitch.name].includes(trimmed)) {
+                    this.sitchLabels[sitch.name].push(trimmed);
+                    changed.push(sitch.name);
                 }
             }
         }
@@ -1749,16 +1796,21 @@ export class CSitchBrowser {
         return labelName === "Deleted" || labelName === "Private" || labelName === "Featured" || labelName === this.activeLabel;
     }
 
-    _addLabelToSitches(sitchNames, labelName) {
+    _addLabelToSitches(sitchKeys, labelName) {
         if (labelName === "Featured") {
             if (!this._canManageFeatured()) return;
             const previousFeatured = this._cloneFeaturedSitches();
             const added = [];
-            const uid = getEffectiveUserID();
-            for (const sn of sitchNames) {
-                if (!this.featuredSitches.has(sn)) {
-                    this.featuredSitches.set(sn, {userID: uid, screenshotUrl: null});
-                    added.push(sn);
+            for (const sitchKey of sitchKeys) {
+                const sitch = this._getSitch(sitchKey);
+                if (!sitch) continue;
+                if (!this.featuredSitches.has(sitch.key)) {
+                    this.featuredSitches.set(sitch.key, {
+                        name: sitch.name,
+                        userID: sitch.ownerUserID,
+                        screenshotUrl: sitch.screenshotUrl || null,
+                    });
+                    added.push(sitch.key);
                 }
             }
             if (added.length > 0) {
@@ -1768,11 +1820,13 @@ export class CSitchBrowser {
             return;
         }
         const changed = [];
-        for (const sn of sitchNames) {
-            if (!this.sitchLabels[sn]) this.sitchLabels[sn] = [];
-            if (!this.sitchLabels[sn].includes(labelName)) {
-                this.sitchLabels[sn].push(labelName);
-                changed.push(sn);
+        for (const sitchKey of sitchKeys) {
+            const sitch = this._getSitch(sitchKey);
+            if (!sitch || !this._isOwnSitch(sitch)) continue;
+            if (!this.sitchLabels[sitch.name]) this.sitchLabels[sitch.name] = [];
+            if (!this.sitchLabels[sitch.name].includes(labelName)) {
+                this.sitchLabels[sitch.name].push(labelName);
+                changed.push(sitch.name);
             }
         }
         if (changed.length > 0) {
@@ -1787,15 +1841,17 @@ export class CSitchBrowser {
         }
     }
 
-    _removeLabelFromSitches(sitchNames, labelName) {
+    _removeLabelFromSitches(sitchKeys, labelName) {
         if (labelName === "Featured") {
             if (!this._canManageFeatured()) return;
             const previousFeatured = this._cloneFeaturedSitches();
             const removed = [];
-            for (const sn of sitchNames) {
-                if (this.featuredSitches.has(sn)) {
-                    this.featuredSitches.delete(sn);
-                    removed.push(sn);
+            for (const sitchKey of sitchKeys) {
+                const sitch = this._getSitch(sitchKey);
+                if (!sitch) continue;
+                if (this.featuredSitches.has(sitch.key)) {
+                    this.featuredSitches.delete(sitch.key);
+                    removed.push(sitch.key);
                 }
             }
             if (removed.length > 0) {
@@ -1805,11 +1861,13 @@ export class CSitchBrowser {
             return;
         }
         const changed = [];
-        for (const sn of sitchNames) {
-            if (this.sitchLabels[sn] && this.sitchLabels[sn].includes(labelName)) {
-                this.sitchLabels[sn] = this.sitchLabels[sn].filter(l => l !== labelName);
-                changed.push(sn);
-                if (this.sitchLabels[sn].length === 0) delete this.sitchLabels[sn];
+        for (const sitchKey of sitchKeys) {
+            const sitch = this._getSitch(sitchKey);
+            if (!sitch || !this._isOwnSitch(sitch)) continue;
+            if (this.sitchLabels[sitch.name] && this.sitchLabels[sitch.name].includes(labelName)) {
+                this.sitchLabels[sitch.name] = this.sitchLabels[sitch.name].filter(l => l !== labelName);
+                changed.push(sitch.name);
+                if (this.sitchLabels[sitch.name].length === 0) delete this.sitchLabels[sitch.name];
             }
         }
         if (changed.length > 0) {
@@ -1846,8 +1904,8 @@ export class CSitchBrowser {
 
     _saveFeatured(previousFeatured = null) {
         const sitches = [];
-        for (const [name, info] of this.featuredSitches) {
-            sitches.push({name, userID: info.userID});
+        for (const [, info] of this.featuredSitches) {
+            sitches.push({name: info.name, userID: info.userID});
         }
         const body = {
             updateFeatured: true,
