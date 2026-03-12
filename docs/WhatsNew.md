@@ -45,6 +45,38 @@ Example entry format:
 
 ---
 
+## Version 2.33.3 (2026-03-12)
+
+### New Features
+- **Local (Non-S3) Server Browser**: Added sitch browser support for local server filesystem saves in non-S3 deployments
+
+### Bug Fixes
+- Ignore non-sitch files when linking sitch versions in the admin dashboard
+
+---
+
+## Version 2.33.2 (2026-03-12)
+
+### New Features
+- **Browser-First Startup**: Sitrec can now start directly in the sitch browser when no specific sitch or action is requested
+
+### Improvements
+- Added dirty-state tracking so the leave-site warning appears only after meaningful changes
+- Added stale-build detection and surfaced the build version in the sitch browser
+- Reduced redundant sitch browser startup fetches
+
+### Bug Fixes
+- Fixed featured sitch key collisions in the sitch browser
+
+---
+
+## Version 2.33.1 (2026-03-11)
+
+### Bug Fixes
+- Allow forward slashes in object keys so user and sitch paths are stored correctly
+
+---
+
 ## Version 2.33.0 (2026-03-11)
 
 ### New Features
