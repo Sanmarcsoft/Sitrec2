@@ -254,6 +254,36 @@ export class CFileManager extends CManager {
         }
     }
 
+    /**
+     * Show a user-visible error dialog for local save failures.
+     * @param {string} actionLabel
+     * @param {Error|*} error
+     */
+    showLocalSaveError(actionLabel, error) {
+        if (isAbortLikeError(error)) return;
+
+        const errorName = error?.name || "Error";
+        const errorCode = error?.code;
+        const errorMessage = error?.message || String(error);
+        let message = `${actionLabel} failed:\n${errorName}${errorCode !== undefined ? ` (code: ${errorCode})` : ""}: ${errorMessage}`;
+
+        if (errorName === "NotFoundError") {
+            message += "\n\nThe selected local folder or file is no longer available.\nSelect Local Sitch Folder again, then retry.";
+            // Folder handle is no longer usable (e.g. folder deleted/moved). Clear local target state.
+            this.directoryHandle = null;
+            this._pendingHandle = null;
+            this._pendingSitchFilename = null;
+            this.localSitchEntry = null;
+            this.localSaveTargetArmed = false;
+            this.updateLocalGUI();
+            this.persistWorkingFolder();
+        } else if (errorName === "NotAllowedError" || errorName === "SecurityError") {
+            message += "\n\nLocal folder permission may have changed.\nUse Reconnect Folder or Select Local Sitch Folder.";
+        }
+
+        showError(message, error);
+    }
+
     hasServerBackedSaves() {
         return (parseBoolean(process.env.SAVE_TO_SERVER) || parseBoolean(process.env.SAVE_TO_S3)) && !isServerless;
     }
@@ -1226,6 +1256,7 @@ export class CFileManager extends CManager {
             }
             if (!isAbortLikeError(error)) {
                 console.warn("Save Local failed:", error);
+                this.showLocalSaveError("Save Local", error);
             }
             return false;
         }
@@ -1256,6 +1287,7 @@ export class CFileManager extends CManager {
             Sit.sitchName = previousSitchName;
             if (!isAbortLikeError(error)) {
                 console.warn("Save Local As failed:", error);
+                this.showLocalSaveError("Save Local As", error);
             }
             return false;
         }
@@ -1266,14 +1298,8 @@ export class CFileManager extends CManager {
      */
     async persistWorkingFolder() {
         try {
-            if (this.directoryHandle) {
-                await saveToIDB('workingFolderHandle', this.directoryHandle);
-            }
-            if (this.localSitchEntry) {
-                await saveToIDB('workingFolderSitchFile', this.localSitchEntry.name);
-            } else {
-                await saveToIDB('workingFolderSitchFile', null);
-            }
+            await saveToIDB('workingFolderHandle', this.directoryHandle || null);
+            await saveToIDB('workingFolderSitchFile', this.localSitchEntry ? this.localSitchEntry.name : null);
             console.log("Working folder persisted to IndexedDB");
         } catch (err) {
             console.warn("Failed to persist working folder:", err);
@@ -1942,15 +1968,12 @@ export class CFileManager extends CManager {
         const loadingId = `asset-${id}-${Date.now()}`;
         LoadingManager.registerLoading(loadingId, filename, "Asset");
 
-        if (!filename.includes("/")) {
-            assert(this.directoryHandle !== undefined, `No directory handle for local file ${filename}`);
-            loadingPromise = this.directoryHandle.getFileHandle(filename).then(fileHandle => {
-                return fileHandle.getFile().then(file => {
-                    return file.arrayBuffer().then(arrayBuffer => {
-                        LoadingManager.completeLoading(loadingId);
-                        return this.parseResult(filename, arrayBuffer, null);
-                    });
-                });
+        const isWorkingFolderPath = this.isLikelyWorkingFolderAssetPath(filename);
+
+        if (isWorkingFolderPath) {
+            loadingPromise = this.readWorkingFolderFile(filename).then(arrayBuffer => {
+                LoadingManager.completeLoading(loadingId);
+                return this.parseResult(filename, arrayBuffer, null);
             }).catch(error => {
                 LoadingManager.completeLoading(loadingId);
                 throw error;
@@ -3284,6 +3307,267 @@ export class CFileManager extends CManager {
             fileExt = getFileExtension(filename);
         }
         return fileExt
+    }
+
+    /**
+     * Returns true when a filename should be resolved from the selected local working folder.
+     * This is used for local sitch assets saved as relative paths.
+     * @param {string} filename
+     * @returns {boolean}
+     */
+    isLikelyWorkingFolderAssetPath(filename) {
+        if (!this.directoryHandle) return false;
+        if (typeof filename !== "string" || filename.length === 0) return false;
+        if (isHttpOrHttps(filename) || isResolvableSitrecReference(filename)) return false;
+        if (filename.startsWith("/")) return false;
+        const normalized = this.normalizeWorkingFolderRelativePath(filename);
+        if (!normalized) return false;
+        if (!normalized.includes("/")) return true;
+        // Nested local assets are stored under a dedicated local folder prefix.
+        return normalized.startsWith("local/");
+    }
+
+    /**
+     * Normalize/sanitize a relative path intended for the working folder.
+     * Prevents traversal and strips query fragments.
+     * @param {string} path
+     * @returns {string|null}
+     */
+    normalizeWorkingFolderRelativePath(path) {
+        if (typeof path !== "string") return null;
+        let normalized = path.split("?")[0].trim().replace(/\\/g, "/");
+        while (normalized.startsWith("./")) {
+            normalized = normalized.substring(2);
+        }
+        normalized = normalized.replace(/^\/+/, "");
+        const parts = normalized.split("/").filter(Boolean);
+        if (parts.length === 0) return null;
+        if (parts.some(part => part === "." || part === "..")) return null;
+        return parts.join("/");
+    }
+
+    /**
+     * Resolve a FileSystemFileHandle from the working folder.
+     * Supports nested relative paths and optional directory creation.
+     * @param {string} relativePath
+     * @param {{create?: boolean, directoryHandle?: FileSystemDirectoryHandle}} [options]
+     * @returns {Promise<FileSystemFileHandle>}
+     */
+    async getWorkingFolderFileHandle(relativePath, {create = false, directoryHandle = this.directoryHandle} = {}) {
+        assert(directoryHandle !== undefined, `No directory handle for local file ${relativePath}`);
+        const normalizedPath = this.normalizeWorkingFolderRelativePath(relativePath);
+        assert(normalizedPath, `Invalid local working-folder path: ${relativePath}`);
+
+        const pathParts = normalizedPath.split("/");
+        const fileName = pathParts.pop();
+
+        let currentHandle = directoryHandle;
+        for (const part of pathParts) {
+            currentHandle = await currentHandle.getDirectoryHandle(part, {create});
+        }
+        return currentHandle.getFileHandle(fileName, {create});
+    }
+
+    /**
+     * Read a file from the working folder.
+     * @param {string} relativePath
+     * @param {FileSystemDirectoryHandle} [directoryHandle]
+     * @returns {Promise<ArrayBuffer>}
+     */
+    async readWorkingFolderFile(relativePath, directoryHandle = this.directoryHandle) {
+        const fileHandle = await this.getWorkingFolderFileHandle(relativePath, {create: false, directoryHandle});
+        const file = await fileHandle.getFile();
+        return file.arrayBuffer();
+    }
+
+    /**
+     * Write data to the working folder, creating intermediate directories as needed.
+     * @param {string} relativePath
+     * @param {ArrayBuffer|Blob|Uint8Array} data
+     * @param {FileSystemDirectoryHandle} [directoryHandle]
+     * @returns {Promise<string>} The normalized relative path written.
+     */
+    async writeWorkingFolderFile(relativePath, data, directoryHandle = this.directoryHandle) {
+        const normalizedPath = this.normalizeWorkingFolderRelativePath(relativePath);
+        assert(normalizedPath, `Invalid local working-folder write path: ${relativePath}`);
+
+        const fileHandle = await this.getWorkingFolderFileHandle(normalizedPath, {create: true, directoryHandle});
+        const writable = await fileHandle.createWritable();
+        await writable.write(data);
+        await writable.close();
+        return normalizedPath;
+    }
+
+    /**
+     * Sanitize a filename for writing into the local working folder.
+     * @param {string} fileName
+     * @param {string} [fallbackName="file.bin"]
+     * @returns {string}
+     */
+    sanitizeLocalRehostFileName(fileName, fallbackName = "file.bin") {
+        let safe = (fileName || "").split("?")[0].replace(/\\/g, "/");
+        if (safe.includes("/")) {
+            safe = safe.split("/").pop();
+        }
+        safe = safe.trim();
+        if (!safe) {
+            safe = fallbackName;
+        }
+        safe = safe.replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_");
+        if (safe === "." || safe === "..") {
+            safe = fallbackName;
+        }
+        return safe;
+    }
+
+    /**
+     * Suggest a subfolder for local rehosted assets.
+     * @param {object} fileEntry
+     * @param {string} key
+     * @returns {string}
+     */
+    getLocalRehostSubfolder(fileEntry = {}, key = "") {
+        if (fileEntry.dataType === "videoImage" || fileEntry.dataType === "groundOverlayImage" || fileEntry.dataType === "kmzImage" || fileEntry.dataType === "image") {
+            return "local/media";
+        }
+        if (fileEntry.dataType === "trackfile" || fileEntry.isTLE || key === "starLink") {
+            return "local/tracks";
+        }
+        if (fileEntry.dataType === "model") {
+            return "local/models";
+        }
+        return "local/assets";
+    }
+
+    /**
+     * Choose a write path that reuses existing identical files and avoids collisions.
+     * If an existing file has identical content, returns that same path (no extra copy needed).
+     * @param {string} preferredRelativePath
+     * @param {ArrayBuffer} sourceBuffer
+     * @param {FileSystemDirectoryHandle} [directoryHandle]
+     * @returns {Promise<{path: string, reusedExisting: boolean}>}
+     */
+    async chooseLocalRehostPath(preferredRelativePath, sourceBuffer, directoryHandle = this.directoryHandle) {
+        const normalizedPreferred = this.normalizeWorkingFolderRelativePath(preferredRelativePath);
+        assert(normalizedPreferred, `Invalid preferred local rehost path: ${preferredRelativePath}`);
+
+        const parts = normalizedPreferred.split("/");
+        const preferredName = parts.pop();
+        const prefix = parts.length > 0 ? parts.join("/") + "/" : "";
+
+        const extIndex = preferredName.lastIndexOf(".");
+        const base = extIndex > 0 ? preferredName.substring(0, extIndex) : preferredName;
+        const ext = extIndex > 0 ? preferredName.substring(extIndex) : "";
+
+        let counter = 2;
+        let candidateName = preferredName;
+        while (true) {
+            const candidatePath = prefix + candidateName;
+            try {
+                const existingHandle = await this.getWorkingFolderFileHandle(candidatePath, {create: false, directoryHandle});
+                const existingFile = await existingHandle.getFile();
+                const existingBuffer = await existingFile.arrayBuffer();
+
+                // Reuse existing file if identical bytes (no recopy needed).
+                if (areArrayBuffersEqual(existingBuffer, sourceBuffer)) {
+                    return {path: candidatePath, reusedExisting: true};
+                }
+
+                candidateName = `${base}-${counter}${ext}`;
+                counter++;
+            } catch (error) {
+                if (error?.name === "NotFoundError") {
+                    return {path: candidatePath, reusedExisting: false};
+                }
+                throw error;
+            }
+        }
+    }
+
+    /**
+     * Copy dynamic/imported assets into the working folder for local saves.
+     * Local-copy paths are stored in `localStaticURL` and used only for local serialization.
+     * @param {FileSystemDirectoryHandle} directoryHandle
+     * @param {boolean} [rehostVideo=false]
+     * @returns {Promise<void>}
+     */
+    async rehostDynamicLinksLocal(directoryHandle, rehostVideo = false) {
+        if (!directoryHandle) return;
+        const todayDateStr = new Date().toISOString().split("T")[0];
+
+        // Local copy for dropped video content (so local saves are portable).
+        if (rehostVideo && NodeMan.exists("video")) {
+            const videoNode = NodeMan.get("video");
+            videoNode.updateCurrentVideoEntry();
+
+            if (videoNode.videos && videoNode.videos.length > 0) {
+                for (const entry of videoNode.videos) {
+                    if (entry.isImage) continue;
+                    const videoDroppedData = entry.videoData?.videoDroppedData;
+                    if (!videoDroppedData) continue;
+
+                    const safeName = this.sanitizeLocalRehostFileName(entry.fileName, `video-${todayDateStr}.mp4`);
+                    const existingRelativePath = this.isLikelyWorkingFolderAssetPath(entry.fileName)
+                        ? this.normalizeWorkingFolderRelativePath(entry.fileName)
+                        : null;
+                    const preferredPath = existingRelativePath || `local/media/${safeName}`;
+                    const {path: chosenPath, reusedExisting} = await this.chooseLocalRehostPath(preferredPath, videoDroppedData, directoryHandle);
+                    if (!reusedExisting) {
+                        await this.writeWorkingFolderFile(chosenPath, videoDroppedData, directoryHandle);
+                    }
+                    entry.localStaticURL = chosenPath;
+
+                    if (entry === videoNode.videos[videoNode.currentVideoIndex]) {
+                        videoNode.localStaticURL = chosenPath;
+                    }
+                }
+            } else if (videoNode.videoData?.videoDroppedData) {
+                const safeName = this.sanitizeLocalRehostFileName(videoNode.fileName, `video-${todayDateStr}.mp4`);
+                const existingRelativePath = this.isLikelyWorkingFolderAssetPath(videoNode.fileName)
+                    ? this.normalizeWorkingFolderRelativePath(videoNode.fileName)
+                    : null;
+                const preferredPath = existingRelativePath || `local/media/${safeName}`;
+                const {path: chosenPath, reusedExisting} = await this.chooseLocalRehostPath(preferredPath, videoNode.videoData.videoDroppedData, directoryHandle);
+                if (!reusedExisting) {
+                    await this.writeWorkingFolderFile(chosenPath, videoNode.videoData.videoDroppedData, directoryHandle);
+                }
+                videoNode.localStaticURL = chosenPath;
+            }
+        }
+
+        for (const key of Object.keys(this.list)) {
+            const fileEntry = this.list[key];
+            if (!fileEntry || fileEntry.skipSerialization) continue;
+            if (!fileEntry.dynamicLink) continue;
+            if (!fileEntry.original) continue;
+
+            let preferredName;
+            if (key === "starLink") {
+                const extension = this.deriveExtension(fileEntry.filename || "starLink.txt");
+                preferredName = `starLink-${todayDateStr}.${extension}`;
+            } else {
+                preferredName = this.sanitizeLocalRehostFileName(fileEntry.filename || key, `${key || "asset"}.bin`);
+            }
+
+            const subfolder = this.getLocalRehostSubfolder(fileEntry, key);
+            const existingRelativePath = this.isLikelyWorkingFolderAssetPath(fileEntry.filename)
+                ? this.normalizeWorkingFolderRelativePath(fileEntry.filename)
+                : null;
+            const preferredPath = existingRelativePath || `${subfolder}/${preferredName}`;
+            const {path: chosenPath, reusedExisting} = await this.chooseLocalRehostPath(preferredPath, fileEntry.original, directoryHandle);
+            if (!reusedExisting) {
+                await this.writeWorkingFolderFile(chosenPath, fileEntry.original, directoryHandle);
+            }
+            fileEntry.localStaticURL = chosenPath;
+
+            if (fileEntry.dataType === "videoImage" && NodeMan.exists("video")) {
+                const videoNode = NodeMan.get("video");
+                const videoItem = videoNode.videos?.find(v => v.imageFileID === key);
+                if (videoItem) {
+                    videoItem.localStaticURL = chosenPath;
+                }
+            }
+        }
     }
 
     /**

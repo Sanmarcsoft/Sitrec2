@@ -3502,7 +3502,9 @@ export class CCustomManager {
                             fileName: entry.fileName,
                             isImage: entry.isImage || false
                         };
-                        if (entry.staticURL) {
+                        if (local && entry.localStaticURL) {
+                            exported.staticURL = entry.localStaticURL;
+                        } else if (entry.staticURL) {
                             exported.staticURL = entry.staticURL;
                         } else if (local && entry.fileName) {
                             exported.staticURL = entry.fileName;
@@ -3515,6 +3517,9 @@ export class CCustomManager {
                     out.videos = videosToExport;
                     out.currentVideoIndex = videoNode.currentVideoIndex;
                     console.log("Exporting: videos array with", videosToExport.length, "entries");
+                } else if (local && videoNode.localStaticURL) {
+                    console.log("Exporting: LOCAL Found video node with localStaticURL = ", videoNode.localStaticURL)
+                    out.videoFile = videoNode.localStaticURL;
                 } else if (videoNode.staticURL) {
                     // Fallback for legacy single video
                     console.log("Exporting: Found video node with staticURL = ", videoNode.staticURL)
@@ -3570,8 +3575,8 @@ export class CCustomManager {
                 if (!file.isMultiple) {
                     if (local) {
                         // if we are saving locally, then we don't need to rehost the files
-                        // so just save the original name
-                        files[id] = file.filename
+                        // so use localStaticURL if available, otherwise original filename
+                        files[id] = file.localStaticURL || file.filename
                     } else {
                         // Only include files that have been successfully rehosted
                         if (file.staticURL) {
@@ -3836,7 +3841,7 @@ export class CCustomManager {
      * @param {FileSystemFileHandle} [fileHandle=null] - If provided (and local=true), save directly into this file.
      * @returns {Promise<{savedName?: string, fileHandle?: FileSystemFileHandle}|void>}
      */
-    serialize(name, version, local = false, directoryHandle = null, fileHandle = null) {
+    async serialize(name, version, local = false, directoryHandle = null, fileHandle = null) {
         console.log("Serializing custom sitch")
 
         assert(Sit.canMod || Sit.isCustom, "one of Sit.canMod or Sit.isCustom must be true to serialize a sitch")
@@ -3847,9 +3852,13 @@ export class CCustomManager {
 
         if (local) {
 
-            // if we are saving locally, then we don't need to rehost the files
-            // so just save the stringified sitch
-            // with the loaded files using their original names
+            // For working-folder local saves, copy dynamic/imported assets into the folder first.
+            // This enables portable local sitches without manual file shuffling.
+            if (directoryHandle) {
+                await FileManager.rehostDynamicLinksLocal(directoryHandle, true);
+            }
+
+            // Save the stringified sitch using localStaticURL paths when present.
             let str = this.getCustomSitchString(true);
 
             // special handling for local save of a sitch with a dropped TS file

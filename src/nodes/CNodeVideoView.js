@@ -419,7 +419,12 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
     isValidVideoURL(url) {
         if (!url) return false;
-        return url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:');
+        if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:')) {
+            return true;
+        }
+        // Local working-folder videos are stored as relative paths like "local/media/foo.mp4".
+        const {FileManager} = require("../Globals");
+        return !!FileManager?.directoryHandle && typeof url === "string" && !url.startsWith("/");
     }
     
     /**

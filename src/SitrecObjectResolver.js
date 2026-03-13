@@ -224,14 +224,16 @@ export async function resolveSitrecReference(value, {force = false} = {}) {
         return null;
     }
 
-    const cacheKey = isSitrecObjectRef(value) ? value : toCanonicalSitrecRef(value);
+    // Normalize to decoded canonical ref to avoid double-encoding keys like "%20".
+    const canonicalRef = toCanonicalSitrecRef(value);
+    const cacheKey = canonicalRef;
     const now = Date.now();
     const cached = objectUrlCache.get(cacheKey);
     if (!force && cached && cached.data?.url && (!cached.expiresMs || cached.expiresMs - now > 30_000)) {
         return cached.data;
     }
 
-    const url = withTestUser(SITREC_SERVER + "object.php?ref=" + encodeURIComponent(value));
+    const url = withTestUser(SITREC_SERVER + "object.php?ref=" + encodeURIComponent(canonicalRef));
     const response = await fetch(url, {mode: "cors", cache: "no-store"});
     if (!response.ok) {
         throw new Error(`Object resolver failed: HTTP ${response.status}`);
