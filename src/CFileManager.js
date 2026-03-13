@@ -175,6 +175,11 @@ export class CFileManager extends CManager {
         this.localSaveTargetArmed = false;
         // Last successful save intent. Used by Cmd/Ctrl+S to repeat expected behavior.
         this.lastSaveAction = null;
+        // Deduplicate "select working folder" prompts when multiple local assets resolve at once.
+        this._pendingLocalFolderAcquirePromise = null;
+        // Throttle repeated local-import error dialogs during a single failed load burst.
+        this._localImportErrorLastKey = null;
+        this._localImportErrorLastMs = 0;
 
         this.rehoster = new CRehoster();
 
@@ -282,6 +287,136 @@ export class CFileManager extends CManager {
         }
 
         showError(message, error);
+    }
+
+    /**
+     * True when a path looks like a local-working-folder reference embedded in a local sitch.
+     * This detection is independent of whether a working folder is currently selected.
+     * @param {string} filename
+     * @returns {boolean}
+     */
+    isLikelyImportedLocalAssetPath(filename) {
+        if (typeof filename !== "string" || filename.length === 0) return false;
+        if (isHttpOrHttps(filename) || isResolvableSitrecReference(filename)) return false;
+        if (filename.startsWith("/")) return false;
+
+        const normalized = this.normalizeWorkingFolderRelativePath(filename);
+        if (!normalized) return false;
+
+        // Local saves currently write copied assets under local/... .
+        return normalized.startsWith("local/");
+    }
+
+    /**
+     * Show a user-facing message that local-folder selection is required to load an imported local sitch.
+     * @param {string} assetPath
+     */
+    showLocalFolderRequiredForImportedAsset(assetPath) {
+        const normalized = this.normalizeWorkingFolderRelativePath(assetPath) || assetPath;
+        this.showLocalImportError(
+            "local-folder-required",
+            `This sitch references a local file path:\n${normalized}\n\n` +
+            "To load it, select the folder that contains this sitch and its local assets:\n" +
+            "File -> Local -> Select Local Sitch Folder"
+        );
+    }
+
+    /**
+     * Show a user-facing message that the selected folder does not contain a required local asset.
+     * @param {string} assetPath
+     * @param {Error|*} [error]
+     */
+    showMissingLocalAssetInSelectedFolder(assetPath, error = null) {
+        const normalized = this.normalizeWorkingFolderRelativePath(assetPath) || assetPath;
+        const folderName = this.directoryHandle?.name || this._pendingHandle?.name || "selected folder";
+        this.showLocalImportError(
+            "missing-local-asset",
+            `Could not find local asset:\n${normalized}\n\n` +
+            `The current Local Sitch Folder ("${folderName}") does not contain this file.\n` +
+            "Select the correct folder and try loading the sitch again:\n" +
+            "File -> Local -> Select Local Sitch Folder",
+            error
+        );
+    }
+
+    /**
+     * Show local-import related errors with brief burst-throttling.
+     * This allows the same error to appear again on later attempts, while avoiding modal spam
+     * from multiple assets failing at once in a single load.
+     * @param {string} key
+     * @param {string} message
+     * @param {Error|*} [error]
+     */
+    showLocalImportError(key, message, error = null) {
+        const now = Date.now();
+        const isDuplicateBurst = this._localImportErrorLastKey === key && (now - this._localImportErrorLastMs) < 1000;
+        if (isDuplicateBurst) return;
+
+        this._localImportErrorLastKey = key;
+        this._localImportErrorLastMs = now;
+        showError(message, error);
+    }
+
+    /**
+     * Best-effort attempt to ensure a working folder is available for imported local sitch assets.
+     * If no folder is selected, prompts the user to pick one.
+     * @param {string} assetPath
+     * @returns {Promise<boolean>}
+     */
+    async ensureWorkingFolderForImportedLocalAsset(assetPath) {
+        if (this.directoryHandle) return true;
+
+        // Reuse in-flight prompt when multiple assets resolve concurrently.
+        if (this._pendingLocalFolderAcquirePromise) {
+            return this._pendingLocalFolderAcquirePromise;
+        }
+
+        this._pendingLocalFolderAcquirePromise = (async () => {
+            // If a previously remembered folder exists, try reconnecting first.
+            if (this._pendingHandle && !this.directoryHandle) {
+                try {
+                    const permission = await this._pendingHandle.queryPermission({mode: "readwrite"});
+                    if (permission === "granted") {
+                        this.directoryHandle = this._pendingHandle;
+                        this._pendingHandle = null;
+                        this._pendingSitchFilename = null;
+                        this.updateLocalGUI();
+                        await this.persistWorkingFolder();
+                        return true;
+                    }
+                } catch (error) {
+                    console.warn("Failed to auto-reconnect pending working folder:", error);
+                }
+            }
+
+            if (!supportsDirectoryPicker()) {
+                showLocalFolderAccessUnsupportedMessage();
+                this.showLocalFolderRequiredForImportedAsset(assetPath);
+                return false;
+            }
+
+            const normalized = this.normalizeWorkingFolderRelativePath(assetPath) || assetPath;
+            const wantsSelection = confirm(
+                `This imported sitch references local file "${normalized}", but no Local Sitch Folder is selected.\n\n` +
+                "Select that folder now?"
+            );
+            if (!wantsSelection) {
+                this.showLocalFolderRequiredForImportedAsset(normalized);
+                return false;
+            }
+
+            await this.openDirectory();
+            if (this.directoryHandle) {
+                return true;
+            }
+
+            this.showLocalFolderRequiredForImportedAsset(normalized);
+            return false;
+        })().finally(() => {
+            this._pendingLocalFolderAcquirePromise = null;
+        });
+
+        return this._pendingLocalFolderAcquirePromise;
     }
 
     hasServerBackedSaves() {
@@ -2071,10 +2206,29 @@ export class CFileManager extends CManager {
         const loadingId = `asset-${id}-${Date.now()}`;
         LoadingManager.registerLoading(loadingId, filename, "Asset");
 
+        const isImportedLocalPath = this.isLikelyImportedLocalAssetPath(filename);
         const isWorkingFolderPath = this.isLikelyWorkingFolderAssetPath(filename);
 
-        if (isWorkingFolderPath) {
-            loadingPromise = this.readWorkingFolderFile(filename).then(arrayBuffer => {
+        if (isWorkingFolderPath || isImportedLocalPath) {
+            const localReadPromise = (isWorkingFolderPath
+                ? Promise.resolve(true)
+                : this.ensureWorkingFolderForImportedLocalAsset(filename))
+                .then(canReadLocalAsset => {
+                    if (!canReadLocalAsset) {
+                        throw new Error(`Local folder not selected for "${filename}"`);
+                    }
+                    return this.readWorkingFolderFile(filename);
+                })
+                .catch(error => {
+                    if (error?.name === "NotFoundError") {
+                        this.showMissingLocalAssetInSelectedFolder(filename, error);
+                    } else if (!this.directoryHandle && isImportedLocalPath) {
+                        this.showLocalFolderRequiredForImportedAsset(filename);
+                    }
+                    throw error;
+                });
+
+            loadingPromise = localReadPromise.then(arrayBuffer => {
                 LoadingManager.completeLoading(loadingId);
                 return this.parseResult(filename, arrayBuffer, null);
             }).catch(error => {

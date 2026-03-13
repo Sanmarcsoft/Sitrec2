@@ -480,7 +480,29 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
                 this.skipCurrentVideoRestore();
             }
         } else {
+            const { FileManager } = require("../Globals");
             const storedRef = entry.staticURL || entry.fileName;
+            const isImportedLocalPath = FileManager?.isLikelyImportedLocalAssetPath?.(storedRef);
+            if (isImportedLocalPath) {
+                const hasWorkingFolder = await FileManager.ensureWorkingFolderForImportedLocalAsset(storedRef);
+                if (!hasWorkingFolder) {
+                    console.warn(`[VideoLoad] Cannot restore video[${nextIdx}] "${entry.fileName}" - Local Sitch Folder is required`);
+                    this.skipCurrentVideoRestore();
+                    return;
+                }
+
+                try {
+                    await FileManager.getWorkingFolderFileHandle(storedRef, {create: false});
+                } catch (error) {
+                    if (error?.name === "NotFoundError") {
+                        FileManager.showMissingLocalAssetInSelectedFolder(storedRef, error);
+                        this.skipCurrentVideoRestore();
+                        return;
+                    }
+                    throw error;
+                }
+            }
+
             const url = await resolveURLForFetch(storedRef).catch(error => {
                 console.error(`[VideoLoad] Failed to resolve video[${nextIdx}] "${entry.fileName}":`, error);
                 return null;
