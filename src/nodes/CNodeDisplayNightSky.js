@@ -806,6 +806,37 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
     }
 
+    getObserverFromCameraPos(cameraPos) {
+        // Build the astronomical observer from the actual render camera position.
+        // The Sun and Moon are drawn on shared global sky scenes, so any view that
+        // wants correct topocentric placement must derive its own observer before
+        // rendering those shared meshes.
+        const cameraLLA = ECEFToLLAVD_radii(cameraPos);
+        return new Astronomy.Observer(cameraLLA.x, cameraLLA.y, cameraLLA.z);
+    }
+
+    syncPlanetSpritesToObserver(cameraPos, date = this.in.startTime.dateNow, options = {}) {
+        const observer = this.getObserverFromCameraPos(cameraPos);
+        const storeState = options.storeState ?? true;
+
+        for (const [name, planet] of Object.entries(this.planets.planetSprites)) {
+            // When storeState is false we still move/scale the shared Sun and Moon
+            // meshes for the current render camera, but we leave the canonical
+            // ephemeris values alone so arrows/debug readouts do not depend on
+            // whichever view happened to render last.
+            this.planets.updatePlanetSprite(
+                name,
+                planet.sprite,
+                date,
+                observer,
+                planet.daySkySprite,
+                {storeState}
+            );
+        }
+
+        return observer;
+    }
+
     update(frame) {
 
         if (this.useDayNight) {
@@ -849,18 +880,11 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
         var nowDate = this.in.startTime.dateNow
 
-        // Use lookCamera position for observer instead of fixed Sit coordinates
-        const cameraPos = this.camera.position;
-        // Same reasoning as above: topocentric Moon geometry is sensitive enough
-        // that we want the observer derived from the WGS84 ellipsoid, not the
-        // simpler spherical Earth approximation.
-        const cameraLLA = ECEFToLLAVD_radii(cameraPos);
-        let observer = new Astronomy.Observer(cameraLLA.x, cameraLLA.y, cameraLLA.z);
-        // update the planets position for the current time
-        for (const [name, planet] of Object.entries(this.planets.planetSprites)) {
-            // Update both the regular sprite and day sky sprite in one call
-            this.planets.updatePlanetSprite(name, planet.sprite, nowDate, observer, planet.daySkySprite)
-            // Update celestial arrows and Sun-specific calculations
+        // Keep the canonical ephemeris state tied to the look camera because the
+        // celestial arrows/debug tools are anchored there. Individual views will
+        // resync the shared Sun/Moon meshes to their own cameras during renderSky().
+        const observer = this.syncPlanetSpritesToObserver(this.camera.position, nowDate, {storeState: true});
+        for (const [name] of Object.entries(this.planets.planetSprites)) {
             const planetData = this.planets.planetSprites[name];
             this.updateArrow(name, planetData.ra, planetData.dec, nowDate, observer, 100)
         }

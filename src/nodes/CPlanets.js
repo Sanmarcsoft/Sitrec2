@@ -341,8 +341,9 @@ export class CPlanets {
         }
     }
 
-    updateMoonMesh(date, observer) {
+    updateMoonMesh(date, observer, options = {}) {
         if (!this.moonMesh) return;
+        const storeState = options.storeState ?? true;
         
         // Topocentric center direction for the Moon. This sets where the Moon
         // appears in the sky for the current observer and naturally captures
@@ -392,7 +393,7 @@ export class CPlanets {
             this.moonDayMaterial.uniforms.sunDirection.value.copy(sunInMoonLocal);
         }
         
-        if (this.planetSprites["Moon"]) {
+        if (storeState && this.planetSprites["Moon"]) {
             this.planetSprites["Moon"].ra = ra;
             this.planetSprites["Moon"].dec = dec;
             this.planetSprites["Moon"].equatorial = equatorial;
@@ -435,9 +436,10 @@ export class CPlanets {
      * @param {Astronomy.Observer} observer Observer location
      * @param {Sprite} [daySkySprite] Optional day sky sprite to update in parallel
      */
-    updatePlanetSprite(planet, sprite, date, observer, daySkySprite = undefined) {
+    updatePlanetSprite(planet, sprite, date, observer, daySkySprite = undefined, options = {}) {
+        const storeState = options.storeState ?? true;
         if (planet === "Moon") {
-            this.updateMoonMesh(date, observer);
+            this.updateMoonMesh(date, observer, {storeState});
             return;
         }
         
@@ -505,7 +507,7 @@ export class CPlanets {
                 color: color,
                 daySkySprite: daySkySprite,
             };
-        } else {
+        } else if (storeState) {
             this.planetSprites[planet].ra = ra;
             this.planetSprites[planet].dec = dec;
             this.planetSprites[planet].mag = mag;

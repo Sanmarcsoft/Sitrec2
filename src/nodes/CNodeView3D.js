@@ -725,6 +725,10 @@ export class CNodeView3D extends CNodeViewCanvas {
             // Update star and satellite scales for this view
             const nightSkyNode = NodeMan.get("NightSkyNode");
             if (nightSkyNode) {
+                // The sky scenes are shared across views, so resync the Sun/Moon
+                // meshes to the camera that is actually being rendered right now.
+                // Without this, the main view can inherit the look-camera observer.
+                nightSkyNode.syncPlanetSpritesToObserver(lookCamera.position, undefined, {storeState: false});
                 nightSkyNode.starField.updateStarScales(this);
                 nightSkyNode.updateSatelliteScales(this);
             }
@@ -1495,6 +1499,12 @@ export class CNodeView3D extends CNodeViewCanvas {
 
             // // scale the sprites one for each viewport
             const nightSkyNode = NodeMan.get("NightSkyNode")
+            if (nightSkyNode?.syncPlanetSpritesToObserver) {
+                // Same shared-scene issue as above: render the Sun/Moon from this
+                // view's observer, but keep global arrow/debug ephemeris state
+                // owned by the NightSkyNode update step.
+                nightSkyNode.syncPlanetSpritesToObserver(this.camera.position, undefined, {storeState: false});
+            }
             
             if (Globals.renderDebugFlags.dbg_updateStarScales) {
                 nightSkyNode.starField.updateStarScales(this)
