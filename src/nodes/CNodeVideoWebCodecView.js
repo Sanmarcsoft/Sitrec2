@@ -166,7 +166,7 @@ export class CNodeVideoWebCodecView extends CNodeVideoView {
             this.videoData = new CVideoAudioOnly({id: this.id + "_data_" + this.videos.length, dropFile: file},
                 this.loadedCallback.bind(this), this.errorCallback.bind(this));
         }
-        else if (fileName.endsWith('.h264') || file.type === 'video/h264') {
+        else if (fileName.endsWith('.h264') || fileName.endsWith('.dad') || file.type === 'video/h264') {
             console.log("Using H.264 specialized handler for: " + file.name);
             this.videoData = new CVideoH264Data({id: this.id + "_data_" + this.videos.length, dropFile: file},
                 this.loadedCallback.bind(this), this.errorCallback.bind(this));

@@ -2833,8 +2833,8 @@ export class CFileManager extends CManager {
 
                 const videoNode = NodeMan.get("video");
 
-                // Check if it's an H.264 stream
-                if (fileExt === "h264") {
+                // Check if it's an H.264 stream (.h264 or .dad)
+                if (fileExt === "h264" || fileExt === "dad") {
                     console.log("H.264 stream detected, attempting to load with specialized handler");
                     const blob = new Blob([parsedFile], { type: 'video/h264' });
                     const file = new File([blob], filename, { type: 'video/h264' });
@@ -3448,8 +3448,9 @@ export class CFileManager extends CManager {
                     }
                     break;
                 }
+                case "dad":
                 case "h264":
-                    // Raw H.264 elementary stream from TS file
+                    // Raw H.264 elementary stream (.h264 or .dad)
                     // These need special handling as they lack MP4 container structure
                     // For now, treat as video data and let the video system handle it
                     dataType = "video";

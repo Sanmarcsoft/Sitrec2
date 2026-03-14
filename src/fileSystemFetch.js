@@ -76,13 +76,15 @@ export async function fileSystemFetch(url, options = {}) {
         const file = await fileHandle.getFile();
         
         // Determine response type based on file extension or options
-        const isBinary = url.endsWith('.bin') || 
-                       url.endsWith('.klv') || 
+        const isBinary = url.endsWith('.bin') ||
+                       url.endsWith('.klv') ||
                        url.endsWith('.ts') ||
                        url.endsWith('.jpg') ||
                        url.endsWith('.png') ||
                        url.endsWith('.mp4') ||
                        url.endsWith('.webm') ||
+                       url.endsWith('.h264') ||
+                       url.endsWith('.dad') ||
                        options.responseType === 'arraybuffer';
         
         // Create a Response object that mimics fetch() response
