@@ -18,7 +18,6 @@
 
 import {
     CircleGeometry,
-    Euler,
     Matrix4,
     Mesh,
     MeshBasicMaterial,
@@ -169,6 +168,46 @@ export class CPlanets {
         return 2 * Math.atan(physicalRadiusMeters / distanceMeters);
     }
 
+    _getMoonBodyAxes(axisInfo) {
+        const alpha = (axisInfo.ra / 24) * 2 * Math.PI;
+        const delta = radians(axisInfo.dec);
+        const spin = radians((((axisInfo.spin % 360) + 360) % 360));
+
+        // Build a true Moon-fixed frame from the IAU rotational elements:
+        // alpha/delta give the north-pole direction in J2000, and spin=W gives
+        // the prime meridian angle around that pole. This is a more stable basis
+        // for crater placement than inferring the face orientation by mixing
+        // libration angles with extra topocentric correction terms.
+        //
+        // Resulting local axes:
+        // - north: Moon north pole
+        // - primeMeridian: selenographic lon=0, lat=0 direction
+        // - east: completes the right-handed texture frame
+        const north = new Vector3(axisInfo.north.x, axisInfo.north.y, axisInfo.north.z).normalize();
+
+        // nodeDir and meridianRef are the standard two perpendicular directions
+        // in the Moon's equatorial plane derived from the pole RA/Dec.
+        // Rotating between them by W lands on the current prime meridian.
+        const nodeDir = new Vector3(-Math.sin(alpha), Math.cos(alpha), 0).normalize();
+        const meridianRef = new Vector3(
+            -Math.cos(alpha) * Math.sin(delta),
+            -Math.sin(alpha) * Math.sin(delta),
+            Math.cos(delta)
+        ).normalize();
+
+        // Prime meridian in inertial space at this instant.
+        const primeMeridian = nodeDir.multiplyScalar(Math.cos(spin))
+            .add(meridianRef.multiplyScalar(Math.sin(spin)))
+            .normalize();
+
+        // The map uses the Moon's equatorial east-west direction across the face.
+        // Together with the existing +0.25 U offset in the shader, this keeps the
+        // Earth-facing near side aligned with the equirectangular texture.
+        const east = new Vector3().crossVectors(north, primeMeridian).normalize();
+
+        return {east, north, primeMeridian};
+    }
+
     /**
      * Removes all planet sprites from scenes
      * Safely disposes of materials and textures
@@ -305,10 +344,10 @@ export class CPlanets {
     updateMoonMesh(date, observer) {
         if (!this.moonMesh) return;
         
+        // Topocentric center direction for the Moon. This sets where the Moon
+        // appears in the sky for the current observer and naturally captures
+        // topocentric viewing geometry.
         const celestialInfo = Astronomy.Equator("Moon", date, observer, false, true);
-        const geocentricObserver = new Astronomy.Observer(0, 0, 0);
-        const geocentricInfo = Astronomy.Equator("Moon", date, geocentricObserver, false, true);
-        const libration = Astronomy.Libration(date);
         const axisInfo = Astronomy.RotationAxis("Moon", date);
         
         const ra = (celestialInfo.ra) / 24 * 2 * Math.PI;
@@ -318,45 +357,30 @@ export class CPlanets {
         const moonAngularDiameter = this._getAngularDiameterRad("Moon", date, observer, 1737400);
         const moonRadius = Math.tan(moonAngularDiameter / 2) * this.sphereRadius;
         
+        // The shader still needs the Sun direction in the Moon's local frame to
+        // place the terminator correctly on the textured sphere.
         const sunInfo = Astronomy.Equator("Sun", date, observer, false, true);
         const sunRa = (sunInfo.ra) / 24 * 2 * Math.PI;
         const sunDec = radians(sunInfo.dec);
         const sunEquatorial = raDec2Celestial(sunRa, sunDec, this.sphereRadius);
         
         const sunDir = new Vector3(sunEquatorial.x, sunEquatorial.y, sunEquatorial.z).normalize();
-        
-        const toMoonTopo = new Vector3(equatorial.x, equatorial.y, equatorial.z).normalize();
-        const toEarth = toMoonTopo.clone().negate();
-        
-        const geoRa = (geocentricInfo.ra) / 24 * 2 * Math.PI;
-        const geoDec = radians(geocentricInfo.dec);
-        const geoEquatorial = raDec2Celestial(geoRa, geoDec, this.sphereRadius);
-        const toMoonGeo = new Vector3(geoEquatorial.x, geoEquatorial.y, geoEquatorial.z).normalize();
-        
-        const moonNorthPole = new Vector3(axisInfo.north.x, axisInfo.north.y, axisInfo.north.z).normalize();
-        const moonNorth = moonNorthPole.clone().sub(toEarth.clone().multiplyScalar(moonNorthPole.dot(toEarth))).normalize();
-        const moonEast = new Vector3().crossVectors(moonNorth, toEarth).normalize();
-        
-        const parallax = toMoonTopo.clone().sub(toMoonGeo);
-        const parallaxEast = parallax.dot(moonEast);
-        const parallaxNorth = parallax.dot(moonNorth);
-        
+
+        // Orient the Moon from its body-fixed frame directly.
+        // The previous version started from the Earth-facing direction and then
+        // added libration/parallax terms by hand; that was close, but subtle
+        // crater placement errors remained. Using the prime meridian explicitly
+        // keeps visible lunar features anchored to the actual rotational model.
+        const {east, north, primeMeridian} = this._getMoonBodyAxes(axisInfo);
         const rotMatrix = new Matrix4();
-        rotMatrix.makeBasis(moonEast, moonNorth, toEarth);
-        
-        const elonRad = radians(-libration.elon) + parallaxEast;
-        const elatRad = radians(-libration.elat) + parallaxNorth;
-        
-        const librationMatrix = new Matrix4();
-        librationMatrix.makeRotationFromEuler(new Euler(elatRad, elonRad, 0, 'YXZ'));
-        
-        const finalRotation = rotMatrix.clone().multiply(librationMatrix);
+        rotMatrix.makeBasis(east, north, primeMeridian);
         
         this.moonMesh.position.set(equatorial.x, equatorial.y, equatorial.z);
         this.moonMesh.scale.set(moonRadius, moonRadius, moonRadius);
-        this.moonMesh.setRotationFromMatrix(finalRotation);
+        this.moonMesh.setRotationFromMatrix(rotMatrix);
         
-        const invRotMatrix = finalRotation.clone().invert();
+        // Convert the Sun direction into Moon-local space for lighting.
+        const invRotMatrix = rotMatrix.clone().invert();
         const sunInMoonLocal = sunDir.clone().applyMatrix4(invRotMatrix);
         
         this.moonMaterial.uniforms.sunDirection.value.copy(sunInMoonLocal);
@@ -364,7 +388,7 @@ export class CPlanets {
         if (this.moonDayMesh && this.moonDayMaterial) {
             this.moonDayMesh.position.copy(this.moonMesh.position);
             this.moonDayMesh.scale.copy(this.moonMesh.scale);
-            this.moonDayMesh.setRotationFromMatrix(finalRotation);
+            this.moonDayMesh.setRotationFromMatrix(rotMatrix);
             this.moonDayMaterial.uniforms.sunDirection.value.copy(sunInMoonLocal);
         }
         

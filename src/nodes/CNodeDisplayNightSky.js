@@ -10,7 +10,7 @@ import {
     propagateLayerMaskObject,
     setLayerMaskRecursive
 } from "../threeExt";
-import {ECEFToLLAVD_Sphere, getLST, raDecToAzElRADIANS, wgs84} from "../LLA-ECEF-ENU";
+import {ECEFToLLAVD_radii, ECEFToLLAVD_Sphere, getLST, raDecToAzElRADIANS, wgs84} from "../LLA-ECEF-ENU";
 // npm install three-text2d --save-dev
 // https://github.com/gamestdio/three-text2d
 //import { MeshText2D, textAlign } from 'three-text2d'
@@ -525,7 +525,10 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             cameraPos: this.camera.position,
             ecefToLla: (pos) => {
                 const ecef = pos;
-                return ECEFToLLAVD_Sphere(ecef);
+                // Use ellipsoidal LLA here instead of the older spherical helper.
+                // The Moon is close enough that small observer-position errors show
+                // up as small but visible topocentric feature-placement errors.
+                return ECEFToLLAVD_radii(ecef);
             }
         })
 
@@ -848,7 +851,10 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
         // Use lookCamera position for observer instead of fixed Sit coordinates
         const cameraPos = this.camera.position;
-        const cameraLLA = ECEFToLLAVD_Sphere(cameraPos);
+        // Same reasoning as above: topocentric Moon geometry is sensitive enough
+        // that we want the observer derived from the WGS84 ellipsoid, not the
+        // simpler spherical Earth approximation.
+        const cameraLLA = ECEFToLLAVD_radii(cameraPos);
         let observer = new Astronomy.Observer(cameraLLA.x, cameraLLA.y, cameraLLA.z);
         // update the planets position for the current time
         for (const [name, planet] of Object.entries(this.planets.planetSprites)) {
