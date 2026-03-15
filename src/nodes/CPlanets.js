@@ -94,6 +94,7 @@ export class CPlanets {
             uniforms: {
                 moonTexture: { value: this.textures.moonSurface },
                 sunDirection: { value: new Vector3(1, 0, 0) },
+                observerDirection: { value: new Vector3(0, 0, -1) },
                 skyColor: { value: new Vector3(0, 0, 0) },
                 skyBrightness: { value: 0.0 },
             },
@@ -109,6 +110,7 @@ export class CPlanets {
             fragmentShader: `
                 uniform sampler2D moonTexture;
                 uniform vec3 sunDirection;
+                uniform vec3 observerDirection;
                 uniform vec3 skyColor;
                 uniform float skyBrightness;
                 varying vec3 vNormal;
@@ -116,17 +118,25 @@ export class CPlanets {
                 
                 void main() {
                     vec3 sunDir = normalize(sunDirection);
-                    float intensity = dot(vNormal, sunDir);
-                    float blendFactor = smoothstep(-0.08, 0.08, intensity);
+                    vec3 viewDir = normalize(observerDirection);
+                    float mu0 = max(0.0, dot(vNormal, sunDir));
+                    float mu = max(0.0, dot(vNormal, viewDir));
+                    // Lommel-Seeliger reflectance is a reasonable first-order model
+                    // for an airless body like the Moon. It darkens toward the
+                    // terminator without adding any light to the shadowed side.
+                    float reflectance = 0.0;
+                    if (mu0 > 0.0 && mu > 0.0) {
+                        reflectance = min(1.0, (2.0 * mu0) / max(mu0 + mu, 1e-4));
+                    }
                     float dayBlend = clamp(skyBrightness, 0.0, 1.0);
                     
                     vec2 uv = vUv;
                     uv.x = fract(uv.x + 0.25);
                     vec4 textureColor = texture2D(moonTexture, uv);
-                    vec4 dayColor = textureColor;
+                    vec4 dayColor = textureColor * reflectance;
                     vec4 nightColor = vec4(0.0, 0.0, 0.0, 1.0);
                     
-                    vec4 moonColor = mix(nightColor, dayColor, blendFactor);
+                    vec4 moonColor = mix(nightColor, dayColor, step(1e-5, reflectance));
                     float moonAtten = max(0.0, 1.0 - 0.5 * dayBlend);
                     vec3 finalColor = moonColor.rgb * moonAtten + skyColor;
                     gl_FragColor = vec4(finalColor, 1.0);
@@ -166,6 +176,22 @@ export class CPlanets {
     _getAngularDiameterRad(body, date, observer, physicalRadiusMeters, aberration = true) {
         const distanceMeters = this._getTopocentricDistanceMeters(body, date, observer, aberration);
         return 2 * Math.atan(physicalRadiusMeters / distanceMeters);
+    }
+
+    _getMoonToSunDirection(date, aberration = true) {
+        const sunVector = Astronomy.GeoVector(Astronomy.Body.Sun, date, aberration);
+        const moonVector = Astronomy.GeoVector(Astronomy.Body.Moon, date, aberration);
+
+        // Lighting on the Moon should use the direction from the Moon's center to
+        // the Sun, not the topocentric direction from the Earth observer to the
+        // Sun. Using the observer's Sun direction leaves a small but noticeable
+        // bias in eclipse/new-moon cases where even sub-degree errors create a
+        // one-sided illuminated rim.
+        return new Vector3(
+            sunVector.x - moonVector.x,
+            sunVector.y - moonVector.y,
+            sunVector.z - moonVector.z
+        ).normalize();
     }
 
     _getMoonBodyAxes(axisInfo) {
@@ -358,14 +384,10 @@ export class CPlanets {
         const moonAngularDiameter = this._getAngularDiameterRad("Moon", date, observer, 1737400);
         const moonRadius = Math.tan(moonAngularDiameter / 2) * this.sphereRadius;
         
-        // The shader still needs the Sun direction in the Moon's local frame to
-        // place the terminator correctly on the textured sphere.
-        const sunInfo = Astronomy.Equator("Sun", date, observer, false, true);
-        const sunRa = (sunInfo.ra) / 24 * 2 * Math.PI;
-        const sunDec = radians(sunInfo.dec);
-        const sunEquatorial = raDec2Celestial(sunRa, sunDec, this.sphereRadius);
-        
-        const sunDir = new Vector3(sunEquatorial.x, sunEquatorial.y, sunEquatorial.z).normalize();
+        // Drive the lunar terminator from the physical Moon-center -> Sun vector.
+        // This keeps the lighting basis in the same inertial frame as the Moon's
+        // body rotation and avoids the small topocentric bias from observer -> Sun.
+        const sunDir = this._getMoonToSunDirection(date);
 
         // Orient the Moon from its body-fixed frame directly.
         // The previous version started from the Earth-facing direction and then
@@ -383,14 +405,17 @@ export class CPlanets {
         // Convert the Sun direction into Moon-local space for lighting.
         const invRotMatrix = rotMatrix.clone().invert();
         const sunInMoonLocal = sunDir.clone().applyMatrix4(invRotMatrix);
+        const observerInMoonLocal = equatorial.clone().normalize().negate().applyMatrix4(invRotMatrix).normalize();
         
         this.moonMaterial.uniforms.sunDirection.value.copy(sunInMoonLocal);
+        this.moonMaterial.uniforms.observerDirection.value.copy(observerInMoonLocal);
         
         if (this.moonDayMesh && this.moonDayMaterial) {
             this.moonDayMesh.position.copy(this.moonMesh.position);
             this.moonDayMesh.scale.copy(this.moonMesh.scale);
             this.moonDayMesh.setRotationFromMatrix(rotMatrix);
             this.moonDayMaterial.uniforms.sunDirection.value.copy(sunInMoonLocal);
+            this.moonDayMaterial.uniforms.observerDirection.value.copy(observerInMoonLocal);
         }
         
         if (storeState && this.planetSprites["Moon"]) {
