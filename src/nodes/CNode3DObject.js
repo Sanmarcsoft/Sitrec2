@@ -30,6 +30,7 @@ import {
     Mesh,
     MeshBasicMaterial,
     MeshLambertMaterial,
+    Matrix3,
     MeshPhongMaterial,
     MeshPhysicalMaterial,
     OctahedronGeometry,
@@ -2304,7 +2305,7 @@ export class CNode3DObject extends CNode3DGroup {
         }
         const isShader = this.material && this.material.isShaderMaterial;
         this.model.traverse((child) => {
-            if (child.isMesh) {
+            if (child.isMesh && !child.userData?.sitrecGaussianSplat) {
                 if (child.originalMaterial === undefined) {
                     // save the original material so we can restore it later
                     child.originalMaterial = child.material;
@@ -2382,7 +2383,38 @@ export class CNode3DObject extends CNode3DGroup {
         const common = this.common;
         if (!common) return;
 
+        const target = this.group;
+        if (target && (common.rotateX || common.rotateY || common.rotateZ)) {
+            this.needsUndo = true;
+
+            this.origPosition = target.position.clone();
+            this.origQuaternion = target.quaternion.clone();
+            this.origScale = target.scale.clone();
+
+            if (common.rotateY) {
+                target.rotateY(common.rotateY * Math.PI / 180);
+            }
+
+            if (common.rotateX) {
+                target.rotateX(common.rotateX * Math.PI / 180);
+            }
+
+            if (common.rotateZ) {
+                target.rotateZ(common.rotateZ * Math.PI / 180);
+            }
+
+            target.updateMatrix();
+            target.updateMatrixWorld(true);
+        } else if (target) {
+            target.updateMatrixWorld(true);
+        }
+
         if (this.model) {
+            if (view.camera) {
+                view.camera.updateMatrixWorld(true);
+                view.camera.updateProjectionMatrix?.();
+            }
+
             this.model.traverse((child) => {
                 const material = child.material;
 
@@ -2404,37 +2436,34 @@ export class CNode3DObject extends CNode3DGroup {
 
                     const sortState = child.userData.splatSortState;
                     if (sortState && view.camera) {
-                        child.updateMatrixWorld();
-                        const invMatrix = child.matrixWorld.clone().invert();
-                        const localCam = view.camera.position.clone().applyMatrix4(invMatrix);
-                        sortState.sort(localCam.x, localCam.y, localCam.z);
+                        child.updateWorldMatrix(true, false);
+                        const renderState = child.userData.gaussianSplatRenderState ??= {
+                            worldOrigin: new Vector3(),
+                            viewOrigin: new Vector3(),
+                            viewLinear: new Matrix3(),
+                            objectLinear: new Matrix3(),
+                            modelViewLinear: new Matrix3(),
+                        };
+
+                        // Feed the shader a camera-relative origin plus the linear
+                        // model-view transform so splat projection stays stable even
+                        // when the object lives far from world origin.
+                        renderState.worldOrigin.setFromMatrixPosition(child.matrixWorld);
+                        renderState.viewOrigin.copy(renderState.worldOrigin).applyMatrix4(view.camera.matrixWorldInverse);
+                        renderState.viewLinear.setFromMatrix4(view.camera.matrixWorldInverse);
+                        renderState.objectLinear.setFromMatrix4(child.matrixWorld);
+                        renderState.modelViewLinear.multiplyMatrices(renderState.viewLinear, renderState.objectLinear);
+
+                        if (material.uniforms?.viewOrigin) {
+                            material.uniforms.viewOrigin.value.copy(renderState.viewOrigin);
+                        }
+                        if (material.uniforms?.modelViewLinear) {
+                            material.uniforms.modelViewLinear.value.copy(renderState.modelViewLinear);
+                        }
+                        sortState.sort(view.camera, child.matrixWorld);
                     }
                 }
             });
-        }
-        
-        const target = this.group;
-        if (target && (common.rotateX || common.rotateY || common.rotateZ)) {
-            this.needsUndo = true;
-            
-            this.origPosition = target.position.clone();
-            this.origQuaternion = target.quaternion.clone();
-            this.origScale = target.scale.clone();
-            
-            if (common.rotateY) {
-                target.rotateY(common.rotateY * Math.PI / 180);
-            }
-
-            if (common.rotateX) {
-                target.rotateX(common.rotateX * Math.PI / 180);
-            }
-
-            if (common.rotateZ) {
-                target.rotateZ(common.rotateZ * Math.PI / 180);
-            }
-            
-            target.updateMatrix();
-            target.updateMatrixWorld();
         }
 
         if (this.displayBoundingBox) {

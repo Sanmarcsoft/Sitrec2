@@ -5,18 +5,26 @@ import {DRACOLoader} from "three/addons/loaders/DRACOLoader.js";
 import {GLTFLoader} from "three/addons/loaders/GLTFLoader.js";
 import {PLYLoader} from "three/addons/loaders/PLYLoader.js";
 import {
+    AddEquation,
     BufferAttribute,
     Color,
+    CustomBlending,
+    DoubleSide,
     Group,
     InstancedBufferAttribute,
     InstancedBufferGeometry,
+    Matrix3,
+    Matrix4,
     Mesh,
     MeshStandardMaterial,
     NormalBlending,
+    OneFactor,
+    OneMinusSrcAlphaFactor,
     PlaneGeometry,
     Points,
     PointsMaterial,
     ShaderMaterial,
+    Vector3,
 } from "three";
 
 const SUPPORTED_MODEL_EXTENSIONS = Object.freeze(["glb", "ply"]);
@@ -232,26 +240,30 @@ function sigmoid(value) {
 }
 
 function ensurePLYPointColors(geometry) {
+    // Always prefer SH DC coefficients (splatColorDc) over PLYLoader's built-in
+    // vertex colors. PLYLoader converts uint8 sRGB colors to linear via
+    // Color.setRGB(..., SRGBColorSpace), producing quantized linear values.
+    // SH DC coefficients are full-precision and match the trained gaussian splat.
+    const splatColorDc = geometry.getAttribute("splatColorDc");
+    if (splatColorDc) {
+        const colors = new Float32Array(splatColorDc.count * 3);
+        for (let i = 0; i < splatColorDc.count; i++) {
+            const base = i * 3;
+            colors[base] = clamp01(0.5 + SH_C0 * splatColorDc.array[base]);
+            colors[base + 1] = clamp01(0.5 + SH_C0 * splatColorDc.array[base + 1]);
+            colors[base + 2] = clamp01(0.5 + SH_C0 * splatColorDc.array[base + 2]);
+        }
+
+        const colorAttribute = new BufferAttribute(colors, 3);
+        geometry.setAttribute("color", colorAttribute);
+        return colorAttribute;
+    }
+
     if (geometry.getAttribute("color")) {
         return geometry.getAttribute("color");
     }
 
-    const splatColorDc = geometry.getAttribute("splatColorDc");
-    if (!splatColorDc) {
-        return null;
-    }
-
-    const colors = new Float32Array(splatColorDc.count * 3);
-    for (let i = 0; i < splatColorDc.count; i++) {
-        const base = i * 3;
-        colors[base] = clamp01(0.5 + SH_C0 * splatColorDc.array[base]);
-        colors[base + 1] = clamp01(0.5 + SH_C0 * splatColorDc.array[base + 1]);
-        colors[base + 2] = clamp01(0.5 + SH_C0 * splatColorDc.array[base + 2]);
-    }
-
-    const colorAttribute = new BufferAttribute(colors, 3);
-    geometry.setAttribute("color", colorAttribute);
-    return colorAttribute;
+    return null;
 }
 
 function ensurePLYPointOpacity(geometry) {
@@ -469,6 +481,8 @@ function createGaussianSplatMaterial(filename) {
 
         uniform float viewportWidth;
         uniform float viewportHeight;
+        uniform vec3 viewOrigin;
+        uniform mat3 modelViewLinear;
 
         varying vec2 vPosition;
         varying vec3 vColor;
@@ -476,7 +490,8 @@ function createGaussianSplatMaterial(filename) {
         varying float vDepth;
 
         mat3 quatToMat3(vec4 q) {
-            float qw = q.x, qx = q.y, qy = q.z, qz = q.w;
+            vec4 nq = normalize(q);
+            float qw = nq.x, qx = nq.y, qy = nq.z, qz = nq.w;
             float x2 = qx + qx, y2 = qy + qy, z2 = qz + qz;
             float xx = qx * x2, xy = qx * y2, xz = qx * z2;
             float yy = qy * y2, yz = qy * z2, zz = qz * z2;
@@ -489,7 +504,9 @@ function createGaussianSplatMaterial(filename) {
         }
 
         void main() {
-            vec4 viewCenter = modelViewMatrix * vec4(splatCenter, 1.0);
+            // Keep the splat center camera-relative in shader code so we avoid
+            // losing precision when models are positioned in ECEF-scale coordinates.
+            vec4 viewCenter = vec4(viewOrigin + modelViewLinear * splatCenter, 1.0);
 
             if (viewCenter.z > 0.0) {
                 gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
@@ -503,7 +520,7 @@ function createGaussianSplatMaterial(filename) {
                 0.0, splatScale.y, 0.0,
                 0.0, 0.0, splatScale.z
             );
-            mat3 M_view = mat3(modelViewMatrix) * R * S;
+            mat3 M_view = modelViewLinear * R * S;
 
             float tx = viewCenter.x;
             float ty = viewCenter.y;
@@ -582,13 +599,16 @@ function createGaussianSplatMaterial(filename) {
         varying float vDepth;
 
         void main() {
-            float power = -4.5 * dot(vPosition, vPosition);
-            if (power < -16.0) discard;
+            float A = dot(vPosition, vPosition);
+            if (A > 1.0) discard;
 
-            float alpha = vOpacity * exp(power);
+            // position.xy spans the 3-sigma ellipse, so use the matching -4.5 falloff
+            // to keep surfaces filled without growing the silhouette past the cutoff.
+            float alpha = min(0.99, vOpacity * exp(-4.5 * A));
             if (alpha < 1.0 / 255.0) discard;
 
-            gl_FragColor = vec4(vColor, alpha);
+            // Premultiplied alpha output for front-to-back under-operator compositing
+            gl_FragColor = vec4(vColor * alpha, alpha);
 
             float z = (log2(max(nearPlane, 1.0 + vDepth)) / log2(1.0 + farPlane)) * 2.0 - 1.0;
             gl_FragDepthEXT = z * 0.5 + 0.5;
@@ -602,12 +622,22 @@ function createGaussianSplatMaterial(filename) {
         uniforms: {
             viewportWidth: {value: 1920},
             viewportHeight: {value: 1080},
+            viewOrigin: {value: new Vector3()},
+            modelViewLinear: {value: new Matrix3()},
             ...sharedUniforms,
         },
         transparent: true,
         depthTest: true,
         depthWrite: false,
-        blending: NormalBlending,
+        // Premultiplied alpha back-to-front compositing.
+        // Sharp edges come from the steep -4.5 gaussian (1.1% opacity at 3σ edge).
+        blending: CustomBlending,
+        blendEquation: AddEquation,
+        blendSrc: OneFactor,
+        blendDst: OneMinusSrcAlphaFactor,
+        blendSrcAlpha: OneFactor,
+        blendDstAlpha: OneMinusSrcAlphaFactor,
+        side: DoubleSide,
     });
 
     material.userData ??= {};
@@ -623,34 +653,15 @@ function createSplatSortState(splatCount, instancedGeometry) {
     const scales = instancedGeometry.getAttribute("splatScale").array;
     const rotations = instancedGeometry.getAttribute("splatRotation").array;
 
-    let combGap = splatCount;
-    let lastCamX = NaN;
-    let lastCamY = NaN;
-    let lastCamZ = NaN;
-
-    function swapInstances(i, j) {
-        let t;
-        const i3 = i * 3, j3 = j * 3;
-        t = centers[i3]; centers[i3] = centers[j3]; centers[j3] = t;
-        t = centers[i3 + 1]; centers[i3 + 1] = centers[j3 + 1]; centers[j3 + 1] = t;
-        t = centers[i3 + 2]; centers[i3 + 2] = centers[j3 + 2]; centers[j3 + 2] = t;
-
-        t = colors[i3]; colors[i3] = colors[j3]; colors[j3] = t;
-        t = colors[i3 + 1]; colors[i3 + 1] = colors[j3 + 1]; colors[j3 + 1] = t;
-        t = colors[i3 + 2]; colors[i3 + 2] = colors[j3 + 2]; colors[j3 + 2] = t;
-
-        t = opacities[i]; opacities[i] = opacities[j]; opacities[j] = t;
-
-        t = scales[i3]; scales[i3] = scales[j3]; scales[j3] = t;
-        t = scales[i3 + 1]; scales[i3 + 1] = scales[j3 + 1]; scales[j3 + 1] = t;
-        t = scales[i3 + 2]; scales[i3 + 2] = scales[j3 + 2]; scales[j3 + 2] = t;
-
-        const i4 = i * 4, j4 = j * 4;
-        t = rotations[i4]; rotations[i4] = rotations[j4]; rotations[j4] = t;
-        t = rotations[i4 + 1]; rotations[i4 + 1] = rotations[j4 + 1]; rotations[j4 + 1] = t;
-        t = rotations[i4 + 2]; rotations[i4 + 2] = rotations[j4 + 2]; rotations[j4 + 2] = t;
-        t = rotations[i4 + 3]; rotations[i4 + 3] = rotations[j4 + 3]; rotations[j4 + 3] = t;
-    }
+    // Pre-allocate reorder buffers
+    const order = new Uint32Array(splatCount);
+    const depths = new Float32Array(splatCount);
+    const newCenters = new Float32Array(splatCount * 3);
+    const newColors = new Float32Array(splatCount * 3);
+    const newOpacities = new Float32Array(splatCount);
+    const newScales = new Float32Array(splatCount * 3);
+    const newRotations = new Float32Array(splatCount * 4);
+    const modelViewMatrix = new Matrix4();
 
     function markAttributesForUpload() {
         instancedGeometry.getAttribute("splatCenter").needsUpdate = true;
@@ -660,119 +671,58 @@ function createSplatSortState(splatCount, instancedGeometry) {
         instancedGeometry.getAttribute("splatRotation").needsUpdate = true;
     }
 
-    function binSort(cx, cy, cz) {
-        const n = splatCount;
-        const distances = new Float32Array(n);
-        let minDist = Infinity, maxDist = -Infinity;
-
-        for (let i = 0; i < n; i++) {
-            const i3 = i * 3;
-            const dx = centers[i3] - cx;
-            const dy = centers[i3 + 1] - cy;
-            const dz = centers[i3 + 2] - cz;
-            const d = dx * dx + dy * dy + dz * dz;
-            distances[i] = d;
-            if (d < minDist) minDist = d;
-            if (d > maxDist) maxDist = d;
-        }
-
-        const range = maxDist - minDist;
-        if (range <= 0) return;
-
-        const NUM_BINS = Math.min(n, 65536);
-        const binCounts = new Uint32Array(NUM_BINS);
-        const binIndices = new Uint32Array(n);
-
-        for (let i = 0; i < n; i++) {
-            const bin = Math.min(NUM_BINS - 1, Math.floor((distances[i] - minDist) / range * NUM_BINS));
-            binIndices[i] = bin;
-            binCounts[bin]++;
-        }
-
-        const binStarts = new Uint32Array(NUM_BINS);
-        let sum = 0;
-        let maxBinCount = 0;
-        for (let b = NUM_BINS - 1; b >= 0; b--) {
-            binStarts[b] = sum;
-            sum += binCounts[b];
-            if (binCounts[b] > maxBinCount) maxBinCount = binCounts[b];
-        }
-
-        const binCurrent = binStarts.slice();
-        const newCenters = new Float32Array(n * 3);
-        const newColors = new Float32Array(n * 3);
-        const newOpacities = new Float32Array(n);
-        const newScales = new Float32Array(n * 3);
-        const newRotations = new Float32Array(n * 4);
-
-        for (let i = 0; i < n; i++) {
-            const dest = binCurrent[binIndices[i]]++;
-            const s3 = i * 3, d3 = dest * 3;
-            newCenters[d3] = centers[s3]; newCenters[d3 + 1] = centers[s3 + 1]; newCenters[d3 + 2] = centers[s3 + 2];
-            newColors[d3] = colors[s3]; newColors[d3 + 1] = colors[s3 + 1]; newColors[d3 + 2] = colors[s3 + 2];
-            newOpacities[dest] = opacities[i];
-            newScales[d3] = scales[s3]; newScales[d3 + 1] = scales[s3 + 1]; newScales[d3 + 2] = scales[s3 + 2];
-            const s4 = i * 4, d4 = dest * 4;
-            newRotations[d4] = rotations[s4]; newRotations[d4 + 1] = rotations[s4 + 1];
-            newRotations[d4 + 2] = rotations[s4 + 2]; newRotations[d4 + 3] = rotations[s4 + 3];
-        }
-
-        centers.set(newCenters);
-        colors.set(newColors);
-        opacities.set(newOpacities);
-        scales.set(newScales);
-        rotations.set(newRotations);
-
-        combGap = maxBinCount;
-        markAttributesForUpload();
-    }
-
-    function combSortPass(cx, cy, cz) {
-        let swapped = false;
-        const gap = combGap;
-
-        for (let i = 0; i + gap < splatCount; i++) {
-            const j = i + gap;
-            const i3 = i * 3, j3 = j * 3;
-            const dxi = centers[i3] - cx, dyi = centers[i3 + 1] - cy, dzi = centers[i3 + 2] - cz;
-            const dxj = centers[j3] - cx, dyj = centers[j3 + 1] - cy, dzj = centers[j3 + 2] - cz;
-            const distI = dxi * dxi + dyi * dyi + dzi * dzi;
-            const distJ = dxj * dxj + dyj * dyj + dzj * dzj;
-
-            if (distI < distJ) {
-                swapInstances(i, j);
-                swapped = true;
-            }
-        }
-
-        combGap = Math.max(1, Math.floor(combGap / 1.3));
-
-        if (swapped) {
-            markAttributesForUpload();
-        }
-        return swapped;
-    }
-
     return {
-        sort(localCamX, localCamY, localCamZ) {
+        sort(camera, objectMatrixWorld) {
             if (splatCount < 2) return;
 
-            const dx = localCamX - lastCamX;
-            const dy = localCamY - lastCamY;
-            const dz = localCamZ - lastCamZ;
+            // Exact back-to-front gaussian splat compositing needs true camera-space Z,
+            // not bucketed camera distance. Use the fresh model-view matrix row directly.
+            modelViewMatrix.multiplyMatrices(camera.matrixWorldInverse, objectMatrixWorld);
+            const e = modelViewMatrix.elements;
+            // View-space Z = row 2 of the modelView matrix dotted with (x, y, z, 1)
+            const m8 = e[2], m9 = e[6], m10 = e[10], m11 = e[14];
 
-            if (Number.isNaN(lastCamX) || dx * dx + dy * dy + dz * dz > 0.01) {
-                binSort(localCamX, localCamY, localCamZ);
-                lastCamX = localCamX;
-                lastCamY = localCamY;
-                lastCamZ = localCamZ;
+            // Compute view-space depth for each splat center
+            for (let i = 0; i < splatCount; i++) {
+                const i3 = i * 3;
+                depths[i] = m8 * centers[i3] + m9 * centers[i3 + 1] + m10 * centers[i3 + 2] + m11;
+                order[i] = i;
             }
 
-            for (let pass = 0; pass < 10; pass++) {
-                if (!combSortPass(localCamX, localCamY, localCamZ)) break;
+            // Sort back-to-front: in view space, more negative Z is farther away.
+            // We want farthest (most negative) first, so sort ascending by depth.
+            exactDepthSort(order, depths);
+
+            // Reorder all attribute arrays by the sorted order
+            for (let dest = 0; dest < splatCount; dest++) {
+                const src = order[dest];
+                const s3 = src * 3, d3 = dest * 3;
+                newCenters[d3] = centers[s3]; newCenters[d3 + 1] = centers[s3 + 1]; newCenters[d3 + 2] = centers[s3 + 2];
+                newColors[d3] = colors[s3]; newColors[d3 + 1] = colors[s3 + 1]; newColors[d3 + 2] = colors[s3 + 2];
+                newOpacities[dest] = opacities[src];
+                newScales[d3] = scales[s3]; newScales[d3 + 1] = scales[s3 + 1]; newScales[d3 + 2] = scales[s3 + 2];
+                const s4 = src * 4, d4 = dest * 4;
+                newRotations[d4] = rotations[s4]; newRotations[d4 + 1] = rotations[s4 + 1];
+                newRotations[d4 + 2] = rotations[s4 + 2]; newRotations[d4 + 3] = rotations[s4 + 3];
             }
+
+            centers.set(newCenters);
+            colors.set(newColors);
+            opacities.set(newOpacities);
+            scales.set(newScales);
+            rotations.set(newRotations);
+            markAttributesForUpload();
         },
     };
+}
+
+function exactDepthSort(order, depths) {
+    // Tie-break on the original index so the sort is deterministic for nearly
+    // identical depths and doesn't shimmer as typed-array order changes.
+    order.sort((a, b) => {
+        const delta = depths[a] - depths[b];
+        return delta !== 0 ? delta : a - b;
+    });
 }
 
 function createPLYModel(geometry, filename, sourceData) {
@@ -804,6 +754,18 @@ function createPLYModel(geometry, filename, sourceData) {
         mesh.updateMatrix();
         root.add(mesh);
     } else if (isGaussianSplatPLY(geometry)) {
+        console.log(`[GaussianSplat] Detected gaussian splat PLY: ${filename}`);
+        console.log(`[GaussianSplat] Splat count: ${geometry.getAttribute("position").count}`);
+        const scaleAttr = geometry.getAttribute("splatScale");
+        if (scaleAttr) {
+            let minS = Infinity, maxS = -Infinity;
+            for (let i = 0; i < scaleAttr.array.length; i++) {
+                const v = Math.exp(scaleAttr.array[i]);
+                if (v < minS) minS = v;
+                if (v > maxS) maxS = v;
+            }
+            console.log(`[GaussianSplat] Scale range (linear): ${minS.toExponential(3)} to ${maxS.toExponential(3)}`);
+        }
         const instancedGeometry = createGaussianSplatGeometry(geometry);
         const material = createGaussianSplatMaterial(filename);
         const splatMesh = new Mesh(instancedGeometry, material);
@@ -811,6 +773,7 @@ function createPLYModel(geometry, filename, sourceData) {
         splatMesh.rotateX(-Math.PI / 2);
         splatMesh.updateMatrix();
         splatMesh.frustumCulled = false;
+        splatMesh.renderOrder = 999;
         splatMesh.userData.sitrecGaussianSplat = true;
         splatMesh.userData.splatSortState = createSplatSortState(
             instancedGeometry.instanceCount, instancedGeometry,

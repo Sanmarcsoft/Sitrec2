@@ -112,6 +112,7 @@ jest.mock("three/addons/loaders/PLYLoader.js", () => {
     };
 });
 
+import {PerspectiveCamera} from "three";
 import {extractModelFilenameParameters, isSupportedModelFile, parseModelData} from "../src/ModelLoader";
 
 function toArrayBuffer(text) {
@@ -234,6 +235,8 @@ describe("ModelLoader", () => {
         expect(splatMesh.material.userData.sitrecGaussianSplat).toBe(true);
         expect(splatMesh.material.transparent).toBe(true);
         expect(splatMesh.frustumCulled).toBe(false);
+        expect(splatMesh.material.uniforms.viewOrigin).toBeDefined();
+        expect(splatMesh.material.uniforms.modelViewLinear).toBeDefined();
         expect(geometry.isInstancedBufferGeometry).toBe(true);
         expect(geometry.instanceCount).toBe(2);
         expect(geometry.getAttribute("splatCenter")).toBeDefined();
@@ -243,6 +246,49 @@ describe("ModelLoader", () => {
         expect(geometry.getAttribute("splatRotation")).toBeDefined();
         expect(splatMesh.userData.splatSortState).toBeDefined();
         expect(splatMesh.rotation.x).toBeCloseTo(-Math.PI / 2);
+    });
+
+    test("sorts gaussian splats by exact view-space depth without binning artifacts", async () => {
+        const splatPLY = [
+            "ply",
+            "format ascii 1.0",
+            "element vertex 3",
+            "property float x",
+            "property float y",
+            "property float z",
+            "property float f_dc_0",
+            "property float f_dc_1",
+            "property float f_dc_2",
+            "property float opacity",
+            "property float scale_0",
+            "property float scale_1",
+            "property float scale_2",
+            "property float rot_0",
+            "property float rot_1",
+            "property float rot_2",
+            "property float rot_3",
+            "end_header",
+            "0 0 0 1 0 0 0 -2 -2 -2 1 0 0 0",
+            "0 1.0 0 0 1 0 1 -1 -1 -1 1 0 0 0",
+            "0 1.000001 0 0 0 1 1 -1 -1 -1 1 0 0 0",
+        ].join("\n");
+
+        const modelAsset = await parseModelData("splat-sort.ply", toArrayBuffer(splatPLY));
+        const splatMesh = modelAsset.scene.children[0];
+        const geometry = splatMesh.geometry;
+        const camera = new PerspectiveCamera(50, 1, 0.1, 100);
+
+        camera.position.set(0, 0, 5);
+        camera.lookAt(0, 0, 0);
+        camera.updateMatrixWorld(true);
+        splatMesh.updateMatrixWorld(true);
+
+        splatMesh.userData.splatSortState.sort(camera, splatMesh.matrixWorld);
+
+        const sortedCenters = Array.from(geometry.getAttribute("splatCenter").array);
+        expect(sortedCenters[1]).toBeCloseTo(1.000001, 5);
+        expect(sortedCenters[4]).toBeCloseTo(1.0, 5);
+        expect(sortedCenters[7]).toBeCloseTo(0.0, 5);
     });
 
     test("falls back to point cloud for PLY with partial splat attributes (no rotation)", async () => {
