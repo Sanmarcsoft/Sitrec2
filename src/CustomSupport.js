@@ -869,10 +869,10 @@ export class CCustomManager {
             new CNodeViewDAG({
                 id: "dagView",
                 visible: false,
-                left: 0,
+                left: 0.8,
                 top: 0,
-                width: 1,
-                height: 1,
+                width: 0.2,
+                height: 0.2,
                 draggable: false,
             });
         }

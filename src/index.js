@@ -2464,12 +2464,14 @@ function renderMain(elapsed) {
     if (globalProfiler) globalProfiler.push('#2ca02c', 'Viewports');
     
     ViewMan.updateZOrder();
+    ViewMan.computeEffectiveVisibility();
+    ViewMan.updateDOMVisibility();
     
     // Check if any view is in XR mode - if so, skip normal rendering
     // The XR animation loop will handle rendering for the active view
     let xrActive = false;
     ViewMan.iterate((key, view) => {
-        if (view.xrActive) {
+        if (view.xrActive && view._effectivelyVisible) {
             xrActive = true;
         }
     });
@@ -2477,16 +2479,7 @@ function renderMain(elapsed) {
     // Only render viewports if not in XR mode
     // When in XR mode, the XR animation loop handles rendering
     if (!xrActive) {
-        // Compute effective visibility for all views (handles overlays, relativeTo, fullscreen)
-        ViewMan.computeEffectiveVisibility();
-        ViewMan.updateDOMVisibility();
-        const renderOnlyDagView = ViewMan.get("dagView", false)?._effectivelyVisible ?? false;
-
         ViewMan.iterate((key, view) => {
-            if (renderOnlyDagView && key !== "dagView") {
-                return;
-            }
-
             // In video analysis mode, only render the video viewport
             if (Globals.justVideoAnalysis && key !== "video") {
                 return;

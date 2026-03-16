@@ -29,6 +29,8 @@ export class CNodeViewDAG extends CNodeViewCanvas2D {
 
         this.hiddenNodes = new Set();
         this.savedState = null;
+        this.inactiveBranchColor = "#5a1f1f";
+        this.inactiveBranchStrokeColor = "#7a2b2b";
 
         this.setupMouseHandlers();
 
@@ -270,6 +272,17 @@ export class CNodeViewDAG extends CNodeViewCanvas2D {
 
         sortedDepths.forEach((depth, colIndex) => {
             const nodesInColumn = columns.get(depth);
+            nodesInColumn.sort((aId, bId) => {
+                const aNode = NodeMan.get(aId, false);
+                const bNode = NodeMan.get(bId, false);
+                const aHasVisibleDescendants = this.hasVisibleDescendants(aNode);
+                const bHasVisibleDescendants = this.hasVisibleDescendants(bNode);
+
+                if (aHasVisibleDescendants !== bHasVisibleDescendants) {
+                    return aHasVisibleDescendants ? -1 : 1;
+                }
+                return 0;
+            });
             let currentY = 50;
             nodesInColumn.forEach((nodeId) => {
                 this.nodePositions[nodeId] = {
@@ -300,9 +313,9 @@ export class CNodeViewDAG extends CNodeViewCanvas2D {
         super.renderCanvas(frame);
         if (!this.visible) return;
 
-        this.calculateLayout();
         this.visibleOutputCache = new Map();
         this.visibleEdgeOutputCache = new Map();
+        this.calculateLayout();
 
         const ctx = this.ctx;
         ctx.save();
@@ -316,7 +329,6 @@ export class CNodeViewDAG extends CNodeViewCanvas2D {
     }
 
     drawConnections(ctx) {
-        ctx.strokeStyle = '#4a90d9';
         ctx.lineWidth = 2 / this.zoom;
 
         NodeMan.iterate((id, node) => {
@@ -337,10 +349,10 @@ export class CNodeViewDAG extends CNodeViewCanvas2D {
                 const startY = fromPos.y + this.getNodeHeight(fromNode) / 2;
                 const endX = toPos.x;
                 const endY = this.getInputY(node, key);
-                const fadeEdge = this.countVisibleOutputsForEdge(inputNode, node, true) === 0;
+                const inactiveEdge = this.countVisibleOutputsForEdge(inputNode, node, true) === 0;
+                const edgeColor = inactiveEdge ? this.inactiveBranchColor : '#4a90d9';
 
-                ctx.save();
-                ctx.globalAlpha = fadeEdge ? 0.5 : 1;
+                ctx.strokeStyle = edgeColor;
                 ctx.beginPath();
                 ctx.moveTo(startX, startY);
 
@@ -359,9 +371,8 @@ export class CNodeViewDAG extends CNodeViewCanvas2D {
                 ctx.lineTo(endX - arrowSize * Math.cos(angle - 0.4), endY - arrowSize * Math.sin(angle - 0.4));
                 ctx.lineTo(endX - arrowSize * Math.cos(angle + 0.4), endY - arrowSize * Math.sin(angle + 0.4));
                 ctx.closePath();
-                ctx.fillStyle = '#4a90d9';
+                ctx.fillStyle = edgeColor;
                 ctx.fill();
-                ctx.restore();
             }
         });
     }
@@ -377,17 +388,15 @@ export class CNodeViewDAG extends CNodeViewCanvas2D {
             let bgColor = '#2d3748';
             if (node.isDisplayNode) bgColor = '#2d5748';
             else if (Object.keys(node.inputs).length === 0) bgColor = '#574832';
-            const fadeNode = !this.isVisibleDisplayNode(node) && this.countVisibleOutputs(node, true) === 0;
+            const inactiveNode = !this.hasVisibleDescendants(node);
+            if (inactiveNode) bgColor = this.inactiveBranchColor;
 
             ctx.fillStyle = bgColor;
-            ctx.strokeStyle = '#4a5568';
+            ctx.strokeStyle = inactiveNode ? this.inactiveBranchStrokeColor : '#4a5568';
             ctx.lineWidth = 2 / this.zoom;
 
             this.roundRect(ctx, pos.x, pos.y, this.nodeWidth, nodeHeight, 6);
-            ctx.save();
-            ctx.globalAlpha = fadeNode ? 0.5 : 1;
             ctx.fill();
-            ctx.restore();
             ctx.stroke();
 
             ctx.fillStyle = '#e2e8f0';
@@ -433,6 +442,10 @@ export class CNodeViewDAG extends CNodeViewCanvas2D {
 
     isVisibleDisplayNode(node) {
         return this.isNodeVisibleInDAG(node) && node.isDisplayNode;
+    }
+
+    hasVisibleDescendants(node) {
+        return this.isVisibleDisplayNode(node) || this.countVisibleOutputs(node, true) > 0;
     }
 
     countVisibleOutputs(node, justDisplayNodes = false) {

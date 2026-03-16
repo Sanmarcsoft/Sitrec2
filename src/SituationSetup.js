@@ -1032,10 +1032,10 @@ export async function SetupFromKeyAndData(key, _data, depth=0) {
             node = new CNodeViewDAG({
                 id: data.id ?? "dagView",
                 visible: data.visible ?? false,
-                left: data.left ?? 0,
+                left: data.left ?? 0.8,
                 top: data.top ?? 0,
-                width: data.width ?? 1,
-                height: data.height ?? 1,
+                width: data.width ?? 0.2,
+                height: data.height ?? 0.2,
                 ...data,
             });
             break;
