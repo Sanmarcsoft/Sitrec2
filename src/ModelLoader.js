@@ -8,9 +8,12 @@ import {
     BufferAttribute,
     Color,
     Group,
+    InstancedBufferAttribute,
+    InstancedBufferGeometry,
     Mesh,
     MeshStandardMaterial,
     NormalBlending,
+    PlaneGeometry,
     Points,
     PointsMaterial,
     ShaderMaterial,
@@ -408,6 +411,370 @@ function createPLYPointCloudMaterial(geometry, filename) {
     return material;
 }
 
+function isGaussianSplatPLY(geometry) {
+    return geometry.getAttribute("splatScale") !== undefined
+        && geometry.getAttribute("splatRotation") !== undefined;
+}
+
+function createGaussianSplatGeometry(geometry) {
+    const posAttr = geometry.getAttribute("position");
+    const splatCount = posAttr.count;
+
+    const colorAttr = ensurePLYPointColors(geometry);
+    const opacityAttr = ensurePLYPointOpacity(geometry);
+    const scaleAttr = geometry.getAttribute("splatScale");
+    const rotAttr = geometry.getAttribute("splatRotation");
+
+    // Build per-instance typed arrays
+    const centers = new Float32Array(posAttr.array);
+    const colors = colorAttr
+        ? new Float32Array(colorAttr.array)
+        : new Float32Array(splatCount * 3).fill(0.75);
+    const opacities = new Float32Array(opacityAttr.array);
+
+    // Apply exp() to log-space scale values
+    const scales = new Float32Array(splatCount * 3);
+    for (let i = 0; i < splatCount; i++) {
+        const b = i * 3;
+        scales[b] = Math.exp(scaleAttr.array[b]);
+        scales[b + 1] = Math.exp(scaleAttr.array[b + 1]);
+        scales[b + 2] = Math.exp(scaleAttr.array[b + 2]);
+    }
+
+    const rotations = new Float32Array(rotAttr.array);
+
+    // Base quad: 2×2 plane with vertices at (±1, ±1, 0)
+    const baseQuad = new PlaneGeometry(2, 2);
+    const instancedGeometry = new InstancedBufferGeometry();
+    instancedGeometry.index = baseQuad.index;
+    instancedGeometry.setAttribute("position", baseQuad.getAttribute("position"));
+
+    instancedGeometry.setAttribute("splatCenter", new InstancedBufferAttribute(centers, 3));
+    instancedGeometry.setAttribute("splatColor", new InstancedBufferAttribute(colors, 3));
+    instancedGeometry.setAttribute("splatOpacity", new InstancedBufferAttribute(opacities, 1));
+    instancedGeometry.setAttribute("splatScale", new InstancedBufferAttribute(scales, 3));
+    instancedGeometry.setAttribute("splatRotation", new InstancedBufferAttribute(rotations, 4));
+    instancedGeometry.instanceCount = splatCount;
+
+    return instancedGeometry;
+}
+
+function createGaussianSplatMaterial(filename) {
+    const vertexShader = /* glsl */ `
+        attribute vec3 splatCenter;
+        attribute vec3 splatColor;
+        attribute float splatOpacity;
+        attribute vec3 splatScale;
+        attribute vec4 splatRotation;
+
+        uniform float viewportWidth;
+        uniform float viewportHeight;
+
+        varying vec2 vPosition;
+        varying vec3 vColor;
+        varying float vOpacity;
+        varying float vDepth;
+
+        mat3 quatToMat3(vec4 q) {
+            float qw = q.x, qx = q.y, qy = q.z, qz = q.w;
+            float x2 = qx + qx, y2 = qy + qy, z2 = qz + qz;
+            float xx = qx * x2, xy = qx * y2, xz = qx * z2;
+            float yy = qy * y2, yz = qy * z2, zz = qz * z2;
+            float wx = qw * x2, wy = qw * y2, wz = qw * z2;
+            return mat3(
+                1.0 - (yy + zz), xy + wz, xz - wy,
+                xy - wz, 1.0 - (xx + zz), yz + wx,
+                xz + wy, yz - wx, 1.0 - (xx + yy)
+            );
+        }
+
+        void main() {
+            vec4 viewCenter = modelViewMatrix * vec4(splatCenter, 1.0);
+
+            if (viewCenter.z > 0.0) {
+                gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+                vOpacity = 0.0;
+                return;
+            }
+
+            mat3 R = quatToMat3(splatRotation);
+            mat3 S = mat3(
+                splatScale.x, 0.0, 0.0,
+                0.0, splatScale.y, 0.0,
+                0.0, 0.0, splatScale.z
+            );
+            mat3 M_view = mat3(modelViewMatrix) * R * S;
+
+            float tx = viewCenter.x;
+            float ty = viewCenter.y;
+            float tz = viewCenter.z;
+            float tz2 = tz * tz;
+            float focalX = projectionMatrix[0][0] * viewportWidth * 0.5;
+            float focalY = projectionMatrix[1][1] * viewportHeight * 0.5;
+
+            float j00 = focalX / tz;
+            float j02 = -focalX * tx / tz2;
+            float j11 = focalY / tz;
+            float j12 = -focalY * ty / tz2;
+
+            vec3 T0 = vec3(
+                j00 * M_view[0][0] + j02 * M_view[0][2],
+                j00 * M_view[1][0] + j02 * M_view[1][2],
+                j00 * M_view[2][0] + j02 * M_view[2][2]
+            );
+            vec3 T1 = vec3(
+                j11 * M_view[0][1] + j12 * M_view[0][2],
+                j11 * M_view[1][1] + j12 * M_view[1][2],
+                j11 * M_view[2][1] + j12 * M_view[2][2]
+            );
+
+            float cov2d_00 = dot(T0, T0) + 0.3;
+            float cov2d_01 = dot(T0, T1);
+            float cov2d_11 = dot(T1, T1) + 0.3;
+
+            float tr = cov2d_00 + cov2d_11;
+            float det = cov2d_00 * cov2d_11 - cov2d_01 * cov2d_01;
+            float disc = sqrt(max(0.25 * tr * tr - det, 0.0));
+            float lambda1 = max(0.5 * tr + disc, 0.1);
+            float lambda2 = max(0.5 * tr - disc, 0.1);
+
+            vec2 v1;
+            if (abs(cov2d_01) > 0.0001) {
+                v1 = normalize(vec2(cov2d_01, lambda1 - cov2d_00));
+            } else {
+                v1 = (cov2d_00 >= cov2d_11) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+            }
+            vec2 v2 = vec2(-v1.y, v1.x);
+
+            float radius1 = 3.0 * sqrt(lambda1);
+            float radius2 = 3.0 * sqrt(lambda2);
+
+            float maxRadius = max(radius1, radius2);
+            if (maxRadius > 2048.0) {
+                float s = 2048.0 / maxRadius;
+                radius1 *= s;
+                radius2 *= s;
+            }
+
+            vec2 screenOffset = v1 * position.x * radius1 + v2 * position.y * radius2;
+
+            vec4 clipCenter = projectionMatrix * viewCenter;
+            gl_Position = clipCenter + vec4(
+                screenOffset.x * 2.0 / viewportWidth * clipCenter.w,
+                screenOffset.y * 2.0 / viewportHeight * clipCenter.w,
+                0.0, 0.0
+            );
+
+            vPosition = position.xy;
+            vColor = splatColor;
+            vOpacity = splatOpacity;
+            vDepth = clipCenter.w;
+        }
+    `;
+
+    const fragmentShader = /* glsl */ `
+        uniform float nearPlane;
+        uniform float farPlane;
+
+        varying vec2 vPosition;
+        varying vec3 vColor;
+        varying float vOpacity;
+        varying float vDepth;
+
+        void main() {
+            float power = -4.5 * dot(vPosition, vPosition);
+            if (power < -16.0) discard;
+
+            float alpha = vOpacity * exp(power);
+            if (alpha < 1.0 / 255.0) discard;
+
+            gl_FragColor = vec4(vColor, alpha);
+
+            float z = (log2(max(nearPlane, 1.0 + vDepth)) / log2(1.0 + farPlane)) * 2.0 - 1.0;
+            gl_FragDepthEXT = z * 0.5 + 0.5;
+        }
+    `;
+
+    const material = new ShaderMaterial({
+        name: `${getDisplayModelName(filename)} Gaussian Splat`,
+        vertexShader,
+        fragmentShader,
+        uniforms: {
+            viewportWidth: {value: 1920},
+            viewportHeight: {value: 1080},
+            ...sharedUniforms,
+        },
+        transparent: true,
+        depthTest: true,
+        depthWrite: false,
+        blending: NormalBlending,
+    });
+
+    material.userData ??= {};
+    material.userData.sitrecGaussianSplat = true;
+
+    return material;
+}
+
+function createSplatSortState(splatCount, instancedGeometry) {
+    const centers = instancedGeometry.getAttribute("splatCenter").array;
+    const colors = instancedGeometry.getAttribute("splatColor").array;
+    const opacities = instancedGeometry.getAttribute("splatOpacity").array;
+    const scales = instancedGeometry.getAttribute("splatScale").array;
+    const rotations = instancedGeometry.getAttribute("splatRotation").array;
+
+    let combGap = splatCount;
+    let lastCamX = NaN;
+    let lastCamY = NaN;
+    let lastCamZ = NaN;
+
+    function swapInstances(i, j) {
+        let t;
+        const i3 = i * 3, j3 = j * 3;
+        t = centers[i3]; centers[i3] = centers[j3]; centers[j3] = t;
+        t = centers[i3 + 1]; centers[i3 + 1] = centers[j3 + 1]; centers[j3 + 1] = t;
+        t = centers[i3 + 2]; centers[i3 + 2] = centers[j3 + 2]; centers[j3 + 2] = t;
+
+        t = colors[i3]; colors[i3] = colors[j3]; colors[j3] = t;
+        t = colors[i3 + 1]; colors[i3 + 1] = colors[j3 + 1]; colors[j3 + 1] = t;
+        t = colors[i3 + 2]; colors[i3 + 2] = colors[j3 + 2]; colors[j3 + 2] = t;
+
+        t = opacities[i]; opacities[i] = opacities[j]; opacities[j] = t;
+
+        t = scales[i3]; scales[i3] = scales[j3]; scales[j3] = t;
+        t = scales[i3 + 1]; scales[i3 + 1] = scales[j3 + 1]; scales[j3 + 1] = t;
+        t = scales[i3 + 2]; scales[i3 + 2] = scales[j3 + 2]; scales[j3 + 2] = t;
+
+        const i4 = i * 4, j4 = j * 4;
+        t = rotations[i4]; rotations[i4] = rotations[j4]; rotations[j4] = t;
+        t = rotations[i4 + 1]; rotations[i4 + 1] = rotations[j4 + 1]; rotations[j4 + 1] = t;
+        t = rotations[i4 + 2]; rotations[i4 + 2] = rotations[j4 + 2]; rotations[j4 + 2] = t;
+        t = rotations[i4 + 3]; rotations[i4 + 3] = rotations[j4 + 3]; rotations[j4 + 3] = t;
+    }
+
+    function markAttributesForUpload() {
+        instancedGeometry.getAttribute("splatCenter").needsUpdate = true;
+        instancedGeometry.getAttribute("splatColor").needsUpdate = true;
+        instancedGeometry.getAttribute("splatOpacity").needsUpdate = true;
+        instancedGeometry.getAttribute("splatScale").needsUpdate = true;
+        instancedGeometry.getAttribute("splatRotation").needsUpdate = true;
+    }
+
+    function binSort(cx, cy, cz) {
+        const n = splatCount;
+        const distances = new Float32Array(n);
+        let minDist = Infinity, maxDist = -Infinity;
+
+        for (let i = 0; i < n; i++) {
+            const i3 = i * 3;
+            const dx = centers[i3] - cx;
+            const dy = centers[i3 + 1] - cy;
+            const dz = centers[i3 + 2] - cz;
+            const d = dx * dx + dy * dy + dz * dz;
+            distances[i] = d;
+            if (d < minDist) minDist = d;
+            if (d > maxDist) maxDist = d;
+        }
+
+        const range = maxDist - minDist;
+        if (range <= 0) return;
+
+        const NUM_BINS = Math.min(n, 65536);
+        const binCounts = new Uint32Array(NUM_BINS);
+        const binIndices = new Uint32Array(n);
+
+        for (let i = 0; i < n; i++) {
+            const bin = Math.min(NUM_BINS - 1, Math.floor((distances[i] - minDist) / range * NUM_BINS));
+            binIndices[i] = bin;
+            binCounts[bin]++;
+        }
+
+        const binStarts = new Uint32Array(NUM_BINS);
+        let sum = 0;
+        let maxBinCount = 0;
+        for (let b = NUM_BINS - 1; b >= 0; b--) {
+            binStarts[b] = sum;
+            sum += binCounts[b];
+            if (binCounts[b] > maxBinCount) maxBinCount = binCounts[b];
+        }
+
+        const binCurrent = binStarts.slice();
+        const newCenters = new Float32Array(n * 3);
+        const newColors = new Float32Array(n * 3);
+        const newOpacities = new Float32Array(n);
+        const newScales = new Float32Array(n * 3);
+        const newRotations = new Float32Array(n * 4);
+
+        for (let i = 0; i < n; i++) {
+            const dest = binCurrent[binIndices[i]]++;
+            const s3 = i * 3, d3 = dest * 3;
+            newCenters[d3] = centers[s3]; newCenters[d3 + 1] = centers[s3 + 1]; newCenters[d3 + 2] = centers[s3 + 2];
+            newColors[d3] = colors[s3]; newColors[d3 + 1] = colors[s3 + 1]; newColors[d3 + 2] = colors[s3 + 2];
+            newOpacities[dest] = opacities[i];
+            newScales[d3] = scales[s3]; newScales[d3 + 1] = scales[s3 + 1]; newScales[d3 + 2] = scales[s3 + 2];
+            const s4 = i * 4, d4 = dest * 4;
+            newRotations[d4] = rotations[s4]; newRotations[d4 + 1] = rotations[s4 + 1];
+            newRotations[d4 + 2] = rotations[s4 + 2]; newRotations[d4 + 3] = rotations[s4 + 3];
+        }
+
+        centers.set(newCenters);
+        colors.set(newColors);
+        opacities.set(newOpacities);
+        scales.set(newScales);
+        rotations.set(newRotations);
+
+        combGap = maxBinCount;
+        markAttributesForUpload();
+    }
+
+    function combSortPass(cx, cy, cz) {
+        let swapped = false;
+        const gap = combGap;
+
+        for (let i = 0; i + gap < splatCount; i++) {
+            const j = i + gap;
+            const i3 = i * 3, j3 = j * 3;
+            const dxi = centers[i3] - cx, dyi = centers[i3 + 1] - cy, dzi = centers[i3 + 2] - cz;
+            const dxj = centers[j3] - cx, dyj = centers[j3 + 1] - cy, dzj = centers[j3 + 2] - cz;
+            const distI = dxi * dxi + dyi * dyi + dzi * dzi;
+            const distJ = dxj * dxj + dyj * dyj + dzj * dzj;
+
+            if (distI < distJ) {
+                swapInstances(i, j);
+                swapped = true;
+            }
+        }
+
+        combGap = Math.max(1, Math.floor(combGap / 1.3));
+
+        if (swapped) {
+            markAttributesForUpload();
+        }
+        return swapped;
+    }
+
+    return {
+        sort(localCamX, localCamY, localCamZ) {
+            if (splatCount < 2) return;
+
+            const dx = localCamX - lastCamX;
+            const dy = localCamY - lastCamY;
+            const dz = localCamZ - lastCamZ;
+
+            if (Number.isNaN(lastCamX) || dx * dx + dy * dy + dz * dz > 0.01) {
+                binSort(localCamX, localCamY, localCamZ);
+                lastCamX = localCamX;
+                lastCamY = localCamY;
+                lastCamZ = localCamZ;
+            }
+
+            for (let pass = 0; pass < 10; pass++) {
+                if (!combSortPass(localCamX, localCamY, localCamZ)) break;
+            }
+        },
+    };
+}
+
 function createPLYModel(geometry, filename, sourceData) {
     geometry.computeBoundingSphere();
     geometry.computeBoundingBox();
@@ -436,6 +803,19 @@ function createPLYModel(geometry, filename, sourceData) {
         mesh.rotateX(-Math.PI / 2);
         mesh.updateMatrix();
         root.add(mesh);
+    } else if (isGaussianSplatPLY(geometry)) {
+        const instancedGeometry = createGaussianSplatGeometry(geometry);
+        const material = createGaussianSplatMaterial(filename);
+        const splatMesh = new Mesh(instancedGeometry, material);
+        splatMesh.name = root.name;
+        splatMesh.rotateX(-Math.PI / 2);
+        splatMesh.updateMatrix();
+        splatMesh.frustumCulled = false;
+        splatMesh.userData.sitrecGaussianSplat = true;
+        splatMesh.userData.splatSortState = createSplatSortState(
+            instancedGeometry.instanceCount, instancedGeometry,
+        );
+        root.add(splatMesh);
     } else {
         const material = createPLYPointCloudMaterial(geometry, filename);
         const points = new Points(geometry, material);

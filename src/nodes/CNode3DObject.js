@@ -2373,12 +2373,30 @@ export class CNode3DObject extends CNode3DGroup {
         if (this.model) {
             this.model.traverse((child) => {
                 const material = child.material;
-                if (!material?.userData?.sitrecPLYPointCloud) {
-                    return;
+
+                if (material?.userData?.sitrecPLYPointCloud) {
+                    if (material.uniforms?.viewportHeight) {
+                        material.uniforms.viewportHeight.value = view.heightPx ?? 1080;
+                    }
                 }
 
-                if (material.uniforms?.viewportHeight) {
-                    material.uniforms.viewportHeight.value = view.heightPx ?? 1080;
+                if (child.userData?.sitrecGaussianSplat && material?.userData?.sitrecGaussianSplat) {
+                    const h = view.heightPx ?? 1080;
+                    const w = view.widthPx ?? 1920;
+                    if (material.uniforms?.viewportHeight) {
+                        material.uniforms.viewportHeight.value = h;
+                    }
+                    if (material.uniforms?.viewportWidth) {
+                        material.uniforms.viewportWidth.value = w;
+                    }
+
+                    const sortState = child.userData.splatSortState;
+                    if (sortState && view.camera) {
+                        child.updateMatrixWorld();
+                        const invMatrix = child.matrixWorld.clone().invert();
+                        const localCam = view.camera.position.clone().applyMatrix4(invMatrix);
+                        sortState.sort(localCam.x, localCam.y, localCam.z);
+                    }
                 }
             });
         }
