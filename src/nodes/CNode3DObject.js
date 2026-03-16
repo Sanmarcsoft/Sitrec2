@@ -1806,6 +1806,7 @@ export class CNode3DObject extends CNode3DGroup {
                 // we do that test first, as isUnhosted will assert if the file doesn't exist
 
                 if (this.currentModel
+                    && this.currentModel.file !== model.file
                     && FileManager.isUnhosted(this.currentModel.file)
                     && (!FileManager.exists(this.selectModel) || FileManager.isUnhosted(this.selectModel))
                 ) {
