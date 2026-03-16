@@ -104,6 +104,7 @@ export const ModelFiles = {
     "MQ-9 (clean)":         { file: 'data/models/MQ9-clean.glb',},
     "SR-71":                { file: 'data/models/SR-71.glb',},
     "PA-28-181":            { file: 'data/models/PA28.glb',},
+    "Shahed Drone":             { file: 'data/models/shahed#L3.5m#.glb',},
  //   "737 MAX 8 (White)":    { file: 'data/models/737_MAX_8_White.glb',},
  //   "777-200ER (Malyasia)": { file: 'data/models/777-200ER-Malaysia.glb',},
 //    "DC-10":                { file: 'data/models/DC-10.glb',},
