@@ -54,7 +54,7 @@ import {FileManager, Globals, guiMenus, NodeMan, setRenderOne, Sit} from "../Glo
 import {assert} from "../assert";
 import {DebugArrowAB, disposeScene, propagateLayerMaskObject, removeDebugArrow} from "../threeExt";
 import {CNodeViewText} from "./CNodeViewText.js";
-import {loadGLTFModel} from "./CNode3DModel";
+import {loadModelAsset} from "../ModelLoader";
 import {V3} from "../threeUtils";
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import {CNodeLabel3D, CNodeMeasureAB} from "./CNodeLabels3D";
@@ -1822,10 +1822,10 @@ export class CNode3DObject extends CNode3DGroup {
 
 
                 //const loader = new GLTFLoader();
-                console.log("LOADING NEW GLTF model: ", model.file);
+                console.log("LOADING NEW model: ", model.file);
 
                 Globals.pendingActions++;
-                loadGLTFModel(model.file, gltf => {
+                loadModelAsset(model.file, modelAsset => {
                     // since it's async, we might now be rendering a geometry
                     // If so, then don't add the model to the group
                     if (this.modelOrGeometry === "model") {
@@ -1836,11 +1836,15 @@ export class CNode3DObject extends CNode3DGroup {
                         this.destroyObject();
                         this.destroyLights();
 
-                        this.model = gltf.scene;
+                        this.model = modelAsset.scene;
 
                         if (Globals.shadowsEnabled) {
-                            this.model.castShadow = true;
-                            this.model.receiveShadow = true;
+                            this.model.traverse((child) => {
+                                if (child.isMesh) {
+                                    child.castShadow = true;
+                                    child.receiveShadow = true;
+                                }
+                            });
                         }
 
                         this.extractLightsFromModel(this.model);
@@ -1871,7 +1875,7 @@ export class CNode3DObject extends CNode3DGroup {
                     }
                     Globals.pendingActions--;
                 }, (error) => {
-                    console.error("Failed to load GLTF model:", model.file, error);
+                    console.error("Failed to load model:", model.file, error);
                     Globals.pendingActions--;
                 });
             }

@@ -84,6 +84,7 @@ import {extractFlightClubInfo, flightClubToCSVStrings, isFlightClubJSON} from ".
 import {CSitchBrowser} from "./CSitchBrowser";
 import {ViewMan} from "./CViewManager";
 import {isResolvableSitrecReference, resolveURLForFetch, toCanonicalSitrecRef} from "./SitrecObjectResolver";
+import {isSupportedModelFile} from "./ModelLoader";
 
 const trackFileClasses = [
     CTrackFileKML,
@@ -2561,7 +2562,7 @@ export class CFileManager extends CManager {
      * - Az/El/FOV/Heading CSVs → customAzElController, fovSwitch, headingController
      * - Video/audio → video node
      * - Images → video node (as single-frame video)
-     * - GLB models → targetObject
+     * - Supported 3D models (.glb, .ply) → targetObject
      * 
      * @param {string} filename - The name of the file
      * @param {*} parsedFile - The parsed file data (type varies by file format)
@@ -2840,7 +2841,7 @@ export class CFileManager extends CManager {
                 }
                 setNewSitchObject(copy)
                 return false;
-            } else if (fileExt === "glb") {
+            } else if (fileManagerEntry.dataType === "model" || fileManagerEntry.dataType === "glb" || isSupportedModelFile(filename)) {
                 this.registerDroppedModel(filename);
 
                 const targetObject = this.getPreferredDroppedModelTarget();
@@ -3104,7 +3105,7 @@ export class CFileManager extends CManager {
      * - .zip/.kmz files: Unzips via JSZip, calls parseAsset for each extracted file
      * 
      * Returns parsed data with dataType indicating the format:
-     * - text, tle, csv, kml, xml, json, sitch, video, image, glb, bin, etc.
+     * - text, tle, csv, kml, xml, json, sitch, video, image, model, bin, etc.
      * 
      * @param {string} filename - The name of the file being parsed
      * @param {string} id - The identifier for the asset (used for storage)
@@ -3442,7 +3443,8 @@ export class CFileManager extends CManager {
                     break;
                 }
                 case "glb":             // 3D models in glTF binary format
-                    dataType = "glb";
+                case "ply":             // polygon/point cloud geometry models
+                    dataType = "model";
                     parsed = buffer;
                     break;
                 case "bin":             // for binary files like BSC5 (the Yale Bright Star Catalog)
