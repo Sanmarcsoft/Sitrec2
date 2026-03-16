@@ -301,6 +301,8 @@ export class CNodeViewDAG extends CNodeViewCanvas2D {
         if (!this.visible) return;
 
         this.calculateLayout();
+        this.visibleOutputCache = new Map();
+        this.visibleEdgeOutputCache = new Map();
 
         const ctx = this.ctx;
         ctx.save();
@@ -335,7 +337,10 @@ export class CNodeViewDAG extends CNodeViewCanvas2D {
                 const startY = fromPos.y + this.getNodeHeight(fromNode) / 2;
                 const endX = toPos.x;
                 const endY = this.getInputY(node, key);
+                const fadeEdge = this.countVisibleOutputsForEdge(inputNode, node, true) === 0;
 
+                ctx.save();
+                ctx.globalAlpha = fadeEdge ? 0.5 : 1;
                 ctx.beginPath();
                 ctx.moveTo(startX, startY);
 
@@ -356,6 +361,7 @@ export class CNodeViewDAG extends CNodeViewCanvas2D {
                 ctx.closePath();
                 ctx.fillStyle = '#4a90d9';
                 ctx.fill();
+                ctx.restore();
             }
         });
     }
@@ -371,13 +377,17 @@ export class CNodeViewDAG extends CNodeViewCanvas2D {
             let bgColor = '#2d3748';
             if (node.isDisplayNode) bgColor = '#2d5748';
             else if (Object.keys(node.inputs).length === 0) bgColor = '#574832';
+            const fadeNode = !this.isVisibleDisplayNode(node) && this.countVisibleOutputs(node, true) === 0;
 
             ctx.fillStyle = bgColor;
             ctx.strokeStyle = '#4a5568';
             ctx.lineWidth = 2 / this.zoom;
 
             this.roundRect(ctx, pos.x, pos.y, this.nodeWidth, nodeHeight, 6);
+            ctx.save();
+            ctx.globalAlpha = fadeNode ? 0.5 : 1;
             ctx.fill();
+            ctx.restore();
             ctx.stroke();
 
             ctx.fillStyle = '#e2e8f0';
@@ -415,6 +425,58 @@ export class CNodeViewDAG extends CNodeViewCanvas2D {
         const pos = this.nodePositions[node.id];
         if (!pos || index < 0) return pos ? pos.y + this.getNodeHeight(node) / 2 : 0;
         return pos.y + this.nodeBaseHeight + index * this.inputLineHeight + this.inputLineHeight / 2;
+    }
+
+    isNodeVisibleInDAG(node) {
+        return node && node.visible && !this.hiddenNodes.has(node.id);
+    }
+
+    isVisibleDisplayNode(node) {
+        return this.isNodeVisibleInDAG(node) && node.isDisplayNode;
+    }
+
+    countVisibleOutputs(node, justDisplayNodes = false) {
+        if (!node) return 0;
+
+        const cacheKey = `${node.id}:${justDisplayNodes ? 1 : 0}`;
+        if (this.visibleOutputCache.has(cacheKey)) {
+            return this.visibleOutputCache.get(cacheKey);
+        }
+
+        let count = 0;
+        for (const output of node.outputs) {
+            count += this.countVisibleOutputsForEdge(node, output, justDisplayNodes);
+        }
+
+        this.visibleOutputCache.set(cacheKey, count);
+        return count;
+    }
+
+    countVisibleOutputsForEdge(sourceNode, outputNode, justDisplayNodes = false) {
+        if (!sourceNode || !outputNode || !this.isNodeVisibleInDAG(outputNode)) {
+            return 0;
+        }
+
+        const cacheKey = `${sourceNode.id}->${outputNode.id}:${justDisplayNodes ? 1 : 0}`;
+        if (this.visibleEdgeOutputCache.has(cacheKey)) {
+            return this.visibleEdgeOutputCache.get(cacheKey);
+        }
+
+        let count = 0;
+        if (outputNode.constructor.name === "CNodeSwitch") {
+            if (outputNode.inputs[outputNode.choice] === sourceNode) {
+                if (!justDisplayNodes) count++;
+                count += this.countVisibleOutputs(outputNode, justDisplayNodes);
+            }
+        } else {
+            if (!justDisplayNodes || outputNode.isDisplayNode) {
+                count++;
+            }
+            count += this.countVisibleOutputs(outputNode, justDisplayNodes);
+        }
+
+        this.visibleEdgeOutputCache.set(cacheKey, count);
+        return count;
     }
 
     roundRect(ctx, x, y, w, h, r) {

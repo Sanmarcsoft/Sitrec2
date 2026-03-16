@@ -2480,8 +2480,12 @@ function renderMain(elapsed) {
         // Compute effective visibility for all views (handles overlays, relativeTo, fullscreen)
         ViewMan.computeEffectiveVisibility();
         ViewMan.updateDOMVisibility();
+        const renderOnlyDagView = ViewMan.get("dagView", false)?._effectivelyVisible ?? false;
 
         ViewMan.iterate((key, view) => {
+            if (renderOnlyDagView && key !== "dagView") {
+                return;
+            }
 
             // In video analysis mode, only render the video viewport
             if (Globals.justVideoAnalysis && key !== "video") {
