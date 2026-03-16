@@ -142,6 +142,17 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         return this.videoData?.originalVideoHeight || this.videoHeight;
     }
 
+    dispatchVideoAvailabilityChanged() {
+        // Custom-sitch UI depends on whether the video view has a real pixel coordinate system yet.
+        EventManager.dispatchEvent("videoAvailabilityChanged", {
+            viewId: this.id,
+            hasVideo: this.videoWidth > 0 &&
+                this.videoHeight > 0 &&
+                this.originalVideoWidth > 0 &&
+                this.originalVideoHeight > 0
+        });
+    }
+
     /**
      * Loads a video (or image-as-video) into this view.
      *
@@ -310,6 +321,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
             videoData = this.videoData;
 
         assert(videoData, "CNodeVideoView loadedCallback called with no videoData, possibly because it's called in the constructor before the this.videoData is assigned");
+        this.dispatchVideoAvailabilityChanged();
 
         // Decrement pendingActions if this video was registered with the VideoLoadingManager
         // Use _loadingId to track per-video pending state (not videoLoadPending which is shared)
@@ -690,6 +702,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
             }
         }
         this.staticURL = undefined; // clear the static URL, so we will rehost any dropped file
+        this.dispatchVideoAvailabilityChanged();
     }
 
     addVideoEntry(fileName, staticURL = undefined, isImage = false, imageFileID = undefined, videoData = undefined) {
@@ -910,6 +923,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
         this.invalidateELAResult();
         this.updateVideoSelector();
+        this.dispatchVideoAvailabilityChanged();
     }
 
     disposeAllVideos() {
@@ -924,6 +938,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         this.videoData = null;
         this.invalidateELAResult();
         this.updateVideoSelector();
+        this.dispatchVideoAvailabilityChanged();
     }
 
     /**
@@ -988,6 +1003,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
             width: img.width, height: img.height,
             videoData: this
         });
+        this.dispatchVideoAvailabilityChanged();
     }
 
     renderCanvas(frame = 0) {

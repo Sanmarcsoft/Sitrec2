@@ -39,13 +39,22 @@ export class CDraggableItem {
 
         this.video = this.view.overlayView;
 
+        if (v.coordinatesAreVideo) {
+            // Deserialized keyframes are already stored in original-video coordinates.
+            this.x = v.x;
+            this.y = v.y;
+        } else if (this.view.hasVideoGeometry()) {
+            const [vX, vY] = this.video.canvasToVideoCoordsOriginal(v.x, v.y);
 
-        const [vX, vY] = this.video.canvasToVideoCoordsOriginal(v.x, v.y);
+            console.log(`Adding draggable item at canvas (${v.x}, ${v.y}) which is video (${vX}, ${vY})`)
 
-        console.log(`Adding draggable item at canvas (${v.x}, ${v.y}) which is video (${vX}, ${vY})`)
-
-        this.x = vX;
-        this.y = vY;
+            this.x = vX;
+            this.y = vY;
+        } else {
+            // Keep finite placeholder values until a video is available and the overlay can rebuild cleanly.
+            this.x = v.x;
+            this.y = v.y;
+        }
 
 
         this.dragging = false;
@@ -351,6 +360,38 @@ n
         this.minimizeTraverseSpeed(true);
     }
 
+    hasVideoGeometry() {
+        const overlayView = this.overlayView;
+        return overlayView !== undefined &&
+            overlayView.videoWidth > 0 &&
+            overlayView.videoHeight > 0 &&
+            overlayView.originalVideoWidth > 0 &&
+            overlayView.originalVideoHeight > 0;
+    }
+
+    ensureOverlayGeometryReady() {
+        if (!this.hasVideoGeometry()) {
+            return false;
+        }
+
+        // Tracking math uses the video view's cached geometry values, so refresh them lazily here
+        // when the LOS graph is evaluated before the video view has rendered this frame.
+        if ((!Number.isFinite(this.overlayView.fovCoverage) || this.overlayView.fovCoverage <= 0) &&
+            this.overlayView.widthPx > 0 &&
+            this.overlayView.heightPx > 0 &&
+            this.overlayView.getSourceAndDestCoords) {
+            this.overlayView.getSourceAndDestCoords();
+        }
+
+        return Number.isFinite(this.overlayView.fovCoverage) && this.overlayView.fovCoverage > 0;
+    }
+
+    getFallbackTrackPoint() {
+        // These placeholders are only used while no video exists. Once a video loads,
+        // the existing videoLoaded hook triggers a recalc and replaces them with real video coordinates.
+        return [this.overlayView.widthPx / 2, this.overlayView.heightPx / 2];
+    }
+
     minimizeTraverseSpeed(useAirSpeed = false) {
         const traverseNode = NodeMan.get("LOSTraversePerspective", false);
         const startDistNode = NodeMan.get("startDistance", false);
@@ -420,6 +461,13 @@ n
         const cameraLOSNode = this.in.cameraLOSNode
         const fovNode = this.in.fovNode
         const los = cameraLOSNode.getValueFrame(f)
+
+        // "Camera + Object Track" only makes sense once the overlay has a real video coordinate system.
+        // Without a loaded video, fall back to the plain camera LOS instead of manufacturing NaNs.
+        if (!this.ensureOverlayGeometryReady()) {
+            return los;
+        }
+
         let  vFOV = extractFOV(fovNode.getValueFrame(f));
 
 
@@ -499,11 +547,19 @@ n
         // Handle special cases first
         if (this.keyframes.length === 0) {
             // No keyframes, set all points to middle (50, 50)
-            // get the center of the overlay view in view coordinates
-            const viewWidth = this.overlayView.widthPx;
-            const viewHeight = this.overlayView.heightPx;
-            // convert center to original video coordinates
-            const [centerX, centerY] = this.overlayView.canvasToVideoCoordsOriginal(viewWidth / 2, viewHeight / 2);
+            let centerX;
+            let centerY;
+
+            if (this.hasVideoGeometry()) {
+                // Once video dimensions exist, store the default track point in original-video coordinates.
+                const viewWidth = this.overlayView.widthPx;
+                const viewHeight = this.overlayView.heightPx;
+                [centerX, centerY] = this.overlayView.canvasToVideoCoordsOriginal(viewWidth / 2, viewHeight / 2);
+            } else {
+                // Before a video loads we still need finite placeholders, but they should not try to
+                // pretend canvas space is video space.
+                [centerX, centerY] = this.getFallbackTrackPoint();
+            }
 
             for (let i = 0; i < this.frames; i++) {
                 this.pointsXY[i] = [centerX, centerY];
@@ -1103,6 +1159,9 @@ n
 
 
     onMouseDown(e, mouseX, mouseY) {
+        if (!this.hasVideoGeometry()) {
+            return false;
+        }
 
         // if we clicked on a draggable item, then we return true
         // we don't need to check this
@@ -1171,6 +1230,9 @@ n
         super.renderCanvas(frame) // will be CNodeViewCanvas2D
 
         if (!this.showTracking) return;
+
+        // Without video geometry there is nothing meaningful to draw or project into LOS space yet.
+        if (!this.hasVideoGeometry()) return;
 
         // The tracking overlay is based on integer frames
         frame = Math.floor(frame);
@@ -1244,7 +1306,8 @@ n
                 view: this,
                 x: k.x,
                 y: k.y,
-                frame: k.frame
+                frame: k.frame,
+                coordinatesAreVideo: true
             }))
             if (Globals.exportTagNumber < 2001001) {
                 console.log("exportTagNumber is less than 2001001 (" + Globals.exportTagNumber + "), converting keyframe coordinates to video coordinates");

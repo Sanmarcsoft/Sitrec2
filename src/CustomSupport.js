@@ -644,6 +644,29 @@ export class CCustomManager {
 
         // TODO - Multiple events passed to EventManager.addEventListener
 
+        const syncTrackingOverlayLOSSourceOption = () => {
+            if (!Sit.isCustom || !NodeMan.exists("JetLOS") || !NodeMan.exists("trackingOverlay")) {
+                return;
+            }
+
+            const jetLOS = NodeMan.get("JetLOS");
+            const trackingOverlay = NodeMan.get("trackingOverlay");
+            const optionName = "Camera + Object Track";
+            const shouldExposeOption = trackingOverlay.hasVideoGeometry?.() ?? false;
+            const hasOption = jetLOS.inputs[optionName] !== undefined;
+
+            // Hide the object-track LOS mode until the tracking overlay has a real video pixel space.
+            if (shouldExposeOption && !hasOption) {
+                jetLOS.addOption(optionName, trackingOverlay);
+                jetLOS.controller?.updateDisplay();
+            } else if (!shouldExposeOption && hasOption) {
+                jetLOS.removeOption(optionName);
+                jetLOS.controller?.updateDisplay();
+            }
+        };
+
+        syncTrackingOverlayLOSSourceOption();
+
         // Listen for events that mean we've changed the camera track
         // and hence established a sitch we don't want subsequent tracks to mess up.
         // changing camera to a fixed camera, which might be something the user does even beforer
@@ -700,6 +723,8 @@ export class CCustomManager {
                 return;
             }
 
+            syncTrackingOverlayLOSSourceOption();
+
             if (data.width !== undefined && data.height !== undefined) {
                 // this is a video loaded from a file, so we can use the width and height directly
                 width = data.width;
@@ -754,6 +779,10 @@ export class CCustomManager {
 
 
 
+        });
+
+        EventManager.addEventListener("videoAvailabilityChanged", () => {
+            syncTrackingOverlayLOSSourceOption();
         });
 
 
