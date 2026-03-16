@@ -64,7 +64,7 @@ import {findRootTrack} from "../FindRootTrack";
 import {GlobalScene} from "../LocalFrame";
 import {sharedUniforms} from "../js/map33/material/SharedUniforms";
 import {par} from "../par";
-import {f2m} from "../utils";
+import {CNodeGUIValue} from "./CNodeGUIValue";
 
 // Map old/renamed model file paths to their current equivalents.
 // Used to remap file paths in loadedFiles and model name references in serialized sitches.
@@ -857,14 +857,23 @@ export class CNode3DObject extends CNode3DGroup {
         this.addParams(commonParams, this.common, this.gui, true); // add the common parameters to the GUI
 
         this.common.modelLength ??= v.modelLength ?? v.longestSide ?? v.targetLength ?? v.length ?? 0;
-        this.modelLengthController = this.gui.add(this.common, "modelLength", 0, 500, 1).name("Model Length (ft)")
-            .listen()
-            .onChange(() => {
+        this.modelLengthNode = new CNodeGUIValue({
+            id: this.id + "_modelLength",
+            value: this.common.modelLength,
+            start: 0,
+            end: 500,
+            step: 0.1,
+            desc: "Model Length",
+            unitType: "small",
+            tooltip: "Model length along the local Z axis. Set to 0 to disable automatic Z-length scaling.",
+            onChange: () => {
+                this.common.modelLength = this.modelLengthNode.value;
                 this.recalculate();
                 this.rebuildBoundingBox();
                 setRenderOne(true);
-            })
-            .tooltip("Model length along the local Z axis in feet. Set to 0 to disable automatic Z-length scaling.");
+            }
+        }, this.gui);
+        this.modelLengthController = this.modelLengthNode.guiEntry;
         this.modelLengthController.isCommon = true;
 
         this.displayBoundingBox = false;
@@ -1537,8 +1546,8 @@ export class CNode3DObject extends CNode3DGroup {
         delete this.common.longestSide;
         delete this.common.targetLength;
         delete this.common.length;
-        if (typeof this.modelLengthController?.updateDisplay === "function") {
-            this.modelLengthController.updateDisplay();
+        if (this.modelLengthNode) {
+            this.modelLengthNode.setValue(this.common.modelLength);
         }
 
         if (this.modelOrGeometry === "geometry") {
@@ -2893,15 +2902,15 @@ export class CNode3DObject extends CNode3DGroup {
             return;
         }
 
-        this.common.modelLength = modelLengthFeet;
-        if (typeof this.modelLengthController?.updateDisplay === "function") {
-            this.modelLengthController.updateDisplay();
+        if (this.modelLengthNode) {
+            this.modelLengthNode.setValueWithUnits(modelLengthFeet, "imperial", "small");
+            this.common.modelLength = this.modelLengthNode.value;
         }
     }
 
     getModelLengthScale() {
-        const modelLengthFeet = Number(this.common.modelLength ?? this.common.longestSide ?? this.common.targetLength ?? this.common.length) || 0;
-        if (modelLengthFeet <= 0) {
+        const modelLengthMeters = this.modelLengthNode ? this.modelLengthNode.getValueFrame(0) : 0;
+        if (modelLengthMeters <= 0) {
             return 1;
         }
 
@@ -2910,7 +2919,7 @@ export class CNode3DObject extends CNode3DGroup {
             return 1;
         }
 
-        return f2m(modelLengthFeet) / modelLength;
+        return modelLengthMeters / modelLength;
     }
 
     recalculate() {

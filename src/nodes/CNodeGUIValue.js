@@ -210,6 +210,23 @@ export class CNodeGUIValue extends CNodeGUIConstant {
 
     }
 
+    // update mirrored controllers' name, min/max, and display
+    updateMirrors() {
+        if (!this.guiEntry._mirrorControllers) return;
+        const unitsAbbrev = Units[this.unitType].abbrev;
+        const name = this.desc + " (" + unitsAbbrev + ")";
+        for (const mirror of this.guiEntry._mirrorControllers) {
+            if (!mirror.domElement) continue;
+            mirror._name = name;
+            mirror.$name.innerHTML = name;
+            mirror._min = this.guiEntry._min;
+            mirror._max = this.guiEntry._max;
+            mirror._maxMax = this.guiEntry._maxMax;
+            mirror._onUpdateMinMax();
+            mirror.updateDisplay();
+        }
+    }
+
 
     // set GUI controlelr value directly, and update the gui,
     // optionally ignoring the onChange callback
@@ -258,6 +275,9 @@ export class CNodeGUIValue extends CNodeGUIConstant {
 
         // update the display
         this.guiEntry.updateDisplay();
+
+        // update any mirrored controllers
+        this.updateMirrors();
     }
 
 
