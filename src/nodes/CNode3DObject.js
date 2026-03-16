@@ -1511,17 +1511,20 @@ export class CNode3DObject extends CNode3DGroup {
     }
 
     modSerialize() {
+        // Shallow-copy common so we can add modelLengthSI without polluting the live object
+        const commonCopy = {...this.common};
+        if (this.modelLengthNode) {
+            // Store model length in SI (meters) for unit-system-independent serialization
+            commonCopy.modelLengthSI = this.modelLengthNode.getValueFrame(0);
+        }
         return {
             ...super.modSerialize(),
             color: this.color,
             modelOrGeometry: this.modelOrGeometry,
             model: this.selectModel,
-            common: this.common,
+            common: commonCopy,
             geometryParams: this.geometryParams,
             materialParams: this.materialParams,
-            // might need a modelParams
-
-
         }
     }
 
@@ -1547,7 +1550,15 @@ export class CNode3DObject extends CNode3DGroup {
         delete this.common.targetLength;
         delete this.common.length;
         if (this.modelLengthNode) {
-            this.modelLengthNode.setValue(this.common.modelLength);
+            if (this.common.modelLengthSI !== undefined) {
+                // New format: stored in SI meters, convert to current display units
+                this.modelLengthNode.setValueWithUnits(this.common.modelLengthSI, "metric", "small");
+                delete this.common.modelLengthSI;
+            } else {
+                // Legacy format: stored in display units, use as-is
+                this.modelLengthNode.setValue(this.common.modelLength);
+            }
+            this.common.modelLength = this.modelLengthNode.value;
         }
 
         if (this.modelOrGeometry === "geometry") {
@@ -2887,6 +2898,9 @@ export class CNode3DObject extends CNode3DGroup {
         }
         if (this.label) {
             NodeMan.disposeRemove(this.label, true);
+        }
+        if (this.modelLengthNode) {
+            NodeMan.disposeRemove(this.modelLengthNode, true);
         }
         this.disposeCubeCamera();
         this.gui.destroy();

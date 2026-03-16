@@ -173,15 +173,21 @@ export class CUnits {
                 const scaleFactors = this.getScaleFactors(this.lastUnits);
                 console.log("CUnits: scaleFactors: ", scaleFactors);
 
-                // we now informany nodes that have a changeUnits method
+                // we now inform any nodes that have a changeUnits method
                 // to update their values
                 NodeMan.iterate((id, node) => {
                     if (node.changeUnits !== undefined) {
                         node.changeUnits(this.units, scaleFactors);
                     }
                 });
-
-
+            } else {
+                // No previous units (initialization or deserialization):
+                // values are already correct, but GUI labels need updating
+                NodeMan.iterate((id, node) => {
+                    if (node.updateDesc !== undefined) {
+                        node.updateDesc();
+                    }
+                });
             }
 
             if (updateGUI) {
