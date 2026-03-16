@@ -200,7 +200,7 @@ describe("ModelLoader", () => {
         expect(modelAsset.scene.children[0].rotation.x).toBeCloseTo(-Math.PI / 2);
     });
 
-    test("derives colored splat-like point rendering from gaussian-style PLY attributes", async () => {
+    test("renders gaussian splat PLY as instanced mesh with elliptical splats", async () => {
         const splatPLY = [
             "ply",
             "format ascii 1.0",
@@ -225,15 +225,48 @@ describe("ModelLoader", () => {
         ].join("\n");
 
         const modelAsset = await parseModelData("splat.ply", toArrayBuffer(splatPLY));
+        const splatMesh = modelAsset.scene.children[0];
+        const geometry = splatMesh.geometry;
+
+        expect(splatMesh.isMesh).toBe(true);
+        expect(splatMesh.userData.sitrecGaussianSplat).toBe(true);
+        expect(splatMesh.material.isShaderMaterial).toBe(true);
+        expect(splatMesh.material.userData.sitrecGaussianSplat).toBe(true);
+        expect(splatMesh.material.transparent).toBe(true);
+        expect(splatMesh.frustumCulled).toBe(false);
+        expect(geometry.isInstancedBufferGeometry).toBe(true);
+        expect(geometry.instanceCount).toBe(2);
+        expect(geometry.getAttribute("splatCenter")).toBeDefined();
+        expect(geometry.getAttribute("splatColor")).toBeDefined();
+        expect(geometry.getAttribute("splatOpacity")).toBeDefined();
+        expect(geometry.getAttribute("splatScale")).toBeDefined();
+        expect(geometry.getAttribute("splatRotation")).toBeDefined();
+        expect(splatMesh.userData.splatSortState).toBeDefined();
+        expect(splatMesh.rotation.x).toBeCloseTo(-Math.PI / 2);
+    });
+
+    test("falls back to point cloud for PLY with partial splat attributes (no rotation)", async () => {
+        const partialSplatPLY = [
+            "ply",
+            "format ascii 1.0",
+            "element vertex 2",
+            "property float x",
+            "property float y",
+            "property float z",
+            "property float f_dc_0",
+            "property float f_dc_1",
+            "property float f_dc_2",
+            "property float opacity",
+            "end_header",
+            "0 0 0 1 0 0 0",
+            "1 0 0 0 1 0 1",
+        ].join("\n");
+
+        const modelAsset = await parseModelData("partial.ply", toArrayBuffer(partialSplatPLY));
         const points = modelAsset.scene.children[0];
-        const geometry = points.geometry;
 
         expect(points.isPoints).toBe(true);
         expect(points.material.isShaderMaterial).toBe(true);
         expect(points.material.userData.sitrecPLYPointCloud).toBe(true);
-        expect(points.material.transparent).toBe(false);
-        expect(geometry.getAttribute("color")).toBeDefined();
-        expect(geometry.getAttribute("splatOpacity")).toBeDefined();
-        expect(geometry.getAttribute("splatSize")).toBeDefined();
     });
 });
