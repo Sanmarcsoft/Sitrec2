@@ -36,6 +36,28 @@ import {CTrackFile} from "./TrackFiles/CTrackFile";
 import {detectRocketLikeTrack} from "./trackHeuristics";
 import {hasOtherTrackSourceReference} from "./trackSourceUtils";
 
+function disposeDirectTrackDependentControllers(trackNode) {
+    if (!trackNode?.outputs?.length) {
+        return;
+    }
+
+    // Controllers that read from a track may own helper nodes of their own
+    // (for example ObjectTilt creates an internal smoothed track). Dispose
+    // those controllers before severing the track so their helpers do not get
+    // left behind with orphaned inputs.
+    const controllerIDs = [...new Set(
+        trackNode.outputs
+            .filter(outputNode => outputNode?.isController)
+            .map(outputNode => outputNode.id)
+    )];
+
+    for (const controllerID of controllerIDs) {
+        if (NodeMan.exists(controllerID)) {
+            NodeMan.unlinkDisposeRemove(controllerID);
+        }
+    }
+}
+
 
 class CMetaTrack {
     constructor(trackFileName, trackDataNode, trackNode) {
@@ -1521,6 +1543,10 @@ class CTrackManager extends CManager {
         if (Globals.editingTrack === trackOb) {
             Globals.editingTrack = null;
         }
+
+        this.usedShortNames.delete(trackOb.menuText);
+
+        disposeDirectTrackDependentControllers(trackOb.smoothedTrackNode ?? NodeMan.get(trackID, false));
         
         // Disable edit mode first and dispose the spline editor
         if (trackOb.splineEditor) {
@@ -1577,9 +1603,12 @@ class CTrackManager extends CManager {
         
         console.log(`Deleted synthetic track: ${trackID}`);
         
-        // Recalculate and render
-        NodeMan.recalculateAllRootFirst();
-        setRenderOne(true);
+        // Full sitch teardown is already disposing the entire graph, so a
+        // mid-dispose recalc only touches partially-unlinked nodes.
+        if (!Globals.disposing) {
+            NodeMan.recalculateAllRootFirst();
+            setRenderOne(true);
+        }
     }
 
     /**
