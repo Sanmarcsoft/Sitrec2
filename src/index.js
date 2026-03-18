@@ -403,35 +403,63 @@ if (isNestEmbed) {
             const m = event.data.marker;
             console.log("[NEST] Loading marker:", m.filename, m.lat, m.lng);
 
-            // If the marker has a media URL (video/image), load it via DragDropHandler
-            if (m.mediaUrl && typeof DragDropHandler !== 'undefined') {
+            // Load video/image directly into the video viewer node
+            if (m.mediaUrl) {
                 try {
-                    DragDropHandler.uploadURL(m.mediaUrl);
+                    const { NodeMan } = require("./Globals");
+                    // Fetch the media as a blob (bypasses domain allowlist)
+                    fetch(m.mediaUrl)
+                        .then(r => r.blob())
+                        .then(blob => {
+                            const ext = (m.filename || m.mediaUrl).split('.').pop().toLowerCase();
+                            const mimeType = blob.type || (ext === 'mp4' ? 'video/mp4' : 'video/' + ext);
+                            const file = new File([blob], m.filename || 'nest-media.' + ext, { type: mimeType });
+                            // Find the video viewer node and load the file
+                            const videoNode = NodeMan.get("video", true) || NodeMan.get("videoView", true);
+                            if (videoNode && videoNode.uploadFile) {
+                                videoNode.uploadFile(file, true); // autoAdd=true to skip replace dialog
+                            } else {
+                                // Fallback: use DragDropHandler queue
+                                const { FileManager } = require("./Globals");
+                                if (FileManager) {
+                                    FileManager.parseResult(file.name, blob.arrayBuffer(), m.mediaUrl);
+                                }
+                            }
+                            console.log("[NEST] Media loaded:", file.name, file.type, file.size);
+                        })
+                        .catch(e => console.warn("[NEST] Failed to fetch media:", e));
                 } catch (e) {
                     console.warn("[NEST] Failed to load media:", e);
                 }
             }
 
-            // Fly camera to the marker location with sensor-derived orientation
+            // Position camera at marker location with sensor-derived orientation
             if (m.lat != null && m.lng != null) {
                 try {
-                    const { Sit, NodeMan, par } = require("./Globals");
-                    const { LLAToEUS } = require("./LLA-ECEF-ENU");
-                    // Set camera position matching the device's recording orientation
-                    const alt = m.altitude || 10; // meters above ground
-                    const heading = m.heading || 0; // degrees from north
-                    const tilt = m.tilt || 75; // degrees from vertical (75° = slight upward)
-                    console.log("[NEST] Flying to:", m.lat, m.lng, "heading:", heading, "tilt:", tilt, "alt:", alt);
-                    // Update Sitrec's position parameters
-                    if (par) {
-                        par.lat = m.lat;
-                        par.lon = m.lng;
-                        par.startAltitude = alt;
-                        par.startCameraHeading = heading;
-                        par.startCameraPitch = -(90 - tilt); // Convert tilt to pitch
+                    const { NodeMan } = require("./Globals");
+                    const alt = m.altitude || 10;
+                    const heading = m.heading || 0;
+                    const tilt = m.tilt || 75; // 0°=down, 90°=horizon
+                    console.log("[NEST] Camera:", m.lat, m.lng, "heading:", heading, "tilt:", tilt, "alt:", alt);
+
+                    // Position camera and compute look-at target using heading/tilt
+                    const cameraNode = NodeMan.get("mainCamera", true);
+                    if (cameraNode) {
+                        // Camera position at marker location + altitude
+                        cameraNode.startPosLLA = [m.lat, m.lng, alt];
+                        // Compute look-at point ~1km away in the heading direction at the tilt angle
+                        const d = 1000; // meters
+                        const pitchRad = (tilt - 90) * Math.PI / 180; // convert tilt to elevation angle
+                        const headingRad = heading * Math.PI / 180;
+                        const dLat = (d * Math.cos(pitchRad) * Math.cos(headingRad)) / 111320;
+                        const dLng = (d * Math.cos(pitchRad) * Math.sin(headingRad)) / (111320 * Math.cos(m.lat * Math.PI / 180));
+                        const dAlt = d * Math.sin(pitchRad);
+                        cameraNode.lookAtLLA = [m.lat + dLat, m.lng + dLng, alt + dAlt];
+                        cameraNode.resetCamera();
+                        console.log("[NEST] Camera positioned at", cameraNode.startPosLLA, "looking at", cameraNode.lookAtLLA);
                     }
                 } catch (e) {
-                    console.warn("[NEST] Camera fly-to failed:", e);
+                    console.warn("[NEST] Camera positioning failed:", e);
                 }
             }
         }
