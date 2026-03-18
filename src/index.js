@@ -412,15 +412,23 @@ if (isNestEmbed) {
                 }
             }
 
-            // Fly camera to the marker location
+            // Fly camera to the marker location with sensor-derived orientation
             if (m.lat != null && m.lng != null) {
                 try {
-                    const { NodeMan } = require("./Globals");
-                    const mainCamera = NodeMan.get("mainCamera");
-                    if (mainCamera && mainCamera.camera) {
-                        // Set camera position to look at the marker location
-                        // This uses Sitrec's internal coordinate system
-                        console.log("[NEST] Flying to:", m.lat, m.lng);
+                    const { Sit, NodeMan, par } = require("./Globals");
+                    const { LLAToEUS } = require("./LLA-ECEF-ENU");
+                    // Set camera position matching the device's recording orientation
+                    const alt = m.altitude || 10; // meters above ground
+                    const heading = m.heading || 0; // degrees from north
+                    const tilt = m.tilt || 75; // degrees from vertical (75° = slight upward)
+                    console.log("[NEST] Flying to:", m.lat, m.lng, "heading:", heading, "tilt:", tilt, "alt:", alt);
+                    // Update Sitrec's position parameters
+                    if (par) {
+                        par.lat = m.lat;
+                        par.lon = m.lng;
+                        par.startAltitude = alt;
+                        par.startCameraHeading = heading;
+                        par.startCameraPitch = -(90 - tilt); // Convert tilt to pitch
                     }
                 } catch (e) {
                     console.warn("[NEST] Camera fly-to failed:", e);
