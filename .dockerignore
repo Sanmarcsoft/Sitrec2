@@ -1,0 +1,13 @@
+.git
+config/config.php
+config/shared.env
+*.env
+*.tar.gz
+*.zip
+sitrec-cache/
+sitrec-upload/
+sitrec-videos/
+node_modules/
+playwright-report/
+test_other/
+.DS_Store

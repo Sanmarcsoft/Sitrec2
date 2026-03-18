@@ -20,7 +20,10 @@ COPY webpack.*.js .
 COPY webpackCopyPatterns.js .
 COPY config ./config
 COPY docker/docker-config-install.js ./config/config-install.js
-COPY .git .git
+RUN cp config/shared.env.example config/shared.env && cp config/config.js.example config/config.js
+# .git removed for security — version injected via build arg instead
+ARG GIT_VERSION=unknown
+ENV VERSION=${GIT_VERSION}
 COPY apple-touch-icon.png .
 COPY favicon-512.png .
 COPY favicon-32x32.png .

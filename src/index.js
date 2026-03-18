@@ -387,8 +387,18 @@ setGlobalURLParams(urlParams)
 
 // NEST embed mode — listen for marker events from the parent frame
 const isNestEmbed = urlParams.get("embed") === "nest";
+const ALLOWED_NEST_ORIGINS = [
+    "https://dev-nest.matthewstevens.org",
+    "https://nest.matthewstevens.org",
+    "https://dev-nest.pages.dev",
+    "http://localhost:5173",
+];
 if (isNestEmbed) {
     window.addEventListener("message", (event) => {
+        if (!ALLOWED_NEST_ORIGINS.includes(event.origin)) {
+            console.warn("[NEST] Rejected message from untrusted origin:", event.origin);
+            return;
+        }
         if (event.data?.type === "nest:loadMarker") {
             const m = event.data.marker;
             console.log("[NEST] Loading marker:", m.filename, m.lat, m.lng);

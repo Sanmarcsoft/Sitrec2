@@ -436,7 +436,7 @@ export function isSubdomain(domainToCheck, baseDomain) {
 
     // Add a dot at the beginning of the baseDomain to ensure we're matching subdomains
     // and not domains that merely end with the same sequence.
-    const pattern = new RegExp('(^|\\.)' + baseDomain.replace('.', '\\.') + '$');
+    const pattern = new RegExp('(^|\\.)' + baseDomain.replace(/\./g, '\\.') + '$');
 
     return pattern.test(domainToCheck);
 }
