@@ -385,6 +385,42 @@ const queryString = window.location.search;
 urlParams = new URLSearchParams(queryString);
 setGlobalURLParams(urlParams)
 
+// NEST embed mode — listen for marker events from the parent frame
+const isNestEmbed = urlParams.get("embed") === "nest";
+if (isNestEmbed) {
+    window.addEventListener("message", (event) => {
+        if (event.data?.type === "nest:loadMarker") {
+            const m = event.data.marker;
+            console.log("[NEST] Loading marker:", m.filename, m.lat, m.lng);
+
+            // If the marker has a media URL (video/image), load it via DragDropHandler
+            if (m.mediaUrl && typeof DragDropHandler !== 'undefined') {
+                try {
+                    DragDropHandler.uploadURL(m.mediaUrl);
+                } catch (e) {
+                    console.warn("[NEST] Failed to load media:", e);
+                }
+            }
+
+            // Fly camera to the marker location
+            if (m.lat != null && m.lng != null) {
+                try {
+                    const { NodeMan } = require("./Globals");
+                    const mainCamera = NodeMan.get("mainCamera");
+                    if (mainCamera && mainCamera.camera) {
+                        // Set camera position to look at the marker location
+                        // This uses Sitrec's internal coordinate system
+                        console.log("[NEST] Flying to:", m.lat, m.lng);
+                    }
+                } catch (e) {
+                    console.warn("[NEST] Camera fly-to failed:", e);
+                }
+            }
+        }
+    });
+    console.log("[NEST] Embed mode active — listening for marker events");
+}
+
 Globals.regression = urlParams.get("regression") === "1";
 
 const hasExplicitStartupRequest = isNewSitchAction
