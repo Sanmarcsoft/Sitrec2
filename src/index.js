@@ -471,8 +471,54 @@ if (isNestEmbed) {
         if (event.data?.type === "nest:loadAllMarkers") {
             const markers = event.data.markers || [];
             console.log("[NEST] Received", markers.length, "markers from NEST dashboard");
-            // Store markers for Sitrec's use (e.g., rendering pins on the globe)
-            window.__nestMarkers = markers;
+
+            // Compute camera position and angle for each marker from device sensor data
+            const processed = markers.map(m => {
+                let heading = 0, tilt = 75;
+                const sensors = m.sensorsData || {};
+                const mag = sensors.magneticField || sensors.mag;
+                const acc = sensors.acceleration || sensors.acc;
+                if (mag && acc) {
+                    // Tilt-compensated heading from magnetometer + accelerometer
+                    const an = Math.hypot(acc.x, acc.y, acc.z);
+                    const axn = acc.x / an, ayn = acc.y / an, azn = acc.z / an;
+                    const roll = Math.atan2(ayn, azn);
+                    const pitch = Math.atan2(-axn, Math.hypot(ayn, azn));
+                    const mxh = mag.x * Math.cos(pitch) + mag.z * Math.sin(pitch);
+                    const myh = mag.x * Math.sin(roll) * Math.sin(pitch) + mag.y * Math.cos(roll) - mag.z * Math.sin(roll) * Math.cos(pitch);
+                    heading = ((Math.atan2(myh, mxh) * 180 / Math.PI) % 360 + 360) % 360;
+                    // Device tilt: 0° = flat (looking down), 90° = upright (looking at horizon)
+                    tilt = Math.abs(Math.atan2(-acc.x, Math.hypot(acc.y, acc.z)) * 180 / Math.PI);
+                    tilt = Math.max(0, Math.min(90, tilt));
+                }
+                return { ...m, heading, tilt };
+            });
+            window.__nestMarkers = processed;
+            console.log("[NEST] Processed", processed.length, "markers with camera poses");
+
+            // Auto-fly camera to the first marker with a valid location
+            const first = processed.find(m => m.lat != null && m.lng != null);
+            if (first) {
+                try {
+                    const { NodeMan } = require("./Globals");
+                    const alt = first.altitude || 10;
+                    console.log("[NEST] Auto-positioning camera to first marker:", first.filename, first.lat, first.lng, "heading:", first.heading, "tilt:", first.tilt);
+                    const cameraNode = NodeMan.get("mainCamera", true);
+                    if (cameraNode) {
+                        cameraNode.startPosLLA = [first.lat, first.lng, alt];
+                        const d = 1000;
+                        const pitchRad = (first.tilt - 90) * Math.PI / 180;
+                        const headingRad = first.heading * Math.PI / 180;
+                        const dLat = (d * Math.cos(pitchRad) * Math.cos(headingRad)) / 111320;
+                        const dLng = (d * Math.cos(pitchRad) * Math.sin(headingRad)) / (111320 * Math.cos(first.lat * Math.PI / 180));
+                        const dAlt = d * Math.sin(pitchRad);
+                        cameraNode.lookAtLLA = [first.lat + dLat, first.lng + dLng, alt + dAlt];
+                        cameraNode.resetCamera();
+                    }
+                } catch (e) {
+                    console.warn("[NEST] Auto-position failed:", e);
+                }
+            }
         }
     });
     console.log("[NEST] Embed mode active — listening for marker events");
