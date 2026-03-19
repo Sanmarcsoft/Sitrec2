@@ -406,35 +406,7 @@ if (isNestEmbed) {
             const m = event.data.marker;
             console.log("[NEST] Loading marker:", m.filename, m.lat, m.lng);
 
-            // Load video/image directly into the video viewer node
-            if (m.mediaUrl) {
-                try {
-                    const { NodeMan } = require("./Globals");
-                    // Fetch the media as a blob (bypasses domain allowlist)
-                    fetch(m.mediaUrl)
-                        .then(r => r.blob())
-                        .then(blob => {
-                            const ext = (m.filename || m.mediaUrl).split('.').pop().toLowerCase();
-                            const mimeType = blob.type || (ext === 'mp4' ? 'video/mp4' : 'video/' + ext);
-                            const file = new File([blob], m.filename || 'nest-media.' + ext, { type: mimeType });
-                            // Find the video viewer node and load the file
-                            const videoNode = NodeMan.get("video", true) || NodeMan.get("videoView", true);
-                            if (videoNode && videoNode.uploadFile) {
-                                videoNode.uploadFile(file, true); // autoAdd=true to skip replace dialog
-                            } else {
-                                // Fallback: use DragDropHandler queue
-                                const { FileManager } = require("./Globals");
-                                if (FileManager) {
-                                    FileManager.parseResult(file.name, blob.arrayBuffer(), m.mediaUrl);
-                                }
-                            }
-                            console.log("[NEST] Media loaded:", file.name, file.type, file.size);
-                        })
-                        .catch(e => console.warn("[NEST] Failed to fetch media:", e));
-                } catch (e) {
-                    console.warn("[NEST] Failed to load media:", e);
-                }
-            }
+            // Video loading is handled by nest:loadMediaBlob (avoids CORS)
 
             // Position camera at marker location with sensor-derived orientation
             if (m.lat != null && m.lng != null) {
@@ -464,6 +436,34 @@ if (isNestEmbed) {
                 } catch (e) {
                     console.warn("[NEST] Camera positioning failed:", e);
                 }
+            }
+        }
+
+        // Receive video/media blob from NEST (avoids CORS issues)
+        if (event.data?.type === "nest:loadMediaBlob") {
+            const { filename, mimeType, buffer } = event.data;
+            console.log("[NEST] Received media blob:", filename, mimeType, buffer?.byteLength, "bytes");
+            try {
+                const { NodeMan } = require("./Globals");
+                const file = new File([buffer], filename, { type: mimeType });
+                const videoNode = NodeMan.get("video", true) || NodeMan.get("videoView", true);
+                if (videoNode && videoNode.uploadFile) {
+                    videoNode.uploadFile(file, true);
+                    console.log("[NEST] Media loaded into video player:", filename);
+                } else {
+                    console.warn("[NEST] No video node found. Available nodes:", NodeMan.listAll?.() || "unknown");
+                    // Fallback: use DragDropHandler
+                    try {
+                        const DragDropHandler = require("./DragDropHandler").default;
+                        if (DragDropHandler) {
+                            DragDropHandler.queueResult(filename, buffer, filename);
+                            DragDropHandler.checkDropQueue();
+                            console.log("[NEST] Media queued via DragDropHandler");
+                        }
+                    } catch (e) { console.warn("[NEST] DragDropHandler fallback failed:", e); }
+                }
+            } catch (e) {
+                console.warn("[NEST] Failed to load media blob:", e);
             }
         }
 
