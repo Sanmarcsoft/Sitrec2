@@ -390,6 +390,9 @@ const isNestEmbed = urlParams.get("embed") === "nest";
 const ALLOWED_NEST_ORIGINS = [
     "https://dev-nest.matthewstevens.org",
     "https://nest.matthewstevens.org",
+    "https://dev-nest.thephenom.app",
+    "https://nest.thephenom.app",
+    "https://dev-net.thephenom.app",
     "https://dev-nest.pages.dev",
     "http://localhost:5173",
 ];
