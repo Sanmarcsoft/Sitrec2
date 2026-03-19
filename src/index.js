@@ -466,6 +466,14 @@ if (isNestEmbed) {
                 }
             }
         }
+
+        // Receive full marker list from NEST dashboard
+        if (event.data?.type === "nest:loadAllMarkers") {
+            const markers = event.data.markers || [];
+            console.log("[NEST] Received", markers.length, "markers from NEST dashboard");
+            // Store markers for Sitrec's use (e.g., rendering pins on the globe)
+            window.__nestMarkers = markers;
+        }
     });
     console.log("[NEST] Embed mode active — listening for marker events");
 }
