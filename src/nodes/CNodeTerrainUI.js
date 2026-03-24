@@ -93,6 +93,15 @@ export class CNodeTerrainUI extends CNode {
                 maxZoom: 18, // this is the level at which the ocean tile is ideally physically real sized
                 generateMipmaps: true,
             },
+            Esri: {
+                name: "Esri World Imagery",
+                mapURL: (z, x, y) => {
+                    // Same tile source as Cesium globe — browser HTTP cache shared
+                    return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`
+                },
+                maxZoom: 19,
+                supportsOceanSurface: true,
+            },
             ElevationColor: {
                 name: "Elevation Pseudo-Color",
                 isElevationColor: true,
@@ -254,10 +263,13 @@ export class CNodeTerrainUI extends CNode {
 
 
         // This is the default map type if none specificed in the Sit file
+        // Lite mode defaults to Esri (shared cache with Cesium globe)
         // Use DOCKER_MAP_TYPE if building for Docker, otherwise use DEFAULT_MAP_TYPE
-        const defaultMapType =  process.env.DOCKER_BUILD
-            ? (process.env.DOCKER_MAP_TYPE ?? "Debug")
-            : (process.env.DEFAULT_MAP_TYPE ?? "Debug");
+        const defaultMapType = Globals.liteMode
+            ? "Esri"
+            : (process.env.DOCKER_BUILD
+                ? (process.env.DOCKER_MAP_TYPE ?? "Debug")
+                : (process.env.DEFAULT_MAP_TYPE ?? "Debug"));
 
         // map type from the terrain object in a saved sitch, or default to configured default.
         // quickTerrain mode (testAll=2) always forces Debug terrain for speed.
