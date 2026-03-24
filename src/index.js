@@ -387,6 +387,13 @@ setGlobalURLParams(urlParams)
 
 // NEST embed mode — listen for marker events from the parent frame
 const isNestEmbed = urlParams.get("embed") === "nest";
+const isLiteMode = urlParams.get("lite") === "true" || isNestEmbed;
+// Lite mode: skip 3D buildings and atmosphere to reduce memory on mobile
+// Keep: terrain tiles, stars/night sky, satellites, ADSB, camera, video
+if (isLiteMode) {
+    Globals.liteMode = true;
+    console.log("[Sitrec] Lite mode enabled — skipping buildings and atmosphere");
+}
 const ALLOWED_NEST_ORIGINS = [
     "https://dev-nest.matthewstevens.org",
     "https://nest.matthewstevens.org",

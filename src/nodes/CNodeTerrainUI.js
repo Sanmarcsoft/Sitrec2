@@ -686,6 +686,11 @@ export class CNodeTerrainUI extends CNode {
     }
 
     toggleBuildings(show) {
+        if (show && Globals.liteMode) {
+            console.log("[Sitrec] Lite mode — skipping 3D buildings");
+            this.showBuildings = false;
+            return;
+        }
         if (show && !this.canUse3DBuildings) {
             console.warn("CNodeTerrainUI: 3D Buildings not enabled for this user.");
             this.showBuildings = false;

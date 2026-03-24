@@ -1264,8 +1264,8 @@ export class CNodeView3D extends CNodeViewCanvas {
 
                 // Profile: Sky rendering
                 if (globalProfiler) globalProfiler.push('#80b1d3', 'skyRender');
-                // render the day sky
-                if (GlobalDaySkyScene !== undefined) {
+                // render the day sky (skip in lite mode — saves GPU memory)
+                if (GlobalDaySkyScene !== undefined && !Globals.liteMode) {
 
                     // [DBG] Render day sky
                     if (Globals.renderDebugFlags.dbg_renderDaySky) {
